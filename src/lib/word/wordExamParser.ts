@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { ommlToLatex } from 'dwml-ts';
-import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
-import { detectMathTopic } from '@/lib/latex/examParser';
+import { Question, QuestionType, QuestionDifficulty } from '../../types/database';
+import { detectMathTopic } from '../latex/examParser';
 
 /**
  * Trích xuất toàn bộ hình ảnh và ánh xạ quan hệ rId trong file .docx
@@ -23,7 +23,7 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
     else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
     else if (lower.endsWith('.gif')) mime = 'image/gif';
-    else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) mime = 'image/png'; // WMF fallback
+    else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) mime = 'image/wmf';
 
     const dataUrl = `data:${mime};base64,${base64}`;
     const filename = path.replace('word/media/', '').trim();
@@ -51,7 +51,7 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
 }
 
 /**
- * Phân tích trực tiếp XML nội bộ của file Word (OMML to LaTeX & Images)
+ * Phân tích trực tiếp XML nội bộ của file Word (OMML to LaTeX, MathType & Images)
  */
 async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
   const zip = await JSZip.loadAsync(arrayBuffer);
@@ -65,7 +65,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
   xml = xml.replace(/<m:oMathPara[\s\S]*?<\/m:oMathPara>/gi, (m) => {
     try {
       const latex = ommlToLatex(m);
-      return latex ? ` $${latex}$ ` : '';
+      return latex ? `\n$$ ${latex} $$\n` : '';
     } catch {
       return '';
     }
@@ -80,29 +80,59 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     }
   });
 
-  // 2. Thay thế các hình ảnh nhúng Drawing / Pict sang thẻ <img>
+  // 2. Thay thế MathType (<w:object> / <v:imagedata>) thành hình ảnh công thức toán inline
+  xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
+    const dataUrl = rIdToDataUrl.get(rId);
+    return dataUrl
+      ? ` <img src="${dataUrl}" class="inline-math-img inline align-middle mx-1 my-0.5 max-h-8 object-contain" alt="công thức MathType" /> `
+      : '';
+  });
+
+  // 3. Thay thế các hình ảnh vẽ đồ thị / hình học (<w:drawing> / <a:blip>)
   xml = xml.replace(/<a:blip[^>]+r:embed="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
     const dataUrl = rIdToDataUrl.get(rId);
-    return dataUrl ? ` <img src="${dataUrl}" class="max-w-md mx-auto my-3 rounded-xl border border-slate-200" alt="Hình vẽ đề thi" /> ` : '';
+    return dataUrl
+      ? `\n<div class="my-3 flex justify-center"><img src="${dataUrl}" class="max-w-md rounded-xl border border-slate-200 shadow-2xs" alt="Hình vẽ đề thi" /></div>\n`
+      : '';
   });
 
-  xml = xml.replace(/<v:imagedata[^>]+r:id="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
-    const dataUrl = rIdToDataUrl.get(rId);
-    return dataUrl ? ` <img src="${dataUrl}" class="max-w-md mx-auto my-3 rounded-xl border border-slate-200" alt="Hình vẽ đề thi" /> ` : '';
+  // 4. Xử lý các bảng trong Word:
+  // Nếu là bảng phương án trắc nghiệm A, B, C, D -> phân tách bằng tab \t
+  // Nếu là bảng số liệu thống kê -> tạo thành thẻ <table> để giữ nguyên cấu trúc
+  xml = xml.replace(/<w:tbl\b[\s\S]*?<\/w:tbl>/gi, (tblXml) => {
+    const isChoiceTable = /(?:^|\s|\>)(?:[A-D][\.\)]|[a-d]\))/i.test(tblXml);
+    if (isChoiceTable) {
+      return tblXml
+        .replace(/<\/w:tc>/gi, '\t')
+        .replace(/<\/w:tr>/gi, '\n');
+    }
+
+    // Bảng dữ liệu thống kê: chuyển thành <table> HTML
+    const rows = tblXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/gi) || [];
+    const tableRowsHtml = rows
+      .map((row) => {
+        const cells = row.match(/<w:tc\b[\s\S]*?<\/w:tc>/gi) || [];
+        const cellsHtml = cells
+          .map((cell) => {
+            const textMatch = cell.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi) || [];
+            const cellText = textMatch.map((t) => t.replace(/<w:t[^>]*>/i, '').replace(/<\/w:t>/i, '')).join('').trim();
+            return `<td class="border border-slate-300 px-3 py-2 text-center text-sm">${cellText}</td>`;
+          })
+          .join('');
+        return `<tr>${cellsHtml}</tr>`;
+      })
+      .join('');
+
+    return `\n<div class="my-4 overflow-x-auto flex justify-center"><table class="border-collapse border border-slate-300 bg-white rounded-lg shadow-2xs"><tbody>${tableRowsHtml}</tbody></table></div>\n`;
   });
 
-  // 3. Xử lý các đoạn văn bản <w:p> và ô bảng <w:tc>
-  // Chuyển <w:p> thành xuống dòng \n
+  // 5. Xử lý các đoạn văn bản <w:p>
   xml = xml.replace(/<\/w:p>/gi, '\n');
-  xml = xml.replace(/<\/w:tc>/gi, '\t'); // Ô trong bảng cách nhau bằng tab
-  xml = xml.replace(/<\/w:tr>/gi, '\n'); // Hàng trong bảng xuống dòng
 
-  // 4. Giữ lại đánh dấu gạch chân (u) và in đậm (b) trong các text run <w:r>
+  // 6. Giữ lại đánh dấu gạch chân (u), in đậm (b), và màu đỏ (đáp án) trong các text run <w:r>
   xml = xml.replace(/<w:r\b[\s\S]*?<\/w:r>/gi, (runXml) => {
-    // Trích xuất text trong <w:t>
     const textMatches = runXml.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi);
     if (!textMatches) {
-      // Có thể runXml chứa thẻ <img> hoặc $...$ đã thay thế ở trên
       if (runXml.includes('<img') || runXml.includes('$')) {
         return runXml.replace(/<w:[^>]+>/g, '').replace(/<\/w:[^>]+>/g, '');
       }
@@ -122,7 +152,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     return runText;
   });
 
-  // 5. Loại bỏ tất cả các thẻ XML OpenXML còn lại
+  // 7. Loại bỏ tất cả các thẻ XML OpenXML còn lại
   let cleanText = xml
     .replace(/<w:[^>]+>/gi, '')
     .replace(/<\/w:[^>]+>/gi, '')
@@ -149,27 +179,29 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
 }
 
 /**
- * Phân tích file Word .docx thành danh sách câu hỏi đề thi Toán THPT
+ * Phân tích file Word .docx thành danh sách câu hỏi đề thi Toán THPT chuẩn định dạng
  */
-export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer): Promise<{
+export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Array | Buffer): Promise<{
   questions: Question[];
   rawText: string;
 }> {
   let arrayBuffer: ArrayBuffer;
-  if (fileOrBuffer instanceof File) {
+  if (typeof File !== 'undefined' && fileOrBuffer instanceof File) {
     arrayBuffer = await fileOrBuffer.arrayBuffer();
-  } else {
+  } else if (fileOrBuffer instanceof ArrayBuffer) {
     arrayBuffer = fileOrBuffer;
+  } else {
+    // Buffer hoặc Uint8Array từ Node.js
+    const buf = fileOrBuffer as Uint8Array;
+    arrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   }
 
   let textWithMathAndImages = '';
 
   try {
-    // Ưu tiên phương pháp phân tích sâu OOXML (OMML + Images)
     textWithMathAndImages = await parseDocxXmlDirectly(arrayBuffer);
   } catch (err) {
     console.warn('Fallback to mammoth parser:', err);
-    // Phương pháp dự phòng qua mammoth
     const options = {
       convertImage: mammoth.images.imgElement((image: any) => {
         return image.read('base64').then((buf: string) => ({
@@ -182,6 +214,17 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer): Promise<{
       .replace(/<\/p>/gi, '\n')
       .replace(/<\/div>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n');
+  }
+
+  // Quét bảng đáp án ở cuối đề thi nếu có (VD: "BẢNG ĐÁP ÁN: 1.A 2.B 3.C...")
+  const answerKeyMap = new Map<number, string>();
+  const answerKeyBlockMatch = textWithMathAndImages.match(/(?:BẢNG ĐÁP ÁN|ĐÁP ÁN CÁC CÂU)[\s\S]*$/i);
+  if (answerKeyBlockMatch) {
+    const ansRegex = /(\d+)[\.\s:\-]+([A-D])/gi;
+    let m;
+    while ((m = ansRegex.exec(answerKeyBlockMatch[0])) !== null) {
+      answerKeyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
+    }
   }
 
   // Tách câu hỏi theo biểu thức: "Câu 1:", "Câu 1.", "Câu 1 ", "Bài 1:"
@@ -209,7 +252,6 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer): Promise<{
     }
 
     // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (kể cả trong bảng hoặc cách nhau bởi tab)
-    // Hỗ trợ A., A), [A], <u>A</u>., <b>A.</b>
     const choiceRegex = /(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>)?\s*([A-D])[\.\)]\s*(?:<\/b>|<\/strong>|<\/u>)?/gi;
     const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
 
@@ -265,6 +307,11 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer): Promise<{
           id: cur.label,
           text: optText,
         });
+      }
+
+      // Kiểm tra thêm từ bảng đáp án ở cuối tài liệu
+      if (!correctAnswer && answerKeyMap.has(questionNumber)) {
+        correctAnswer = answerKeyMap.get(questionNumber);
       }
 
       if (!correctAnswer && explanation) {
@@ -328,7 +375,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer): Promise<{
       }
     }
 
-    // Làm sạch câu hỏi nhưng giữ lại các thẻ <img>
+    // Làm sạch câu hỏi nhưng giữ lại các thẻ <img> và <table>
     questionContent = questionContent.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
 
     const topic = detectMathTopic(questionContent + ' ' + explanation);

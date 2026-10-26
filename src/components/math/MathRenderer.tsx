@@ -22,29 +22,44 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
 
   // Kích hoạt render TikZ WebAssembly khi có hình vẽ TikZ trong nội dung
   useEffect(() => {
-    if (typeof window !== 'undefined' && html.includes('text/tikz')) {
-      // Nếu TikZJax đã nạp sẵn, gửi sự kiện tải DOM để TikZJax quét và vẽ SVG
+    if (typeof window === 'undefined' || !html.includes('text/tikz')) return;
+
+    const runTikz = () => {
       try {
-        if ((window as any).tikzjax) {
+        if ((window as any).tikzjax?.process) {
           (window as any).tikzjax.process();
         } else {
-          // Nạp script TikZJax nếu chưa có trên trang
-          const existingScript = document.querySelector('script[src*="tikzjax"]');
-          if (!existingScript) {
-            const fontLink = document.createElement('link');
-            fontLink.rel = 'stylesheet';
-            fontLink.href = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
-            document.head.appendChild(fontLink);
-
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
-            script.async = true;
-            document.head.appendChild(script);
-          }
+          window.dispatchEvent(new Event('DOMContentLoaded'));
         }
       } catch (err) {
-        console.warn('TikZ renderer info:', err);
+        console.warn('TikZJax process error:', err);
       }
+    };
+
+    // Kiểm tra xem script TikZJax đã được nạp hay chưa
+    const existingScript = document.querySelector('script[src*="tikzjax"]');
+    if (!existingScript) {
+      const fontLink = document.createElement('link');
+      fontLink.rel = 'stylesheet';
+      fontLink.href = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
+      document.head.appendChild(fontLink);
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
+      script.async = true;
+      script.onload = () => {
+        setTimeout(runTikz, 150);
+        setTimeout(runTikz, 800);
+      };
+      document.head.appendChild(script);
+    } else {
+      runTikz();
+      const t1 = setTimeout(runTikz, 250);
+      const t2 = setTimeout(runTikz, 900);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [html]);
 

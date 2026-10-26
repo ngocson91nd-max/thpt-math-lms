@@ -280,48 +280,141 @@ export default function ExamsPage() {
   };
 
   // Dán mẫu LaTeX
-  const handlePasteLatexSample = (sampleType: 'hue' | 'single' | 'tf' | 'short' | 'essay') => {
+  const handlePasteLatexSample = (sampleType: 'hue' | 'single' | 'tf' | 'short' | 'essay' | 'tkz_tab' | 'tabular') => {
     if (sampleType === 'hue') {
-      setLatexInput(`\\begin{ex}
-Tính giới hạn $L=\\lim\\limits_{x\\to 3}\\dfrac{x^2-9}{x^2-4x+3}$.
+      setLatexInput(`\\MaDe{1252}
+\\TitDe
+{SỞ GIÁO DỤC VÀ ĐÀO TẠO\\\\ \\textbf{THÀNH PHỐ HUẾ}\\\\ \\textbf{ĐỀ CHÍNH THỨC}\\\\ \\textit{(Đề có 04 trang)}}
+{\\textbf{KỲ THI CHỌN HỌC SINH GIỎI THPT}\\\\ \\textbf{CẤP THÀNH PHỐ NĂM HỌC 2026-2027}\\\\ \\textbf{MÔN: TOÁN (PHỔ THÔNG)}\\\\ \\textit{Thời gian: 150 phút (không kể thời gian giao đề)}}
+
+\\subsection*{Phần I. (3,0 điểm)} Thí sinh trả lời từ câu 1 đến câu 12. Mỗi câu thí sinh chỉ chọn một phương án.
+
+\\begin{ex}
+Trong mặt phẳng tọa độ $Oxy$, cho hai điểm $A(1;2)$ và $B(3;0)$. Tọa độ vectơ $\\vv{AB}$ và trung điểm $I$ của $AB$ là
 \\choice
-{$L=0$}
-{$L=1$}
-{\\True $L=3$}
-{$L=6$}
+{$\\vv{AB}=(2;-2)$ và $I(2;2)$}
+{\\True $\\vv{AB}=(2;-2)$ và $I(2;1)$}
+{$\\vv{AB}=(4;2)$ và $I(2;1)$}
+{$\\vv{AB}=(1;-1)$ và $I(4;2)$}
 \\loigiai{
-Ta có $L=\\lim\\limits_{x\\to 3}\\dfrac{(x-3)(x+3)}{(x-1)(x-3)}=3$.
+Ta có $\\vv{AB}=(x_B-x_A; y_B-y_A)=(3-1; 0-2)=(2;-2)$.
+Tọa độ trung điểm $I$: $\\heva{&x_I=\\dfrac{x_A+x_B}{2}=\\dfrac{1+3}{2}=2\\\\ &y_I=\\dfrac{y_A+y_B}{2}=\\dfrac{2+0}{2}=1.}$
+Vậy $I(2;1)$.
 }
 \\end{ex}
 
 \\begin{ex}
-Cho hàm số $y=f(x)=\\dfrac{x^2+2x+2}{x+1}$.
+Khảo sát thời gian tập thể dục của học sinh khối 12 thu được mẫu số liệu ghép nhóm:
+\\begin{center}
+\\begin{tabular}{|l|c|c|c|c|c|}
+\\hline
+Thời gian (phút) & $[0;20)$ & $[20;40)$ & $[40;60)$ & $[60;80)$ & $[80;100)$ \\\\
+\\hline
+Số học sinh & $5$ & $8$ & $11$ & $10$ & $6$ \\\\
+\\hline
+\\end{tabular}
+\\end{center}
+Trung bình mỗi học sinh tập bao nhiêu phút mỗi ngày?
+\\choice
+{$75$}
+{$57$}
+{\\True $52$}
+{$60$}
+\\loigiai{
+Cỡ mẫu $n=40$. Giá trị đại diện các nhóm lần lượt là $10; 30; 50; 70; 90$.
+Thời gian trung bình: $\\overline{x} = \\dfrac{5\\cdot 10 + 8\\cdot 30 + 11\\cdot 50 + 10\\cdot 70 + 6\\cdot 90}{40} = 52$ phút.
+}
+\\end{ex}
+
+\\subsection*{Phần II. (4,0 điểm)} Câu trắc nghiệm đúng sai.
+
+\\begin{ex}
+Cho hàm số $y=f(x)$ liên tục trên $\\mathbb{R}$ và có bảng biến thiên:
+\\begin{center}
+\\begin{tikzpicture}
+\\tkzTabInit[nocadre=false,lgt=1.2,espcl=2.5,deltacl=0.6]
+{$x$/0.6,$y'$/0.6,$y$/2}
+{$-\\infty$,$-1$,$4$,$+\\infty$}
+\\tkzTabLine{,+,0,-,0,+,}
+\\tkzTabVar{-/$-\\infty$,+/$10$,-/$-22$,+/$+\\infty$}
+\\end{tikzpicture}
+\\end{center}
 \\choiceTF
-{\\True Tập xác định của hàm số là $D=\\mathbb{R}\\setminus\\{-1\\}$.}
-{Đạo hàm $f'(x)=\\dfrac{x^2+2x}{(x+1)^2}$.}
-{\\True Điểm cực tiểu của đồ thị hàm số là $(0;2)$.}
-{Tiệm cận xiên của đồ thị hàm số là đường thẳng $y=x+2$.}
+{\\True Hàm số đồng biến trên khoảng $(-\\infty;-1)$.}
+{Giá trị cực tiểu của hàm số bằng $4$.}
+{\\True Điểm cực đại của đồ thị hàm số là $(-1;10)$.}
+{Hàm số có đúng 1 điểm cực trị.}
 \\loigiai{
-Hàm số có TCX là $y=x+1$.
+Dựa vào bảng biến thiên, hàm số đạt cực đại tại $x=-1$, $y_{\\text{CĐ}}=10$ và đạt cực tiểu tại $x=4$, $y_{\\text{CT}}=-22$.
 }
 \\end{ex}
 
 \\begin{ex}
-Một doanh nghiệp sản xuất một loại sản phẩm với chi phí $C(x)=2x^2+10x+50$. Tìm $x$ để chi phí trung bình nhỏ nhất.
-\\shortans{$5$}
-\\loigiai{
-Chi phí trung bình $\\overline{C}(x)=2x+10+\\dfrac{50}{x}\\ge 10+2\\sqrt{100}=30$. Đạt tại $x=5$.
+\\immini{
+Cho hàm số $f(x)=\\dfrac{ax+b}{cx+d}$ có đồ thị $y=f'(x)$ như hình bên và nhận đường thẳng $x=-1$ làm tiệm cận đứng.
+\\choiceTF
+{\\True Hàm số $y=f(x)$ đồng biến trên $(-1;+\\infty)$.}
+{$f(0)=1$.}
+{\\True Tiệm cận ngang của đồ thị $y=f(x)$ là $y=2$.}
+{Số điểm có tọa độ nguyên thuộc đồ thị là $6$.}
+}{
+\\begin{tikzpicture}[scale=0.65, font=\\footnotesize, line join=round, line cap=round]
+\\def\\xmin{-3.5} \\def\\xmax{3.2}
+\\def\\ymin{-0.8} \\def\\ymax{4.5}
+\\draw[->] (\\xmin,0) -- (\\xmax,0) node[below left] {$x$};
+\\draw[->] (0,\\ymin) -- (0,\\ymax) node[below right] {$y$};
+\\node[below left] at (0,0) {$O$};
+\\draw[thick, domain=-0.4:\\xmax, smooth] plot (\\x, {2.5/((\\x)+1)^2});
+\\draw[dashed] (-1,\\ymin) -- (-1,\\ymax);
+\\node[below] at (-1,0) {$-1$};
+\\end{tikzpicture}
 }
-\\end{ex}
-
-\\begin{ex}
-Cho hình chóp $S.ABC$ có đáy $ABC$ vuông tại $B$, $SA\\perp (ABC)$.
-\\begin{enumerate}[a)]
-  \\item Chứng minh $(SAB)\\perp (SBC)$.
-  \\item Tính khoảng cách từ $A$ đến mặt phẳng $(SBC)$.
-\\end{enumerate}
 \\loigiai{
-a) Ta có $BC\\perp AB$ và $BC\\perp SA\\implies BC\\perp (SAB)\\implies (SBC)\\perp (SAB)$.
+Đồ thị hàm số $y=f'(x)$ nằm hoàn toàn phía trên trục hoành trên $(-1;+\\infty)$ nên $f'(x)>0$, do đó $f(x)$ đồng biến trên $(-1;+\\infty)$.
+}
+\\end{ex}`);
+    } else if (sampleType === 'tkz_tab') {
+      setLatexInput(`\\begin{ex}
+Cho hàm số bậc ba $y = f(x)$ có bảng biến thiên:
+\\begin{center}
+\\begin{tikzpicture}
+\\tkzTabInit[nocadre=false,lgt=1.2,espcl=2.5,deltacl=0.6]
+{$x$/0.8,$f'(x)$/0.8,$f(x)$/2}
+{$-\\infty$,$-2$,$2$,$+\\infty$}
+\\tkzTabLine{,+,0,-,0,+,}
+\\tkzTabVar{-/$-\\infty$,+/$10$,-/$-22$,+/$+\\infty$}
+\\end{tikzpicture}
+\\end{center}
+Số nghiệm thực của phương trình $f(x) - 1 = 0$ là
+\\choice
+{$1$}
+{$2$}
+{\\True $3$}
+{$0$}
+\\loigiai{
+Đường thẳng $y = 1$ cắt đồ thị hàm số tại 3 điểm phân biệt vì $-22 < 1 < 10$.
+}
+\\end{ex}`);
+    } else if (sampleType === 'tabular') {
+      setLatexInput(`\\begin{ex}
+Bảng thống kê điểm kiểm tra môn Toán của lớp 12A:
+\\begin{center}
+\\begin{tabular}{|l|c|c|c|c|}
+\\hline
+Mức điểm & $[5;6.5)$ & $[6.5;8)$ & $[8;9)$ & $[9;10]$ \\\\
+\\hline
+Tần số & $8$ & $15$ & $12$ & $5$ \\\\
+\\hline
+\\end{tabular}
+\\end{center}
+Khoảng biến thiên của mẫu số liệu trên bằng bao nhiêu?
+\\choice
+{$3$}
+{\\True $5$}
+{$10$}
+{$15$}
+\\loigiai{
+Khoảng biến thiên là $R = 10 - 5 = 5$.
 }
 \\end{ex}`);
     } else if (sampleType === 'single') {
@@ -1222,39 +1315,53 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                       <span className="text-xs font-semibold text-slate-700">
                         Dán mã các câu hỏi LaTeX gói ex_test (chứa \begin{'{ex}'}...\end{'{ex}'}):
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handlePasteLatexSample('hue')}
-                          className="rounded-lg bg-purple-100 border border-purple-200 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-200"
+                          className="rounded-lg bg-purple-100 border border-purple-200 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-200 cursor-pointer"
                         >
-                          Mẫu Huế HSG
+                          Mẫu Huế HSG (Tổng hợp)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePasteLatexSample('tkz_tab')}
+                          className="rounded-lg bg-rose-100 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-200 cursor-pointer"
+                        >
+                          Bảng Biến Thiên (tkz-tab)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePasteLatexSample('tabular')}
+                          className="rounded-lg bg-teal-100 border border-teal-200 px-2 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-200 cursor-pointer"
+                        >
+                          Bảng Tabular
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePasteLatexSample('single')}
-                          className="rounded-lg bg-blue-100 border border-blue-200 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-200"
+                          className="rounded-lg bg-blue-100 border border-blue-200 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-200 cursor-pointer"
                         >
                           Mẫu Trắc nghiệm
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePasteLatexSample('tf')}
-                          className="rounded-lg bg-indigo-100 border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-200"
+                          className="rounded-lg bg-indigo-100 border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-200 cursor-pointer"
                         >
                           Mẫu Đúng/Sai
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePasteLatexSample('short')}
-                          className="rounded-lg bg-amber-100 border border-amber-200 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-200"
+                          className="rounded-lg bg-amber-100 border border-amber-200 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-200 cursor-pointer"
                         >
                           Mẫu Điền số
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePasteLatexSample('essay')}
-                          className="rounded-lg bg-emerald-100 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-200"
+                          className="rounded-lg bg-emerald-100 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-200 cursor-pointer"
                         >
                           Mẫu Tự luận
                         </button>

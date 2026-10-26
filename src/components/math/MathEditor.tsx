@@ -27,8 +27,12 @@ export const MathEditor: React.FC<MathEditorProps> = ({
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'split'>('split');
 
   const insertSymbol = (latex: string) => {
-    // Nếu chưa có ký hiệu $ xung quanh và không phải trường hợp đặc biệt, bọc lại
-    const formatted = latex.startsWith('\\begin') ? `$$\n${latex}\n$$` : `$${latex}$`;
+    // Tabular là môi trường bảng văn bản, không bọc $; các môi trường toán khác bọc $$ hoặc $
+    const formatted = latex.startsWith('\\begin{tabular}')
+      ? `\n${latex}\n`
+      : latex.startsWith('\\begin')
+      ? `$$\n${latex}\n$$`
+      : `$${latex}$`;
     onChange(value ? `${value} ${formatted}` : formatted);
   };
 

@@ -1,4 +1,4 @@
-import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
+import { Question, QuestionType, QuestionDifficulty } from '../../types/database';
 
 function extractBracedGroup(str: string, pos: number): { text: string; nextPos: number } | null {
   let depth = 0;
@@ -108,14 +108,43 @@ export function parseExamLatex(rawTex: string): {
       if (g) explanation = g.text.trim();
     }
 
-    // Bóc tách nội dung đề bài (phần trước \choice / \choiceTF / \shortans / \loigiai)
-    let cutIdx = block.length;
-    ['\\choiceTF', '\\choice', '\\shortans', '\\loigiai'].forEach((cmd) => {
-      const i = block.indexOf(cmd);
-      if (i !== -1 && i < cutIdx) cutIdx = i;
-    });
+    // Bóc tách nội dung đề bài (đặc biệt bảo toàn hình ảnh TikZ trong \immini)
+    let content = '';
+    const imminiIdx = block.indexOf('\\immini');
 
-    let content = block.substring(0, cutIdx).trim();
+    if (imminiIdx !== -1) {
+      let pos = imminiIdx + 7;
+      while (pos < block.length && /\s/.test(block[pos])) pos++;
+      const g1 = extractBracedGroup(block, pos);
+      if (g1) {
+        pos = g1.nextPos;
+        while (pos < block.length && /\s/.test(block[pos])) pos++;
+        const g2 = extractBracedGroup(block, pos);
+        if (g2) {
+          // Kiểm tra xem g1 có chứa \choice / \choiceTF / \shortans hay không
+          let cutInG1 = g1.text.length;
+          ['\\choiceTF', '\\choice', '\\shortans'].forEach((cmd) => {
+            const i = g1.text.indexOf(cmd);
+            if (i !== -1 && i < cutInG1) cutInG1 = i;
+          });
+
+          const textPart = g1.text.substring(0, cutInG1).trim();
+          const figurePart = g2.text.trim();
+          const prefix = block.substring(0, imminiIdx).trim();
+          content = `${prefix ? prefix + '\n' : ''}\\immini{\n${textPart}\n}{\n${figurePart}\n}`;
+        }
+      }
+    }
+
+    if (!content) {
+      let cutIdx = block.length;
+      ['\\choiceTF', '\\choice', '\\shortans', '\\loigiai'].forEach((cmd) => {
+        const i = block.indexOf(cmd);
+        if (i !== -1 && i < cutIdx) cutIdx = i;
+      });
+      content = block.substring(0, cutIdx).trim();
+    }
+
     // Bỏ chú thích % ...
     content = content
       .split('\n')

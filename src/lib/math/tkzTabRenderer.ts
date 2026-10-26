@@ -27,14 +27,15 @@ export function parseTkzTabCode(code: string): TkzTabParsed | null {
     .map((v) => v.replace(/[\$]/g, '').trim())
     .filter(Boolean);
 
-  // 3. Phân tích các dấu trong hàng y' (VD: +, 0, -, 0, +)
+  // 3. Phân tích các dấu trong hàng y' (VD: ,+,0,-,0,+,)
   let signs: string[] = [];
   const lineMatch = code.match(/\\tkzTabLine\s*\{([\s\S]*?)\}/);
   if (lineMatch) {
-    signs = lineMatch[1]
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s !== '');
+    let rawTokens = lineMatch[1].split(',').map((s) => s.trim());
+    // Bỏ phần tử rỗng ở 2 đầu nếu có (do cú pháp ,+,0,-,)
+    if (rawTokens.length > 0 && rawTokens[0] === '') rawTokens.shift();
+    if (rawTokens.length > 0 && rawTokens[rawTokens.length - 1] === '') rawTokens.pop();
+    signs = rawTokens;
   }
 
   // 4. Phân tích các mũi tên biến thiên trong hàng y (VD: -/$-\infty$, +/$10$, -/$-22$, +/$+\infty$)
@@ -63,12 +64,12 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
 
   const headerW = 80;
   const colCount = Math.max(xVals.length - 1, 1);
-  const colW = Math.max(90, Math.floor(460 / colCount));
+  const colW = Math.max(90, Math.floor(480 / colCount));
   const totalW = headerW + colCount * colW + 40;
 
   const row1H = 36;
   const row2H = 36;
-  const row3H = 90;
+  const row3H = 96;
   const totalH = row1H + row2H + row3H;
 
   const row1Y = 0;
@@ -88,8 +89,8 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
 
   // Xây dựng các mũi tên biến thiên
   let variationElements = '';
-  const highY = row3Y + 24;
-  const lowY = row3Y + row3H - 24;
+  const highY = row3Y + 22;
+  const lowY = row3Y + row3H - 22;
 
   if (variations.length >= 2) {
     for (let i = 0; i < variations.length - 1; i++) {
@@ -106,46 +107,57 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
       const endY = isNextHigh ? highY : lowY;
 
       // Điểm điều chỉnh để mũi tên không đè lên chữ số
-      const arrowStartX = startX + 14;
-      const arrowEndX = endX - 14;
+      const arrowStartX = startX + 16;
+      const arrowEndX = endX - 16;
       const arrowStartY = isCurHigh ? startY + 8 : startY - 8;
       const arrowEndY = isNextHigh ? endY + 8 : endY - 8;
 
       // Vẽ đường mũi tên
       variationElements += `
-        <line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="1.8" marker-end="url(#tab-arrow)" />
+        <line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="2" marker-end="url(#tab-arrow)" />
       `;
 
       // Giá trị tại điểm bắt đầu
       if (i === 0) {
         variationElements += `
-          <text x="${startX}" y="${startY + 4}" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(cur.val)}</text>
+          <text x="${startX}" y="${startY + 4}" fill="#0f172a" font-size="13" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(cur.val)}</text>
         `;
       }
 
       // Giá trị tại điểm kết thúc
       variationElements += `
-        <text x="${endX}" y="${endY + 4}" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(next.val)}</text>
+        <text x="${endX}" y="${endY + 4}" fill="#0f172a" font-size="13" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(next.val)}</text>
       `;
     }
   }
 
-  // Dấu ở hàng y' (signs)
+  // Dấu ở hàng y' (signs): chuẩn xác theo quy tắc tkz-tab
   let signsElements = '';
   if (signs.length > 0) {
-    // Phân bổ dấu dọc theo khoảng và điểm
-    const stepX = (colCount * colW) / Math.max(signs.length - 1, 1);
     for (let i = 0; i < signs.length; i++) {
       const s = signs[i];
       if (!s) continue;
-      const sx = headerW + 20 + i * stepX;
+
+      let sx = 0;
+      if (i % 2 === 0) {
+        // Vị trí khoảng (giữa hai điểm x[k] và x[k+1])
+        const k = Math.floor(i / 2);
+        const p1 = xCoords[k] !== undefined ? xCoords[k] : headerW + 20;
+        const p2 = xCoords[k + 1] !== undefined ? xCoords[k + 1] : p1 + colW;
+        sx = (p1 + p2) / 2;
+      } else {
+        // Vị trí điểm mốc (tại điểm x[k])
+        const k = Math.floor((i + 1) / 2);
+        sx = xCoords[k] !== undefined ? xCoords[k] : headerW + 20 + k * colW;
+      }
+
       const sy = row2Y + 22;
 
       if (s === 'd' || s === '||') {
         // Vạch đôi không xác định
         signsElements += `
-          <line x1="${sx - 2}" y1="${row2Y + 6}" x2="${sx - 2}" y2="${row2Y + row2H - 6}" stroke="#dc2626" stroke-width="1.2" />
-          <line x1="${sx + 2}" y1="${row2Y + 6}" x2="${sx + 2}" y2="${row2Y + row2H - 6}" stroke="#dc2626" stroke-width="1.2" />
+          <line x1="${sx - 2}" y1="${row2Y + 6}" x2="${sx - 2}" y2="${row2Y + row2H - 6}" stroke="#dc2626" stroke-width="1.4" />
+          <line x1="${sx + 2}" y1="${row2Y + 6}" x2="${sx + 2}" y2="${row2Y + row2H - 6}" stroke="#dc2626" stroke-width="1.4" />
         `;
       } else {
         const color = s === '+' ? '#16a34a' : s === '-' ? '#dc2626' : '#475569';
@@ -161,7 +173,7 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   for (let i = 0; i < xVals.length; i++) {
     const xPos = xCoords[i];
     xPointsElements += `
-      <text x="${xPos}" y="${row1Y + 22}" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>
+      <text x="${xPos}" y="${row1Y + 22}" fill="#0f172a" font-size="13" font-weight="600" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>
     `;
   }
 
@@ -200,13 +212,17 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   `;
 }
 
-function cleanLatexSymbol(s: string): string {
+export function cleanLatexSymbol(s: string): string {
   if (!s) return '';
   return s
     .replace(/\\infty/g, '∞')
+    .replace(/\\dfrac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\sqrt\{([^}]+)\}/g, '√$1')
     .replace(/\\cdot/g, '·')
     .replace(/\\pm/g, '±')
     .replace(/\\mp/g, '∓')
+    .replace(/\\pi/g, 'π')
     .replace(/\{/g, '')
     .replace(/\}/g, '')
     .trim();
