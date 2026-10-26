@@ -60,12 +60,12 @@ export const Navbar: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-1.5 font-bold text-lg text-slate-900 tracking-tight">
-              LMS TOÁN THPT
+              TOÁN THẦY SƠN
               <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                2025
+                THPT
               </span>
             </div>
-            <div className="text-[11px] text-slate-500 -mt-0.5">Nền tảng Dạy & Học Toán Chuẩn Bộ GD&ĐT</div>
+            <div className="text-[11px] text-slate-500 -mt-0.5">Lớp Học Trực Tuyến & Luyện Thi 2025</div>
           </div>
         </Link>
 

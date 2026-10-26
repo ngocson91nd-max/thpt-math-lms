@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_CLASSES, MOCK_USERS } from '@/lib/supabase/mockStore';
 import { ClassItem } from '@/types/database';
+import { createClient } from '@/lib/supabase/client';
 import {
   GraduationCap,
   Plus,
@@ -14,11 +15,13 @@ import {
   Calendar,
   Key,
   ArrowRight,
-  UserPlus,
+  Trash2,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 
 export default function ClassesPage() {
-  const { isTeacher, isStudent } = useAuth();
+  const { user, isTeacher, isStudent } = useAuth();
   const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -36,34 +39,124 @@ export default function ClassesPage() {
   const [joinInput, setJoinInput] = useState('');
   const [joinSuccess, setJoinSuccess] = useState(false);
 
+  // Tải danh sách lớp từ localStorage hoặc Supabase
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('lms_classes');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setClasses(parsed);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    const supabase = createClient();
+    if (supabase) {
+      supabase
+        .from('classes')
+        .select('*')
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setClasses(data as any);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('lms_classes', JSON.stringify(data));
+            }
+          }
+        });
+    }
+  }, []);
+
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const handleCreateClass = (e: React.FormEvent) => {
+  const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!className.trim()) return;
 
+    const newId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `c-${Date.now()}`;
+
+    const finalCode =
+      classCode.trim().toUpperCase() || `TOAN${grade}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     const newClass: ClassItem = {
-      id: `class-${Date.now()}`,
-      name: className,
-      code: classCode || `TOAN${grade}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: newId,
+      name: className.trim(),
+      code: finalCode,
       grade,
       academic_year: '2025-2026',
-      teacher_id: '22222222-2222-2222-2222-222222222222',
-      teacher: MOCK_USERS[1],
-      description: desc,
+      teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
+      teacher: user || MOCK_USERS[1],
+      description: desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.',
       is_active: true,
-      member_count: 1,
+      member_count: 0,
     };
 
-    setClasses([newClass, ...classes]);
+    const updated = [newClass, ...classes];
+    setClasses(updated);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lms_classes', JSON.stringify(updated));
+    }
+
+    try {
+      const supabase = createClient();
+      if (supabase && user) {
+        await supabase.from('classes').insert([
+          {
+            id: newId,
+            name: newClass.name,
+            code: newClass.code,
+            grade: newClass.grade,
+            academic_year: newClass.academic_year,
+            teacher_id: user.id,
+            description: newClass.description,
+            is_active: true,
+          },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Lỗi khi thêm lớp vào Supabase:', err);
+    }
+
     setShowCreateModal(false);
     setClassName('');
     setClassCode('');
     setDesc('');
+  };
+
+  const handleDeleteClass = async (classId: string, name: string) => {
+    const isConfirmed = confirm(
+      `Thầy có chắc chắn muốn xóa "${name}" không?\nToàn bộ dữ liệu của lớp này sẽ bị xóa khỏi hệ thống.`
+    );
+    if (!isConfirmed) return;
+
+    const updated = classes.filter((c) => c.id !== classId);
+    setClasses(updated);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lms_classes', JSON.stringify(updated));
+    }
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        await supabase.from('classes').delete().eq('id', classId);
+      }
+    } catch (err) {
+      console.warn('Lỗi khi xóa lớp trên Supabase:', err);
+    }
   };
 
   const handleJoinClass = (e: React.FormEvent) => {
@@ -79,17 +172,18 @@ export default function ClassesPage() {
         setJoinInput('');
       }, 1500);
     } else {
-      alert('Không tìm thấy lớp học với mã này. Vui lòng kiểm tra lại!');
+      alert('Không tìm thấy lớp học với mã này. Thầy/học sinh vui lòng kiểm tra lại!');
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Quản Lý Lớp Học Toán THPT
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <GraduationCap className="h-8 w-8 text-blue-600 shrink-0" />
+            Quản Lý Lớp Học - Toán Thầy Sơn
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Danh sách các lớp học trực tuyến, mã tham gia lớp và quản lý học sinh theo từng khối lớp 10, 11, 12.
@@ -100,7 +194,7 @@ export default function ClassesPage() {
           {isStudent && (
             <button
               onClick={() => setShowJoinModal(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-600 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition"
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-600 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
             >
               <Key className="h-4 w-4" />
               Nhập mã vào lớp
@@ -120,84 +214,122 @@ export default function ClassesPage() {
       </div>
 
       {/* Class Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {classes.map((c) => (
-          <div
-            key={c.id}
-            className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-7 shadow-xs hover:shadow-md transition"
-          >
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                  Lớp {c.grade}
-                </span>
-
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Năm học {c.academic_year}</span>
-                </div>
-              </div>
-
-              <h2 className="text-xl font-bold text-slate-900 leading-snug">{c.name}</h2>
-              <p className="mt-2 text-xs text-slate-500 leading-relaxed line-clamp-2">
-                {c.description || 'Lớp bồi dưỡng và luyện thi THPT chất lượng cao.'}
-              </p>
-
-              {/* Invite Code Box */}
-              <div className="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase text-slate-400">
-                    Mã Lớp Học (Dành Cho Học Sinh):
-                  </div>
-                  <div className="font-mono text-sm font-bold text-slate-900 tracking-wider">
-                    {c.code}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => copyCode(c.code)}
-                  className="flex items-center gap-1 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-2xs transition"
-                >
-                  {copiedCode === c.code ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      <span className="text-emerald-600">Đã chép</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5 text-slate-400" />
-                      <span>Sao chép</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Users className="h-4 w-4 text-blue-600" />
-                <span>{c.member_count || 36} học sinh</span>
-              </div>
-
-              <Link
-                href={`/classes/${c.id}`}
-                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
-              >
-                Vào lớp học <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
+      {classes.length === 0 ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
+            <GraduationCap className="h-7 w-7" />
           </div>
-        ))}
-      </div>
+          <h3 className="text-base font-bold text-slate-900">Chưa có lớp học nào</h3>
+          <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+            Thầy có thể tạo các lớp mới (ví dụ Lớp 12A1 Chuyên Toán, Lớp 11 Ôn Thi...) để phân phát đề thi và bài giảng.
+          </p>
+          {isTeacher && (
+            <div className="mt-5">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 transition"
+              >
+                <Plus className="h-4 w-4" />
+                Tạo Lớp Học Mới Ngay
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {classes.map((c) => (
+            <div
+              key={c.id}
+              className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-7 shadow-xs hover:shadow-md transition hover:border-blue-200"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                    Toán Lớp {c.grade}
+                  </span>
+
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Năm học {c.academic_year || '2025-2026'}</span>
+                  </div>
+                </div>
+
+                <h2 className="text-xl font-bold text-slate-900 leading-snug">{c.name}</h2>
+                <p className="mt-2 text-xs text-slate-500 leading-relaxed line-clamp-2">
+                  {c.description || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.'}
+                </p>
+
+                {/* Invite Code Box */}
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">
+                      Mã Lớp Học (Dành Cho Học Sinh):
+                    </div>
+                    <div className="font-mono text-sm font-bold text-slate-900 tracking-wider">
+                      {c.code}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => copyCode(c.code)}
+                    className="flex items-center gap-1 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-2xs transition"
+                  >
+                    {copiedCode === c.code ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <span className="text-emerald-600 font-bold">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 text-slate-400" />
+                        <span>Sao chép</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Users className="h-4 w-4 text-blue-600" />
+                  <span>{c.member_count ?? 36} học sinh</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClass(c.id, c.name)}
+                      className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
+                      title="Xóa lớp học"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Xóa lớp</span>
+                    </button>
+                  )}
+
+                  <Link
+                    href={`/classes/${c.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
+                  >
+                    <span>Vào lớp</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal Tạo Lớp Học Mới */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <h2 className="text-xl font-bold text-slate-900">Tạo Lớp Học Trực Tuyến</h2>
+            <h2 className="text-xl font-bold text-slate-900">Tạo Lớp Học Trực Tuyến Mới</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Khởi tạo lớp mới và cung cấp mã tham gia cho học sinh.
+              Khởi tạo lớp mới của Thầy Sơn và cung cấp mã tham gia cho học sinh.
             </p>
 
             <form onSubmit={handleCreateClass} className="mt-5 space-y-4">
@@ -221,7 +353,7 @@ export default function ClassesPage() {
                   <select
                     value={grade}
                     onChange={(e) => setGrade(Number(e.target.value) as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                   >
                     <option value={12}>Lớp 12</option>
                     <option value={11}>Lớp 11</option>
@@ -230,41 +362,45 @@ export default function ClassesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mã lớp</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mã vào lớp (Tùy chọn)
+                  </label>
                   <input
                     type="text"
                     value={classCode}
                     onChange={(e) => setClassCode(e.target.value)}
-                    placeholder="Tùy chọn (tự sinh)"
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
+                    placeholder="Tự động nếu bỏ trống"
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-mono uppercase"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Mô tả</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mô tả lớp học
+                </label>
                 <textarea
                   rows={2}
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
-                  placeholder="Ghi chú về mục tiêu, định hướng lớp..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
+                  placeholder="Thông tin mục tiêu ôn luyện, lịch học trực tuyến..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-500"
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
                 >
-                  Tạo lớp
+                  Xác nhận Tạo lớp
                 </button>
               </div>
             </form>
@@ -272,52 +408,53 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* Modal Tham Gia Lớp Bằng Mã */}
+      {/* Modal Nhập mã vào lớp */}
       {showJoinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-2 text-blue-600 mb-2">
-              <Key className="h-5 w-5" />
-              <h2 className="text-lg font-bold text-slate-900">Tham Gia Lớp Học</h2>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Nhập mã lớp do thầy cô cung cấp (Ví dụ: <code>TOAN12A1-2026</code>) để ghi danh vào lớp.
+            <h2 className="text-xl font-bold text-slate-900">Vào Lớp Học Của Thầy Sơn</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Nhập mã lớp do Thầy Sơn cung cấp để tham gia và nhận bài tập.
             </p>
 
-            <form onSubmit={handleJoinClass} className="mt-4 space-y-4">
-              <div>
-                <input
-                  type="text"
-                  required
-                  value={joinInput}
-                  onChange={(e) => setJoinInput(e.target.value)}
-                  placeholder="Nhập mã lớp học..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm font-mono font-bold text-center tracking-wider text-slate-900 focus:outline-none focus:border-blue-500 uppercase"
-                />
+            {joinSuccess ? (
+              <div className="my-6 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-center animate-in fade-in">
+                <div className="text-emerald-700 font-bold text-sm mb-1">Tham gia thành công!</div>
+                <div className="text-xs text-emerald-600">Đang chuyển bạn vào lớp học...</div>
               </div>
-
-              {joinSuccess && (
-                <div className="rounded-xl bg-emerald-50 p-2.5 text-center text-xs font-semibold text-emerald-700">
-                  🎉 Ghi danh thành công! Đang chuyển hướng...
+            ) : (
+              <form onSubmit={handleJoinClass} className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mã Lớp Học (6-10 ký tự)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={joinInput}
+                    onChange={(e) => setJoinInput(e.target.value)}
+                    placeholder="Ví dụ: TOAN12A1, TOAN11-8899..."
+                    className="w-full rounded-xl border border-slate-200 p-3 text-center text-sm font-mono font-bold tracking-wider text-slate-900 uppercase focus:outline-none focus:border-blue-500"
+                  />
                 </div>
-              )}
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowJoinModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Đóng
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-500"
-                >
-                  Tham gia
-                </button>
-              </div>
-            </form>
+                <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowJoinModal(false)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
+                  >
+                    Vào Lớp
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

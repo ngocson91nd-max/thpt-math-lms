@@ -21,7 +21,19 @@ import {
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const { isTeacher } = useAuth();
-  const currentClass = MOCK_CLASSES.find((c) => c.id === resolvedParams.id) || MOCK_CLASSES[0];
+  
+  let currentClass = MOCK_CLASSES.find((c) => c.id === resolvedParams.id);
+  if (!currentClass && typeof window !== 'undefined') {
+    const saved = localStorage.getItem('lms_classes');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        currentClass = parsed.find((c: any) => c.id === resolvedParams.id);
+      } catch {}
+    }
+  }
+  if (!currentClass) currentClass = MOCK_CLASSES[0];
+
   const [activeTab, setActiveTab] = useState<'members' | 'exams'>('members');
   const [copied, setCopied] = useState(false);
 

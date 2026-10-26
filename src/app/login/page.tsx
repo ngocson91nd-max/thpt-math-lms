@@ -57,7 +57,7 @@ export default function LoginPage() {
             <Sigma className="h-8 w-8 stroke-[2.5]" />
           </div>
           <h2 className="mt-5 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-            Đăng Nhập LMS Toán THPT
+            Đăng Nhập - Toán Thầy Sơn
           </h2>
           <p className="mt-2 text-sm text-slate-500">
             Học tập, luyện thi trắc nghiệm & tự luận chuẩn cấu trúc Bộ GD&ĐT 2025

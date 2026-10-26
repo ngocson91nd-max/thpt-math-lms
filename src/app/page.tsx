@@ -37,11 +37,11 @@ export default function HomePage() {
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl leading-tight">
-            Nền Tảng LMS Chuyên Biệt Cho Dạy & Học <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-teal-200 to-indigo-200">Toán THPT</span>
+            Toán Thầy Sơn - Lớp Học Trực Tuyến <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-teal-200 to-indigo-200">Toán THPT</span>
           </h1>
 
           <p className="mt-5 text-base sm:text-lg text-slate-300 leading-relaxed">
-            Hỗ trợ hiển thị công thức LaTeX siêu tốc bằng KaTeX, đầy đủ 5 dạng câu hỏi Toán chuẩn Bộ GD&ĐT, bảo mật chấm điểm máy chủ chống gian lận và tích hợp trợ lý AI thông minh.
+            Hệ thống bồi dưỡng kiến thức Toán 10, 11, 12 và luyện đề Tốt nghiệp THPT 2025. Hỗ trợ hiển thị công thức LaTeX siêu tốc, 5 dạng câu hỏi chuẩn Bộ GD&ĐT và chấm tự động tức thì.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">

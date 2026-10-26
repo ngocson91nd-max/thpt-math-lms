@@ -86,10 +86,10 @@ export default function RegisterPage() {
             <Sigma className="h-8 w-8 stroke-[2.5]" />
           </div>
           <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-            Đăng Ký Tài Khoản Học Sinh
+            Đăng Ký Học Sinh - Toán Thầy Sơn
           </h2>
           <p className="mt-2 text-sm text-slate-500">
-            Tạo tài khoản để tham gia các đề thi tính giờ, nhận điểm số và giải chi tiết KaTeX ngay lập tức
+            Tạo tài khoản để tham gia các lớp học trực tuyến và làm bài thi tính giờ của Thầy Sơn
           </p>
         </div>
 

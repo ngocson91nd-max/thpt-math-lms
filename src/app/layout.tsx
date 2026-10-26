@@ -6,9 +6,9 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 
 export const metadata: Metadata = {
-  title: 'Hệ Thống LMS Toán THPT - Nền Tảng Dạy & Học Toán Trực Tuyến',
+  title: 'Toán Thầy Sơn - Nền Tảng Dạy & Học Toán THPT Trực Tuyến',
   description:
-    'LMS chuyên biệt cho môn Toán THPT (Lớp 10, 11, 12). Hỗ trợ KaTeX, 5 dạng câu hỏi chuẩn Bộ GD&ĐT 2025, chấm tự động máy chủ và tích hợp AI.',
+    'Lớp học Toán trực tuyến Thầy Sơn (Lớp 10, 11, 12). Hỗ trợ KaTeX, 5 dạng câu hỏi chuẩn Bộ GD&ĐT 2025, thi tính giờ và chấm tự động.',
 };
 
 export default function RootLayout({

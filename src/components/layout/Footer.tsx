@@ -15,11 +15,11 @@ export const Footer: React.FC = () => {
                 <Sigma className="h-5 w-5" />
               </div>
               <span className="text-lg font-bold text-slate-900 tracking-tight">
-                Hệ Thống LMS Toán THPT
+                Toán Thầy Sơn - THPT
               </span>
             </div>
             <p className="text-sm text-slate-500 max-w-md leading-relaxed">
-              Giải pháp quản lý học tập và thi trực tuyến chuyên biệt cho môn Toán cấp THPT (Lớp 10, 11, 12). Tối ưu hóa render công thức Toán KaTeX, chuẩn format đề thi Bộ GD&ĐT 2025 và chấm tự động phía máy chủ.
+              Lớp học Toán trực tuyến Thầy Sơn chuyên sâu bồi dưỡng kiến thức và luyện thi Tốt nghiệp THPT (Lớp 10, 11, 12). Tối ưu hóa công thức KaTeX, 5 dạng câu hỏi chuẩn Bộ GD&ĐT 2025 và chấm tự động phía máy chủ.
             </p>
           </div>
 
