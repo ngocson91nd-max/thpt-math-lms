@@ -129,11 +129,22 @@ describe('3. Kiểm thử Bảng Biến Thiên (tkz-tab) sang SVG', () => {
 });
 
 describe('4. Kiểm thử Định dạng chữ LaTeX (\\textbf, \\textit, \\underline)', () => {
-  it('Chuyển đổi \\textbf{sai} thành <strong>sai</strong>', () => {
-    const text = 'Khẳng định nào sau đây \\textbf{sai}?';
+  it('Chuyển đổi \\textbf{sai} thành <strong>sai</strong> mà không làm hỏng \\mathrm{e} trong công thức', () => {
+    const text = 'Khẳng định nào sau đây \\textbf{sai}? Cho hàm số $y = x \\cdot \\mathrm{e}^{-x}$.';
     const rendered = renderMathToHtml(text);
     expect(rendered).toContain('<strong>sai</strong>');
     expect(rendered).not.toContain('\\textbf');
+    expect(rendered).not.toContain('<span> e </span>');
+    expect(rendered).not.toContain('<span>e</span>');
+  });
+
+  it('Công thức phân số có \\mathrm{e} không bị dính thẻ span', () => {
+    const fracText = 'Giá trị là $\\dfrac{1}{\\mathrm{e}}$ và $\\dfrac{2}{\\mathrm{e}^2}$.';
+    const rendered = renderMathToHtml(fracText);
+    expect(rendered).toContain('katex');
+    expect(rendered).toContain('mathvariant="normal">e');
+    expect(rendered).not.toContain('<span> e </span>');
+    expect(rendered).not.toContain('<span>e</span>');
   });
 
   it('Chuyển đổi \\textit và \\underline', () => {

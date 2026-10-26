@@ -147,23 +147,11 @@ export function renderMathToHtml(content: string): string {
   text = text.replace(/\\hethet/g, '');
   text = text.replace(/\\dapan/g, '');
 
-  // 6. Xử lý các lệnh định dạng chữ LaTeX trong đề bài: \textbf, \textit, \emph, \underline, \texttt, \textsf, \text
-  text = replaceBracedMacro(text, '\\textbf', (inner) => `<strong>${inner}</strong>`);
-  text = replaceBracedMacro(text, '\\textit', (inner) => `<em>${inner}</em>`);
-  text = replaceBracedMacro(text, '\\emph', (inner) => `<em>${inner}</em>`);
-  text = replaceBracedMacro(text, '\\underline', (inner) => `<u>${inner}</u>`);
-  text = replaceBracedMacro(text, '\\texttt', (inner) => `<code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">${inner}</code>`);
-  text = replaceBracedMacro(text, '\\textsf', (inner) => `<span class="font-sans">${inner}</span>`);
-  text = replaceBracedMacro(text, '\\text', (inner) => `<span>${inner}</span>`);
-  text = replaceBracedMacro(text, '\\mathrm', (inner) => `<span>${inner}</span>`);
-  text = text.replace(/\\quad/g, '&emsp;');
-  text = text.replace(/\\qquad/g, '&emsp;&emsp;');
-
-  // 7. Chuẩn hóa macro \heva và \hoac có ngoặc lồng nhau
+  // 6. Chuẩn hóa macro \heva và \hoac có ngoặc lồng nhau
   text = replaceBracedMacro(text, '\\heva', (inner) => `\\left\\{\\begin{aligned} ${inner} \\end{aligned}\\right.`);
   text = replaceBracedMacro(text, '\\hoac', (inner) => `\\left[\\begin{aligned} ${inner} \\end{aligned}\\right.`);
 
-  // 8. Xử lý môi trường \begin{itemchoice} và \begin{enumerate}
+  // 7. Xử lý môi trường \begin{itemchoice} và \begin{enumerate}
   text = text.replace(/\\begin\{itemchoice\}([\s\S]*?)\\end\{itemchoice\}/g, (_m, body) => {
     return body.replace(/\\itemch\s*/g, '\n• ');
   });
@@ -176,12 +164,12 @@ export function renderMathToHtml(content: string): string {
     });
   });
 
-  // 9. XỬ LÝ KHỐI TIKZ \begin{tikzpicture} ... \end{tikzpicture}
+  // 8. XỬ LÝ KHỐI TIKZ \begin{tikzpicture} ... \end{tikzpicture}
   // Bóc tách trước và lưu thành placeholder để không bị bất kỳ regex nào làm hỏng cú pháp TeX
   text = text.replace(/\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g, (_m, body) => {
     const cleanTikz = `\\begin{tikzpicture}${body}\\end{tikzpicture}`.trim();
 
-    // 9a. Kiểm tra nếu là Bảng biến thiên (tkz-tab) -> Render SVG trực tiếp 0ms siêu nét!
+    // 8a. Kiểm tra nếu là Bảng biến thiên (tkz-tab) -> Render SVG trực tiếp 0ms siêu nét!
     if (body.includes('\\tkzTabInit') || body.includes('tkzTab')) {
       const parsedTab = parseTkzTabCode(cleanTikz);
       if (parsedTab) {
@@ -191,20 +179,20 @@ export function renderMathToHtml(content: string): string {
       }
     }
 
-    // 9b. Hình vẽ hình học / Đồ thị hàm số TikZ: Render hình thuần túy, sạch sẽ, không banner thừa
+    // 8b. Hình vẽ hình học / Đồ thị hàm số TikZ: Render hình thuần túy, sạch sẽ, không banner thừa
     const encodedTikz = encodeURIComponent(cleanTikz);
-    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center overflow-x-auto w-full select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,calc,positioning,shapes,through,intersections">${cleanTikz}</script></div></div>`;
+    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,calc,positioning,shapes,through,intersections">${cleanTikz}</script></div></div>`;
 
     return savePlaceholder(tikzWrapper);
   });
 
-  // 10. XỬ LÝ BẢNG SỐ LIỆU \begin{tabular} ... \end{tabular}
+  // 9. XỬ LÝ BẢNG SỐ LIỆU \begin{tabular} ... \end{tabular}
   text = text.replace(/\\begin\{tabular\}(?:\[.*?\])?\{[^}]+\}[\s\S]*?\\end\{tabular\}/g, (match) => {
     const tableHtml = renderTabularToHtml(match);
     return savePlaceholder(tableHtml);
   });
 
-  // 11. XỬ LÝ \immini{mainText}{figure} với độ sâu ngoặc nhọn chuẩn xác
+  // 10. XỬ LÝ \immini{mainText}{figure} với độ sâu ngoặc nhọn chuẩn xác và bố cục co giãn an toàn
   let imminiIdx = text.indexOf('\\immini');
   while (imminiIdx !== -1) {
     let pos = imminiIdx + 7;
@@ -218,20 +206,20 @@ export function renderMathToHtml(content: string): string {
 
     const mainText = g1.text.trim();
     const sideContent = g2.text.trim();
-    const imminiHtml = `<div class="immini-block flex flex-col md:flex-row items-start justify-between gap-6 my-4"><div class="immini-content flex-1 leading-relaxed">${mainText}</div><div class="immini-figure shrink-0 w-full md:w-auto flex flex-col items-center justify-center">${sideContent}</div></div>`;
+    const imminiHtml = `<div class="immini-block flex flex-col md:flex-row items-center md:items-start justify-between gap-5 my-3"><div class="immini-content flex-1 min-w-0 leading-relaxed">${mainText}</div><div class="immini-figure shrink-0 w-full md:w-auto md:max-w-[42%] flex flex-col items-center justify-center p-2 bg-slate-50/60 rounded-xl border border-slate-200/70 overflow-hidden">${sideContent}</div></div>`;
     const token = savePlaceholder(imminiHtml);
 
     text = text.substring(0, imminiIdx) + token + text.substring(g2.nextPos);
     imminiIdx = text.indexOf('\\immini', imminiIdx + token.length);
   }
 
-  // 12. XỬ LÝ \begin{center} ... \end{center}
+  // 11. XỬ LÝ \begin{center} ... \end{center}
   text = text.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (_m, body) => {
     const centerHtml = `<div class="text-center my-3 flex flex-col items-center justify-center w-full">${body.trim()}</div>`;
     return savePlaceholder(centerHtml);
   });
 
-  // 13. XỬ LÝ DISPLAY MATH $$...$$
+  // 12. XỬ LÝ DISPLAY MATH $$...$$ -> RENDER KATEX TRƯỚC VÀ CẤT VÀO PLACEHOLDER!
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
     try {
       const rendered = katex.renderToString(math.trim(), {
@@ -244,7 +232,7 @@ export function renderMathToHtml(content: string): string {
     }
   });
 
-  // 14. XỬ LÝ INLINE MATH $...$
+  // 13. XỬ LÝ INLINE MATH $...$ -> RENDER KATEX TRƯỚC VÀ CẤT VÀO PLACEHOLDER!
   text = text.replace(/(?<!\\)\$([^\$\n]+?)\$/g, (_, math) => {
     try {
       const rendered = katex.renderToString(math.trim(), {
@@ -257,7 +245,19 @@ export function renderMathToHtml(content: string): string {
     }
   });
 
-  // 15. XỬ LÝ XUỐNG DÒNG TRONG VĂN BẢN THUẦN TÚY (Lúc này không còn thẻ HTML, SVG hay Script nào trong text!)
+  // 14. BÂY GIỜ TOÀN BỘ CÔNG THỨC TOÁN ($...$ và $$...$$) ĐÃ ĐƯỢC KATEX XỬ LÝ VÀ BẢO VỆ!
+  // Chỉ còn lại VĂN BẢN THUẦN TÚY TIẾNG VIỆT NGOÀI CÔNG THỨC!
+  // Bây giờ mới xử lý các lệnh định dạng chữ in đậm, in nghiêng, gạch chân trong văn bản đề thi:
+  text = replaceBracedMacro(text, '\\textbf', (inner) => `<strong>${inner}</strong>`);
+  text = replaceBracedMacro(text, '\\textit', (inner) => `<em>${inner}</em>`);
+  text = replaceBracedMacro(text, '\\emph', (inner) => `<em>${inner}</em>`);
+  text = replaceBracedMacro(text, '\\underline', (inner) => `<u>${inner}</u>`);
+  text = replaceBracedMacro(text, '\\texttt', (inner) => `<code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">${inner}</code>`);
+  text = replaceBracedMacro(text, '\\textsf', (inner) => `<span class="font-sans">${inner}</span>`);
+  text = text.replace(/\\quad/g, '&emsp;');
+  text = text.replace(/\\qquad/g, '&emsp;&emsp;');
+
+  // 15. XỬ LÝ XUỐNG DÒNG TRONG VĂN BẢN THUẦN TÚY
   text = text.replace(/\\\\(?:\s*\[\s*\d+\w*\s*\])?/g, '<br />');
   text = text.replace(/\n\n+/g, '<br /><br />');
   text = text.replace(/\n/g, '<br />');

@@ -53,6 +53,10 @@ body {
 }
 
 /* TikZ WebAssembly / TikZJax Figures */
+.tikz-wrapper {
+  max-width: 100%;
+}
+
 .tikz-target svg,
 .tikzjax-wrapper svg,
 svg.tikz,
@@ -69,6 +73,7 @@ svg.tikzjax {
   flex-direction: column;
   gap: 1.25rem;
   margin: 0.75rem 0;
+  width: 100%;
 }
 
 @media (min-width: 768px) {
@@ -76,5 +81,22 @@ svg.tikzjax {
     flex-direction: row;
     align-items: flex-start;
     justify-content: space-between;
+  }
+}
+
+.immini-content {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.immini-figure {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .immini-figure {
+    max-width: 42%;
   }
 }
