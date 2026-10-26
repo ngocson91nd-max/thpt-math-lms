@@ -96,9 +96,55 @@ describe('3. Kiểm thử Bảng Biến Thiên (tkz-tab) sang SVG', () => {
       expect(svg).toContain('marker-end="url(#tab-arrow');
     }
   });
+
+  it('Xử lý Bảng Biến Thiên có tiệm cận đứng / vạch đôi (tiệm cận đứng x=1 với -D+)', () => {
+    const asymptoteTab = `\\begin{tikzpicture}
+      \\tkzTabInit[nocadre=false,lgt=1.2,espcl=2.5,deltacl=0.6]
+      {$x$/0.6,$y'$/0.6,$y$/2}
+      {$-\\infty$,$1$,$2$,$+\\infty$}
+      \\tkzTabLine{,-,d,-,0,+,}
+      \\tkzTabVar{+/$-1$,-D+/$-\\infty$/$+\\infty$,-/$1$,+/$2$}
+    \\end{tikzpicture}`;
+
+    const parsed = parseTkzTabCode(asymptoteTab);
+    expect(parsed).not.toBeNull();
+    if (parsed) {
+      expect(parsed.xVals).toEqual(['-\\infty', '1', '2', '+\\infty']);
+      expect(parsed.variations.length).toBe(4);
+      expect(parsed.variations[1].isDiscontinuity).toBe(true);
+      expect(parsed.variations[1].leftVal).toBe('-\\infty');
+      expect(parsed.variations[1].rightVal).toBe('+\\infty');
+
+      const svg = generateTkzTabSvg(parsed);
+      expect(svg).toContain('<svg');
+      // Vạch đôi kéo dài từ hàng y' xuống tận đáy bảng y
+      expect(svg).toContain('y2="176"');
+      expect(svg).toContain('-1');
+      expect(svg).toContain('-∞');
+      expect(svg).toContain('+∞');
+      expect(svg).toContain('1');
+      expect(svg).toContain('2');
+    }
+  });
 });
 
-describe('4. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)', () => {
+describe('4. Kiểm thử Định dạng chữ LaTeX (\\textbf, \\textit, \\underline)', () => {
+  it('Chuyển đổi \\textbf{sai} thành <strong>sai</strong>', () => {
+    const text = 'Khẳng định nào sau đây \\textbf{sai}?';
+    const rendered = renderMathToHtml(text);
+    expect(rendered).toContain('<strong>sai</strong>');
+    expect(rendered).not.toContain('\\textbf');
+  });
+
+  it('Chuyển đổi \\textit và \\underline', () => {
+    const text = 'Chọn mệnh đề \\textit{đúng} và \\underline{chính xác}.';
+    const rendered = renderMathToHtml(text);
+    expect(rendered).toContain('<em>đúng</em>');
+    expect(rendered).toContain('<u>chính xác</u>');
+  });
+});
+
+describe('5. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)', () => {
   it('Bóc tách đúng toàn bộ 27 câu hỏi và bảo tồn tất cả 6 hình vẽ TikZ trong \\immini', () => {
     const rawTex = fs.readFileSync('Hue-HSG12-26-27.tex', 'utf8');
     const { questions, metadata } = parseExamLatex(rawTex);
