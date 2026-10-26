@@ -1,4 +1,4 @@
-﻿-- supabase/seed.sql
+-- supabase/seed.sql
 -- Dữ liệu mẫu chuẩn sư phạm Toán THPT phục vụ kiểm thử và demo hệ thống LMS
 
 -- 1. TẠO HỒ SƠ TÀI KHOẢN (PROFILES)
@@ -114,12 +114,7 @@ VALUES
     -- Dạng 3: Trắc nghiệm Đúng/Sai 4 ý chuẩn THPT 2025 (true_false)
     ('a4444444-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222', 12, 'Khảo sát hàm số', 'van_dung', 'true_false',
     'Cho hàm số $f(x) = \frac{x^2 - 3x + 6}{x - 1}$. Xét tính đúng hoặc sai của các mệnh đề sau:',
-    '[
-        {"id": "a", "text": "Tập xác định của hàm số là $D = \\mathbb{R} \\setminus \\{1\\}$"},
-        {"id": "b", "text": "Đạo hàm của hàm số là $f''(x) = \\frac{x^2 - 2x - 3}{(x - 1)^2}$"},
-        {"id": "c", "text": "Hàm số đạt cực đại tại điểm $x = 3$"},
-        {"id": "d", "text": "Đường tiệm cận xiên của đồ thị hàm số là đường thẳng $y = x - 2$"}
-    ]'::jsonb,
+    '[{"id":"a","text":"Tập xác định của hàm số là $D = \\mathbb{R} \\setminus \\{1\\}$"},{"id":"b","text":"Đạo hàm của hàm số là $f''(x) = \\frac{x^2 - 2x - 3}{(x - 1)^2}$"},{"id":"c","text":"Hàm số đạt cực đại tại điểm $x = 3$"},{"id":"d","text":"Đường tiệm cận xiên của đồ thị hàm số là đường thẳng $y = x - 2$"}]'::jsonb,
     '{"a": true, "b": true, "c": false, "d": true}'::jsonb,
     'Giải chi tiết:
 - Ý a) Đúng vì mẫu thức $x - 1 \ne 0 \iff x \ne 1$.
@@ -148,12 +143,12 @@ VALUES
     ('a7777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 12, 'Toán thực tế - Ứng dụng đạo hàm', 'van_dung_cao', 'essay',
     'Một hộ sản xuất dự định làm một bể chứa nước bằng inox hình hộp chữ nhật không nắp có thể tích $V = 32\text{ m}^3$, đáy là hình vuông cạnh $x\text{ (m)}$, chiều cao là $h\text{ (m)}$. Hãy tìm kích thước $x$ và $h$ để diện tích inox cần sử dụng là nhỏ nhất (bỏ qua độ dày mối hàn). Trình bày đầy đủ các bước giải.',
     '[]'::jsonb,
-    '"Hướng dẫn chấm:
-1. Xác định công thức thể tích: $V = x^2 h = 32 \\implies h = \\frac{32}{x^2}$ ($x > 0$). (0.25đ)
-2. Thiết lập hàm diện tích toàn phần không nắp: $S(x) = x^2 + 4xh = x^2 + \\frac{128}{x}$. (0.25đ)
-3. Tính đạo hàm: $S''(x) = 2x - \\frac{128}{x^2} = \\frac{2x^3 - 128}{x^2}$. (0.25đ)
-4. Cho $S''(x) = 0 \\iff 2x^3 = 128 \\iff x = 4$. Lập bảng biến thiên kết luận $\\min S(x) = S(4)$. Khi đó $x = 4\\text{ m}, h = \\frac{32}{16} = 2\\text{ m}$. (0.25đ)"'::jsonb,
-    'Bài toán tối ưu hóa diện tích bề mặt bể nước inox: nghiệm tối ưu là cạnh đáy $x = 4\\text{ m}$ và chiều cao $h = 2\\text{ m}$.',
+    to_jsonb('Hướng dẫn chấm:
+1. Xác định công thức thể tích: $V = x^2 h = 32 \implies h = \frac{32}{x^2}$ ($x > 0$). (0.25đ)
+2. Thiết lập hàm diện tích toàn phần không nắp: $S(x) = x^2 + 4xh = x^2 + \frac{128}{x}$. (0.25đ)
+3. Tính đạo hàm: $S''(x) = 2x - \frac{128}{x^2} = \frac{2x^3 - 128}{x^2}$. (0.25đ)
+4. Cho $S''(x) = 0 \iff 2x^3 = 128 \iff x = 4$. Lập bảng biến thiên kết luận $\min S(x) = S(4)$. Khi đó $x = 4\text{ m}, h = \frac{32}{16} = 2\text{ m}$. (0.25đ)'::text),
+    'Bài toán tối ưu hóa diện tích bề mặt bể nước inox: nghiệm tối ưu là cạnh đáy $x = 4\text{ m}$ và chiều cao $h = 2\text{ m}$.',
     1.0, true)
 ON CONFLICT (id) DO NOTHING;
 
