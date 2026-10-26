@@ -18,6 +18,7 @@ import {
   Trash2,
   AlertCircle,
   Sparkles,
+  Pencil,
 } from 'lucide-react';
 
 export default function ClassesPage() {
@@ -28,12 +29,21 @@ export default function ClassesPage() {
   // Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingClass, setEditingClass] = useState<ClassItem | null>(null);
 
-  // Form State
+  // Create Form State
   const [className, setClassName] = useState('');
   const [classCode, setClassCode] = useState('');
   const [grade, setGrade] = useState<10 | 11 | 12>(12);
   const [desc, setDesc] = useState('');
+
+  // Edit Form State
+  const [editName, setEditName] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editGrade, setEditGrade] = useState<10 | 11 | 12>(12);
+  const [editDesc, setEditDesc] = useState('');
+  const [editYear, setEditYear] = useState('2025-2026');
 
   // Join state
   const [joinInput, setJoinInput] = useState('');
@@ -134,6 +144,61 @@ export default function ClassesPage() {
     setClassName('');
     setClassCode('');
     setDesc('');
+  };
+
+  const openEditModal = (c: ClassItem) => {
+    setEditingClass(c);
+    setEditName(c.name);
+    setEditCode(c.code);
+    setEditGrade(c.grade);
+    setEditDesc(c.description || '');
+    setEditYear(c.academic_year || '2025-2026');
+    setShowEditModal(true);
+  };
+
+  const handleUpdateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClass || !editName.trim()) return;
+
+    const updated = classes.map((c) => {
+      if (c.id === editingClass.id) {
+        return {
+          ...c,
+          name: editName.trim(),
+          code: editCode.trim().toUpperCase() || c.code,
+          grade: editGrade,
+          description: editDesc.trim(),
+          academic_year: editYear.trim(),
+        };
+      }
+      return c;
+    });
+
+    setClasses(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lms_classes', JSON.stringify(updated));
+    }
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        await supabase
+          .from('classes')
+          .update({
+            name: editName.trim(),
+            code: editCode.trim().toUpperCase() || editingClass.code,
+            grade: editGrade,
+            description: editDesc.trim(),
+            academic_year: editYear.trim(),
+          })
+          .eq('id', editingClass.id);
+      }
+    } catch (err) {
+      console.warn('Lỗi khi cập nhật lớp trên Supabase:', err);
+    }
+
+    setShowEditModal(false);
+    setEditingClass(null);
   };
 
   const handleDeleteClass = async (classId: string, name: string) => {
@@ -298,15 +363,26 @@ export default function ClassesPage() {
 
                 <div className="flex items-center gap-2">
                   {isTeacher && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteClass(c.id, c.name)}
-                      className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
-                      title="Xóa lớp học"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Xóa lớp</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(c)}
+                        className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition"
+                        title="Chỉnh sửa lớp học"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span>Sửa</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteClass(c.id, c.name)}
+                        className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
+                        title="Xóa lớp học"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Xóa</span>
+                      </button>
+                    </>
                   )}
 
                   <Link
@@ -400,7 +476,106 @@ export default function ClassesPage() {
                   type="submit"
                   className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
                 >
-                  Xác nhận Tạo lớp
+                  Lưu & Tạo Lớp
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Chỉnh Sửa Lớp Học */}
+      {showEditModal && editingClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
+            <h2 className="text-xl font-bold text-slate-900">Chỉnh Sửa Lớp Học</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Cập nhật thông tin lớp học của Thầy Sơn.
+            </p>
+
+            <form onSubmit={handleUpdateClass} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Tên lớp học <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Ví dụ: Lớp 12A1 Chuyên Toán..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
+                  <select
+                    value={editGrade}
+                    onChange={(e) => setEditGrade(Number(e.target.value) as 10 | 11 | 12)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value={12}>Lớp 12</option>
+                    <option value={11}>Lớp 11</option>
+                    <option value={10}>Lớp 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Năm học</label>
+                  <input
+                    type="text"
+                    value={editYear}
+                    onChange={(e) => setEditYear(e.target.value)}
+                    placeholder="2025-2026"
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mã vào lớp
+                </label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  placeholder="TOAN12A1"
+                  className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-mono uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mô tả lớp học
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  placeholder="Thông tin mục tiêu ôn luyện, lịch học trực tuyến..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingClass(null);
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
+                >
+                  Lưu Thay Đổi
                 </button>
               </div>
             </form>

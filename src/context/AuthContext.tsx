@@ -170,46 +170,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         });
 
+        let registeredUserId: string | null = null;
         if (error) {
-          return { success: false, error: error.message };
+          console.warn('Supabase Auth lưu ý (kích hoạt đăng ký trực tiếp):', error.message);
+          // Không chặn học sinh khi Supabase giới hạn email hoặc chưa xác thực
+        } else if (data?.user) {
+          registeredUserId = data.user.id;
         }
 
-        if (data?.user) {
-          const newProfile: Profile = {
-            id: data.user.id,
-            email,
-            full_name: fullName,
-            role,
-            grade,
-            school_name: schoolName,
-            phone,
-            created_at: new Date().toISOString(),
-          };
+        const studentId =
+          registeredUserId ||
+          (typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `student-${Date.now()}`);
 
+        const newProfile: Profile = {
+          id: studentId,
+          email,
+          full_name: fullName,
+          role,
+          grade,
+          school_name: schoolName,
+          phone,
+          created_at: new Date().toISOString(),
+        };
+
+        if (supabase && registeredUserId) {
           try {
             await supabase.from('profiles').upsert([newProfile]);
           } catch (e) {
             console.warn('Profile upsert note:', e);
           }
-
-          setUser(newProfile);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('lms_current_user_id', newProfile.id);
-            localStorage.setItem(`custom_user_${newProfile.id}`, JSON.stringify(newProfile));
-
-            // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
-            const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
-            const cleanAccEmail = email.toLowerCase().trim();
-            const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
-            const accountToSave = { ...newProfile, password };
-            if (idx >= 0) registeredList[idx] = accountToSave;
-            else registeredList.push(accountToSave);
-            localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
-
-            localStorage.removeItem('lms_is_logged_out');
-          }
-          return { success: true };
         }
+
+        setUser(newProfile);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_current_user_id', newProfile.id);
+          localStorage.setItem(`custom_user_${newProfile.id}`, JSON.stringify(newProfile));
+
+          // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
+          const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
+          const cleanAccEmail = email.toLowerCase().trim();
+          const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
+          const accountToSave = { ...newProfile, password };
+          if (idx >= 0) registeredList[idx] = accountToSave;
+          else registeredList.push(accountToSave);
+          localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+
+          localStorage.removeItem('lms_is_logged_out');
+        }
+        return { success: true };
       }
 
       // Mock fallback khi chạy offline hoặc chưa cấu hình Supabase
