@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { MOCK_EXAMS, MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
 import { Exam, Question } from '@/types/database';
 import { parseExamLatex } from '@/lib/latex/examParser';
+import { parseWordDocx } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -43,9 +44,11 @@ export default function ExamsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
-  // Creator Modal Tabs: 'matrix' | 'manual' | 'latex'
-  const [creatorMode, setCreatorMode] = useState<'matrix' | 'manual' | 'latex'>('matrix');
+  // Creator Modal Tabs: 'matrix' | 'manual' | 'latex' | 'word'
+  const [creatorMode, setCreatorMode] = useState<'matrix' | 'manual' | 'latex' | 'word'>('matrix');
   const [selectedFormat, setSelectedFormat] = useState<'standard_3_parts' | 'periodic_4_parts' | 'custom'>('standard_3_parts');
+  const [isParsingWord, setIsParsingWord] = useState(false);
+  const [wordNotice, setWordNotice] = useState<string | null>(null);
 
   // Form tạo đề mới
   const [newTitle, setNewTitle] = useState('Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (Chuẩn Bộ GD&ĐT)');
@@ -223,6 +226,31 @@ export default function ExamsPage() {
       setLatexParseNotice(`Đã trích xuất thành công ${questions.length} câu hỏi từ mã LaTeX!`);
     } catch (err: any) {
       setLatexParseNotice(`Lỗi phân tích cú pháp LaTeX: ${err?.message || 'Không xác định'}`);
+    }
+  };
+
+  // 4. Nhập đề từ file Word (.docx)
+  const handleWordFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsParsingWord(true);
+    setWordNotice(null);
+    try {
+      const { questions } = await parseWordDocx(file);
+      if (questions.length === 0) {
+        setWordNotice('Không tìm thấy câu hỏi nào (định dạng "Câu 1:", "Bài 1:", v.v.) trong file Word!');
+      } else {
+        setSelectedQuestions(questions);
+        setWordNotice(`Đã trích xuất thành công ${questions.length} câu hỏi từ file "${file.name}"!`);
+        const cleanName = file.name.replace(/\.[^/.]+$/, '');
+        if (newTitle.includes('Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán') || !newTitle) {
+          setNewTitle(cleanName);
+        }
+      }
+    } catch (err: any) {
+      setWordNotice(`Lỗi phân tích file Word: ${err?.message || 'Không xác định'}`);
+    } finally {
+      setIsParsingWord(false);
     }
   };
 
@@ -967,6 +995,19 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     <FileCode className="h-4 w-4" />
                     📄 Dán Mã LaTeX (.tex)
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCreatorMode('word')}
+                    className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition cursor-pointer ${
+                      creatorMode === 'word'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    📝 Nhập Từ File Word (.docx)
+                  </button>
                 </div>
 
                 {/* Tab 1: Ma Trận / Tự Động */}
@@ -1218,6 +1259,55 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                         <Sparkles className="h-4 w-4" />
                         Trích Xuất Câu Hỏi Từ LaTeX
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 4: Nhập File Word (.docx) */}
+                {creatorMode === 'word' && (
+                  <div className="rounded-2xl border border-slate-200 p-5 space-y-4 bg-blue-50/20">
+                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-blue-300 rounded-2xl p-6 bg-white hover:bg-blue-50/50 transition">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 mb-3">
+                        <BookOpen className="h-6 w-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 mb-1">
+                        Chọn hoặc kéo thả file Microsoft Word (.docx) vào đây
+                      </h4>
+                      <p className="text-xs text-slate-500 max-w-md text-center mb-4">
+                        Hệ thống tự động đọc công thức toán, trích xuất tất cả đồ thị, hình vẽ hình học nhúng trong file Word và bóc tách thành các câu hỏi trắc nghiệm & tự luận.
+                      </p>
+
+                      <label className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-500 transition cursor-pointer">
+                        <Plus className="h-4 w-4" />
+                        <span>{isParsingWord ? 'Đang đọc file Word...' : 'Chọn file Word (.docx) từ máy'}</span>
+                        <input
+                          type="file"
+                          accept=".docx"
+                          disabled={isParsingWord}
+                          onChange={handleWordFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {wordNotice && (
+                      <div className={`rounded-xl p-3 text-xs font-medium border ${
+                        wordNotice.includes('Lỗi')
+                          ? 'bg-rose-50 border-rose-200 text-rose-800'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      }`}>
+                        {wordNotice}
+                      </div>
+                    )}
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 text-xs text-slate-600">
+                      <div className="font-bold text-slate-800 text-xs">💡 Lưu ý khi soạn đề thi trên Word:</div>
+                      <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                        <li>Đánh số câu rõ ràng: <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">Câu 1:</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">Câu 2.</code> hoặc <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">Bài 1:</code>.</li>
+                        <li>Phương án trắc nghiệm: <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">A.</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">B.</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">C.</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">D.</code>. Gạch chân hoặc in đậm chữ cái đầu để hệ thống nhận diện đáp án đúng.</li>
+                        <li>Đúng / Sai: <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">a)</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">b)</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">c)</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-600">d)</code> kèm từ khóa [Đúng] hoặc [Sai].</li>
+                        <li>Hình vẽ, bảng biểu và ảnh chụp đồ thị chèn trực tiếp trong Word sẽ được tự động bảo toàn 100%.</li>
+                      </ul>
                     </div>
                   </div>
                 )}

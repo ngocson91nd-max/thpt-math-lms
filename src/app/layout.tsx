@@ -18,6 +18,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="h-full antialiased scroll-smooth">
+      <head>
+        <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css" />
+        <script src="https://tikzjax.com/v1/tikzjax.js" async defer></script>
+      </head>
       <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans">
         <AuthProvider>
           <Suspense fallback={<div className="h-16 bg-white border-b border-slate-200" />}>

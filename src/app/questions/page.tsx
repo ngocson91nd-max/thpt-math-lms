@@ -7,6 +7,7 @@ import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import { createClient } from '@/lib/supabase/client';
+import { parseWordDocx } from '@/lib/word/wordExamParser';
 import {
   FileQuestion,
   Plus,
@@ -19,6 +20,7 @@ import {
   HelpCircle,
   Pencil,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
 export default function QuestionsPage() {
@@ -105,6 +107,28 @@ export default function QuestionsPage() {
     setQuestions(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lms_questions', JSON.stringify(updated));
+    }
+  };
+
+  const [isUploadingWord, setIsUploadingWord] = useState(false);
+  const handleWordImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingWord(true);
+    try {
+      const { questions: extracted } = await parseWordDocx(file);
+      if (extracted.length === 0) {
+        alert('Không tìm thấy câu hỏi nào (định dạng "Câu 1:", "Bài 1:", v.v.) trong file Word!');
+      } else {
+        const updated = [...extracted, ...questions];
+        saveQuestions(updated);
+        alert(`Đã nhập thành công ${extracted.length} câu hỏi từ file "${file.name}" vào Ngân hàng câu hỏi!`);
+      }
+    } catch (err: any) {
+      alert(`Lỗi đọc file Word: ${err?.message || 'Không xác định'}`);
+    } finally {
+      setIsUploadingWord(false);
+      e.target.value = '';
     }
   };
 
@@ -382,13 +406,26 @@ export default function QuestionsPage() {
         </div>
 
         {isTeacher && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Thêm Câu Hỏi Mới
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <label className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer shadow-2xs">
+              <Upload className="h-4 w-4" />
+              <span>{isUploadingWord ? 'Đang đọc Word...' : 'Nhập Từ Word (.docx)'}</span>
+              <input
+                type="file"
+                accept=".docx"
+                disabled={isUploadingWord}
+                onChange={handleWordImport}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Thêm Câu Hỏi Mới
+            </button>
+          </div>
         )}
       </div>
 
