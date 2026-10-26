@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_USERS } from '@/lib/supabase/mockStore';
 import {
   BookOpen,
   FileQuestion,
@@ -14,7 +13,6 @@ import {
   FolderDown,
   Award,
   ChevronDown,
-  UserCheck,
   Menu,
   X,
   Sigma,
@@ -28,7 +26,7 @@ import {
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, role, switchDemoUser, isTeacher, signOut } = useAuth();
+  const { user, role, isAdmin, isTeacher, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
@@ -161,37 +159,15 @@ export const Navbar: React.FC = () => {
                       <span>{isTeacher ? 'Sổ điểm & Quản lý bài nộp' : 'Lịch sử thi & Điểm số của tôi'}</span>
                     </Link>
 
-                    {/* Quick Demo Switcher Section */}
-                    <div className="pt-2 mt-1 border-t border-slate-100">
-                      <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Đổi tài khoản thử nghiệm nhanh:
-                      </div>
-                      {MOCK_USERS.slice(0, 3).map((u) => (
-                        <button
-                          key={u.id}
-                          onClick={() => switchDemoUser(u.id)}
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left text-xs transition ${
-                            user?.id === u.id
-                              ? 'bg-blue-50 text-blue-700 font-semibold'
-                              : 'text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`h-2 w-2 rounded-full ${
-                                u.role === 'admin'
-                                  ? 'bg-purple-500'
-                                  : u.role === 'teacher'
-                                  ? 'bg-blue-500'
-                                  : 'bg-emerald-500'
-                              }`}
-                            />
-                            <span>{u.full_name}</span>
-                          </div>
-                          {user?.id === u.id && <UserCheck className="h-3.5 w-3.5 text-blue-600" />}
-                        </button>
-                      ))}
-                    </div>
+                    {isAdmin && (
+                      <Link
+                        href="/questions"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-purple-700 hover:bg-purple-50 transition"
+                      >
+                        <FileQuestion className="h-4 w-4 text-purple-600" />
+                        <span>Quản trị ngân hàng câu hỏi</span>
+                      </Link>
+                    )}
 
                     <div className="pt-2 mt-1 border-t border-slate-100">
                       <button

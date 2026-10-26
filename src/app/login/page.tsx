@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
-  Sparkles,
   AlertCircle,
   CheckCircle2,
   GraduationCap,
@@ -47,12 +46,6 @@ export default function LoginPage() {
         router.push('/exams');
       }, 700);
     }
-  };
-
-  const fillQuickAccount = (accEmail: string, accPass: string = '123456') => {
-    setEmail(accEmail);
-    setPassword(accPass);
-    setErrorMessage('');
   };
 
   return (
@@ -157,43 +150,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Accounts */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-center text-xs font-medium text-slate-400 mb-3 flex items-center justify-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              Tài khoản mẫu thử nghiệm nhanh (Mật khẩu: 123456):
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => fillQuickAccount('student.mai@thpt-math-lms.vn')}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2 text-left hover:bg-slate-100/80 transition"
-              >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white text-xs font-bold">
-                  M
-                </div>
-                <div className="truncate">
-                  <div className="text-xs font-semibold text-slate-800 truncate">Học sinh Mai</div>
-                  <div className="text-[10px] text-slate-400">Lớp 12A1</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickAccount('teacher.toan@thpt-math-lms.vn')}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2 text-left hover:bg-slate-100/80 transition"
-              >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white text-xs font-bold">
-                  T
-                </div>
-                <div className="truncate">
-                  <div className="text-xs font-semibold text-slate-800 truncate">Thầy Toán</div>
-                  <div className="text-[10px] text-slate-400">Giáo viên</div>
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer Link to Register */}

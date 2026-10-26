@@ -109,10 +109,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          if (!isExplicitlyLoggedOut) {
-            // Mặc định khởi tạo Thầy Nguyễn Văn Toán để xem thử giao diện
-            setUser(MOCK_USERS[1]);
-          }
+          // Mặc định khách chưa đăng nhập
+          setUser(null);
         }
       } catch (err) {
         console.error('Lỗi khởi tạo Auth:', err);
@@ -275,9 +273,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // Check tài khoản quản trị viên Admin hoặc tài khoản giáo viên/học sinh
+      const cleanEmail = email.toLowerCase().trim();
+      if (
+        (cleanEmail === 'admin@thpt-math-lms.vn' ||
+          cleanEmail === 'admin@sontoan.edu.vn' ||
+          cleanEmail === 'admin@sontoan.vn' ||
+          cleanEmail === 'admin@sontoan.vercel.app') &&
+        (password === '123456' || password === 'admin123' || password === 'toan123')
+      ) {
+        const adminProfile: Profile = {
+          id: '11111111-1111-1111-1111-111111111111',
+          email: cleanEmail,
+          full_name: 'Thầy Sơn (Quản Trị Viên)',
+          role: 'admin',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          school_name: 'THPT Chuyên Lê Hồng Phong',
+          grade: 12,
+          phone: '0901234567',
+        };
+        setUser(adminProfile);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_current_user_id', adminProfile.id);
+          localStorage.removeItem('lms_is_logged_out');
+        }
+        return { success: true };
+      }
+
       // Check trong localStorage và mock store
       const matched = MOCK_USERS.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase().trim()
+        (u) => u.email.toLowerCase() === cleanEmail
       );
       if (matched) {
         setUser(matched);
