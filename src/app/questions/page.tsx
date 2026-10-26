@@ -1,0 +1,526 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
+import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
+import MathRenderer from '@/components/math/MathRenderer';
+import MathEditor from '@/components/math/MathEditor';
+import {
+  FileQuestion,
+  Plus,
+  Sparkles,
+  Search,
+  Filter,
+  CheckCircle2,
+  Layers,
+  CheckSquare,
+  HelpCircle,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
+
+export default function QuestionsPage() {
+  const { isTeacher } = useAuth();
+  const [questions, setQuestions] = useState<Question[]>(MOCK_QUESTIONS);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
+  const [gradeFilter, setGradeFilter] = useState<string>('all');
+
+  // Modal State
+  const [showModal, setShowModal] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+
+  // Form State
+  const [formType, setFormType] = useState<QuestionType>('single_choice');
+  const [formGrade, setFormGrade] = useState<10 | 11 | 12>(12);
+  const [formTopic, setFormTopic] = useState('Khảo sát hàm số');
+  const [formDifficulty, setFormDifficulty] = useState<QuestionDifficulty>('thong_hieu');
+  const [formContent, setFormContent] = useState('');
+  const [formExplanation, setFormExplanation] = useState('');
+  const [formPoints, setFormPoints] = useState(0.25);
+
+  // Single choice options
+  const [optA, setOptA] = useState('');
+  const [optB, setOptB] = useState('');
+  const [optC, setOptC] = useState('');
+  const [optD, setOptD] = useState('');
+  const [correctSingle, setCorrectSingle] = useState('A');
+
+  // Short answer
+  const [shortAns, setShortAns] = useState('');
+
+  // AI Generator Trigger
+  const handleAiGenerate = async () => {
+    setIsGeneratingAi(true);
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_question',
+          grade: formGrade,
+          topic: formTopic,
+          difficulty: formDifficulty,
+          type: formType,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.result) {
+        try {
+          const parsed = JSON.parse(data.result);
+          if (parsed.content) setFormContent(parsed.content);
+          if (parsed.explanation) setFormExplanation(parsed.explanation);
+          if (parsed.points) setFormPoints(parsed.points);
+
+          if (parsed.options && Array.isArray(parsed.options)) {
+            parsed.options.forEach((opt: any) => {
+              if (opt.id === 'A') setOptA(opt.text);
+              if (opt.id === 'B') setOptB(opt.text);
+              if (opt.id === 'C') setOptC(opt.text);
+              if (opt.id === 'D') setOptD(opt.text);
+            });
+          }
+          if (parsed.correct_answer) setCorrectSingle(parsed.correct_answer);
+        } catch {
+          // Nếu trả về text thô
+          setFormContent(data.result);
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi sinh câu hỏi AI:', err);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const handleCreateQuestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formContent.trim()) return;
+
+    let options: any = [];
+    let correct_answer: any = '';
+
+    if (formType === 'single_choice') {
+      options = [
+        { id: 'A', text: optA || 'Phương án A' },
+        { id: 'B', text: optB || 'Phương án B' },
+        { id: 'C', text: optC || 'Phương án C' },
+        { id: 'D', text: optD || 'Phương án D' },
+      ];
+      correct_answer = correctSingle;
+    } else if (formType === 'short_answer') {
+      options = [];
+      correct_answer = [shortAns];
+    } else if (formType === 'essay') {
+      options = [];
+      correct_answer = 'Hướng dẫn chấm';
+    }
+
+    const newQ: Question = {
+      id: `q-${Date.now()}`,
+      teacher_id: '22222222-2222-2222-2222-222222222222',
+      grade: formGrade,
+      topic: formTopic,
+      difficulty: formDifficulty,
+      type: formType,
+      content: formContent,
+      options,
+      correct_answer,
+      explanation: formExplanation,
+      points: Number(formPoints),
+      is_public: true,
+    };
+
+    setQuestions([newQ, ...questions]);
+    setShowModal(false);
+    // Reset form
+    setFormContent('');
+    setFormExplanation('');
+    setOptA('');
+    setOptB('');
+    setOptC('');
+    setOptD('');
+  };
+
+  const filteredQuestions = questions.filter((q) => {
+    if (gradeFilter !== 'all' && q.grade !== Number(gradeFilter)) return false;
+    if (typeFilter !== 'all' && q.type !== typeFilter) return false;
+    if (difficultyFilter !== 'all' && q.difficulty !== difficultyFilter) return false;
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      return (
+        q.content.toLowerCase().includes(s) ||
+        q.topic.toLowerCase().includes(s) ||
+        (q.explanation && q.explanation.toLowerCase().includes(s))
+      );
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Ngân Hàng Câu Hỏi Toán THPT
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Kho câu hỏi phong phú chuẩn hóa theo 5 định dạng của Bộ GD&ĐT 2025, hiển thị chuẩn KaTeX và tích hợp AI.
+          </p>
+        </div>
+
+        {isTeacher && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition self-start sm:self-auto"
+          >
+            <Plus className="h-4 w-4" />
+            Thêm Câu Hỏi Mới
+          </button>
+        )}
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo chủ đề, đề bài, lời giải..."
+            className="w-full rounded-xl border border-slate-200 pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <select
+            value={gradeFilter}
+            onChange={(e) => setGradeFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Tất cả các lớp (10, 11, 12)</option>
+            <option value="12">Toán Lớp 12</option>
+            <option value="11">Toán Lớp 11</option>
+            <option value="10">Toán Lớp 10</option>
+          </select>
+        </div>
+
+        <div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Tất cả dạng câu hỏi</option>
+            <option value="single_choice">Trắc nghiệm 1 đáp án (Phần I)</option>
+            <option value="true_false">Đúng / Sai 4 ý (Phần II)</option>
+            <option value="short_answer">Điền đáp số ngắn (Phần III)</option>
+            <option value="multiple_choice">Nhiều lựa chọn đúng</option>
+            <option value="essay">Tự luận giải chi tiết</option>
+          </select>
+        </div>
+
+        <div>
+          <select
+            value={difficultyFilter}
+            onChange={(e) => setDifficultyFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Tất cả mức độ</option>
+            <option value="nhan_biet">Nhận biết</option>
+            <option value="thong_hieu">Thông hiểu</option>
+            <option value="van_dung">Vận dụng</option>
+            <option value="van_dung_cao">Vận dụng cao</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Questions List */}
+      <div className="space-y-4">
+        {filteredQuestions.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 p-12 text-center text-slate-400">
+            Không tìm thấy câu hỏi nào phù hợp với bộ lọc.
+          </div>
+        ) : (
+          filteredQuestions.map((q, index) => (
+            <div
+              key={q.id}
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs hover:border-blue-200 transition"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 text-xs font-bold text-blue-700">
+                    #{index + 1}
+                  </span>
+                  <span className="font-bold text-xs text-slate-900">
+                    Toán Lớp {q.grade} • {q.topic}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                    {q.type === 'single_choice' && 'Trắc nghiệm 1 đáp án'}
+                    {q.type === 'multiple_choice' && 'Nhiều lựa chọn'}
+                    {q.type === 'true_false' && 'Đúng/Sai 4 ý THPT'}
+                    {q.type === 'short_answer' && 'Điền đáp số'}
+                    {q.type === 'essay' && 'Tự luận'}
+                  </span>
+
+                  <span
+                    className={`rounded-md px-2 py-0.5 font-semibold ${
+                      q.difficulty === 'nhan_biet'
+                        ? 'bg-blue-50 text-blue-700'
+                        : q.difficulty === 'thong_hieu'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : q.difficulty === 'van_dung'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-rose-50 text-rose-700'
+                    }`}
+                  >
+                    {q.difficulty === 'nhan_biet' && 'Nhận biết'}
+                    {q.difficulty === 'thong_hieu' && 'Thông hiểu'}
+                    {q.difficulty === 'van_dung' && 'Vận dụng'}
+                    {q.difficulty === 'van_dung_cao' && 'Vận dụng cao'}
+                  </span>
+
+                  <span className="font-bold text-slate-700">{q.points} điểm</span>
+                </div>
+              </div>
+
+              {/* Question Content */}
+              <div className="text-sm text-slate-800 leading-relaxed font-medium">
+                <MathRenderer content={q.content} />
+              </div>
+
+              {/* Options Preview */}
+              {q.options && q.options.length > 0 && (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {q.options.map((opt: any) => (
+                    <div
+                      key={opt.id}
+                      className="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-100"
+                    >
+                      <span className="font-bold text-slate-600 uppercase">{opt.id}.</span>
+                      <div className="text-slate-800">
+                        <MathRenderer content={opt.text} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Correct Answer & Explanation Preview */}
+              {q.explanation && (
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-xs">
+                  <div className="font-bold text-blue-900 mb-1">
+                    Đáp án đúng:{' '}
+                    <span className="font-mono text-emerald-700">
+                      {typeof q.correct_answer === 'object'
+                        ? JSON.stringify(q.correct_answer)
+                        : String(q.correct_answer)}
+                    </span>
+                  </div>
+                  <MathRenderer content={q.explanation} className="text-slate-700 leading-relaxed" />
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal Thêm Câu Hỏi Mới */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-3xl my-8 rounded-3xl bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Thêm Câu Hỏi Toán Mới</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Soạn câu hỏi với công thức KaTeX và hỗ trợ tạo tự động bằng AI.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={isGeneratingAi}
+                onClick={handleAiGenerate}
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 hover:from-indigo-500 hover:to-purple-500 transition disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                {isGeneratingAi ? 'AI Đang Soạn Đề...' : 'AI Tạo Đề Tự Động'}
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuestion} className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
+                  <select
+                    value={formGrade}
+                    onChange={(e) => setFormGrade(Number(e.target.value) as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                  >
+                    <option value={12}>Lớp 12</option>
+                    <option value={11}>Lớp 11</option>
+                    <option value={10}>Lớp 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chủ đề</label>
+                  <input
+                    type="text"
+                    value={formTopic}
+                    onChange={(e) => setFormTopic(e.target.value)}
+                    placeholder="Khảo sát hàm số, Oxyz..."
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ</label>
+                  <select
+                    value={formDifficulty}
+                    onChange={(e) => setFormDifficulty(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                  >
+                    <option value="nhan_biet">Nhận biết</option>
+                    <option value="thong_hieu">Thông hiểu</option>
+                    <option value="van_dung">Vận dụng</option>
+                    <option value="van_dung_cao">Vận dụng cao</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng câu</label>
+                  <select
+                    value={formType}
+                    onChange={(e) => setFormType(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                  >
+                    <option value="single_choice">Trắc nghiệm 1 đáp án</option>
+                    <option value="true_false">Đúng / Sai 4 ý</option>
+                    <option value="short_answer">Điền đáp số ngắn</option>
+                    <option value="essay">Tự luận</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Math Editor for Content */}
+              <div>
+                <MathEditor
+                  value={formContent}
+                  onChange={setFormContent}
+                  label="Nội dung đề bài (Hỗ trợ LaTeX):"
+                  placeholder="Ví dụ: Cho hàm số $y = x^3 - 3x^2$... Tính $\int_0^1 ...$"
+                  rows={4}
+                />
+              </div>
+
+              {/* Options if single choice */}
+              {formType === 'single_choice' && (
+                <div className="space-y-2 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="text-xs font-semibold text-slate-700 mb-1">4 Phương án lựa chọn:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Đáp án A (ví dụ: $x = 1$)"
+                      value={optA}
+                      onChange={(e) => setOptA(e.target.value)}
+                      className="rounded-xl border border-slate-200 p-2 text-xs bg-white text-slate-900 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Đáp án B"
+                      value={optB}
+                      onChange={(e) => setOptB(e.target.value)}
+                      className="rounded-xl border border-slate-200 p-2 text-xs bg-white text-slate-900 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Đáp án C"
+                      value={optC}
+                      onChange={(e) => setOptC(e.target.value)}
+                      className="rounded-xl border border-slate-200 p-2 text-xs bg-white text-slate-900 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Đáp án D"
+                      value={optD}
+                      onChange={(e) => setOptD(e.target.value)}
+                      className="rounded-xl border border-slate-200 p-2 text-xs bg-white text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex items-center gap-3">
+                    <span className="text-xs font-semibold text-slate-700">Đáp án đúng:</span>
+                    {(['A', 'B', 'C', 'D'] as const).map((choice) => (
+                      <label key={choice} className="flex items-center gap-1 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name="correctSingle"
+                          checked={correctSingle === choice}
+                          onChange={() => setCorrectSingle(choice)}
+                          className="text-blue-600"
+                        />
+                        <span>{choice}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Short Answer */}
+              {formType === 'short_answer' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Đáp số đúng (Hệ thống tự chuẩn hóa số thập phân và phân số):
+                  </label>
+                  <input
+                    type="text"
+                    value={shortAns}
+                    onChange={(e) => setShortAns(e.target.value)}
+                    placeholder="Ví dụ: 6 hoặc 2.5 hoặc 5/2"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Explanation Editor */}
+              <div>
+                <MathEditor
+                  value={formExplanation}
+                  onChange={setFormExplanation}
+                  label="Lời giải chi tiết chuẩn sư phạm:"
+                  placeholder="Trình bày các bước suy luận và công thức toán..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-500 transition"
+                >
+                  Lưu Vào Ngân Hàng Đề
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
