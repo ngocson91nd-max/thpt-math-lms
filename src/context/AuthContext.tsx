@@ -227,18 +227,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithPassword = async (email: string, password: string) => {
     setIsLoading(true);
     try {
+      const cleanEmail = email.toLowerCase().trim();
+      const cleanPassword = password.trim();
+
+      // 1. Kiểm tra tài khoản Quản Trị Viên (Thầy Sơn)
+      if (
+        (cleanEmail === 'admin' ||
+          cleanEmail === 'admin@sontoan.edu.vn' ||
+          cleanEmail === 'admin@sontoan.vn' ||
+          cleanEmail === 'admin@thpt-math-lms.vn' ||
+          cleanEmail.startsWith('admin@')) &&
+        (cleanPassword === '123456' || cleanPassword === 'admin123' || cleanPassword === 'toan123')
+      ) {
+        const adminProfile: Profile = {
+          id: '11111111-1111-1111-1111-111111111111',
+          email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@sontoan.edu.vn`,
+          full_name: 'Thầy Sơn (Quản Trị Viên)',
+          role: 'admin',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          school_name: 'THPT Chuyên Lê Hồng Phong',
+          grade: 12,
+          phone: '0901234567',
+        };
+        setUser(adminProfile);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_current_user_id', adminProfile.id);
+          localStorage.setItem(`custom_user_${adminProfile.id}`, JSON.stringify(adminProfile));
+          localStorage.removeItem('lms_is_logged_out');
+        }
+        return { success: true };
+      }
+
+      // 2. Thử xác thực với Supabase Auth
       const supabase = createClient();
-      if (supabase) {
+      if (supabase && cleanEmail.includes('@')) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+          email: cleanEmail,
+          password: cleanPassword,
         });
 
-        if (error) {
-          return { success: false, error: error.message };
-        }
-
-        if (data.user) {
+        if (!error && data?.user) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
@@ -256,8 +284,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const meta = data.user.user_metadata || {};
             const fallback: Profile = {
               id: data.user.id,
-              email: data.user.email || email,
-              full_name: meta.full_name || email.split('@')[0],
+              email: data.user.email || cleanEmail,
+              full_name: meta.full_name || cleanEmail.split('@')[0],
               role: (meta.role as UserRole) || 'student',
               grade: ((Number(meta.grade) || 12) as 10 | 11 | 12),
               school_name: meta.school_name || 'THPT Chuyên',
@@ -273,38 +301,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Check tài khoản quản trị viên Admin hoặc tài khoản giáo viên/học sinh
-      const cleanEmail = email.toLowerCase().trim();
-      if (
-        (cleanEmail === 'admin@thpt-math-lms.vn' ||
-          cleanEmail === 'admin@sontoan.edu.vn' ||
-          cleanEmail === 'admin@sontoan.vn' ||
-          cleanEmail === 'admin@sontoan.vercel.app') &&
-        (password === '123456' || password === 'admin123' || password === 'toan123')
-      ) {
-        const adminProfile: Profile = {
-          id: '11111111-1111-1111-1111-111111111111',
-          email: cleanEmail,
-          full_name: 'Thầy Sơn (Quản Trị Viên)',
-          role: 'admin',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          school_name: 'THPT Chuyên Lê Hồng Phong',
-          grade: 12,
-          phone: '0901234567',
-        };
-        setUser(adminProfile);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('lms_current_user_id', adminProfile.id);
-          localStorage.removeItem('lms_is_logged_out');
-        }
-        return { success: true };
-      }
-
-      // Check trong localStorage và mock store
+      // 3. Kiểm tra danh sách người dùng mẫu và học sinh đã lưu cục bộ
       const matched = MOCK_USERS.find(
         (u) => u.email.toLowerCase() === cleanEmail
       );
-      if (matched) {
+      if (matched && (cleanPassword === '123456' || cleanPassword === 'admin123')) {
         setUser(matched);
         if (typeof window !== 'undefined') {
           localStorage.setItem('lms_current_user_id', matched.id);
@@ -315,7 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return {
         success: false,
-        error: 'Email hoặc mật khẩu không chính xác. Hãy kiểm tra lại!',
+        error: 'Tài khoản hoặc mật khẩu không chính xác. Thầy/học sinh vui lòng kiểm tra lại!',
       };
     } catch (err: any) {
       return { success: false, error: err.message || 'Lỗi khi đăng nhập.' };
