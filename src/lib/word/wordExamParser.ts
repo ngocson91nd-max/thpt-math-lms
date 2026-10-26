@@ -4,8 +4,16 @@ import { ommlToLatex } from 'dwml-ts';
 import { Question, QuestionType, QuestionDifficulty } from '../../types/database';
 import { detectMathTopic } from '../latex/examParser';
 
+let WMF: any = null;
+try {
+  WMF = require('wmf');
+} catch {
+  // Fallback if wmf is unavailable
+}
+
 /**
  * Trích xuất toàn bộ hình ảnh và ánh xạ quan hệ rId trong file .docx
+ * Tự động chuyển đổi công thức MathType (WMF) sang PNG Base64 trong môi trường client (Canvas)
  */
 async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
   const rIdToDataUrl = new Map<string, string>();
@@ -17,15 +25,38 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
     const file = zip.file(path);
     if (!file) continue;
 
-    const base64 = await file.async('base64');
     const lower = path.toLowerCase();
-    let mime = 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
-    else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
-    else if (lower.endsWith('.gif')) mime = 'image/gif';
-    else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) mime = 'image/wmf';
+    let dataUrl = '';
 
-    const dataUrl = `data:${mime};base64,${base64}`;
+    // Xử lý chuyển đổi WMF của MathType sang PNG thông qua Canvas
+    if ((lower.endsWith('.wmf') || lower.endsWith('.emf')) && WMF) {
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        try {
+          const uint8 = await file.async('uint8array');
+          const size = WMF.image_size(uint8);
+          const w = Math.max(size ? size[0] : 180, 40);
+          const h = Math.max(size ? size[1] : 60, 20);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          WMF.draw_canvas(uint8, canvas);
+          dataUrl = canvas.toDataURL('image/png');
+        } catch (e) {
+          console.warn('WMF canvas conversion fallback:', e);
+        }
+      }
+    }
+
+    if (!dataUrl) {
+      const base64 = await file.async('base64');
+      let mime = 'image/png';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
+      else if (lower.endsWith('.gif')) mime = 'image/gif';
+      else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) mime = 'image/wmf';
+      dataUrl = `data:${mime};base64,${base64}`;
+    }
+
     const filename = path.replace('word/media/', '').trim();
     filenameToDataUrl.set(filename, dataUrl);
   }
@@ -60,6 +91,9 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
 
   const rIdToDataUrl = await extractDocxImages(zip);
   let xml = await docFile.async('text');
+
+  // Chuẩn hóa ký tự khoảng trắng không ngắt \u00A0
+  xml = xml.replace(/\u00A0/g, ' ');
 
   // 1. Chuyển đổi mọi khối công thức toán OMML <m:oMath> và <m:oMathPara> sang LaTeX
   xml = xml.replace(/<m:oMathPara[\s\S]*?<\/m:oMathPara>/gi, (m) => {
@@ -227,15 +261,21 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     }
   }
 
-  // Tách câu hỏi theo biểu thức: "Câu 1:", "Câu 1.", "Câu 1 ", "Bài 1:"
-  const questionSplitter = /(?=(?:^|\n)\s*(?:<b>|<strong>|<u>)*\s*(?:Câu|Bài)\s*\d+[\.:\s])/i;
+  // Vị trí các phần trong tài liệu nếu có
+  const p1Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
+  const p2Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
+  const p3Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
+  const p4Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
+
+  // Tách câu hỏi theo biểu thức đa dạng: "Câu 1:", "Câu 1.", "Câu 1 ", "Bài 1:", "[Câu 1]", "CÂU 1"
+  const questionSplitter = /(?=(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)*\s*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI) *\d+ *(?:\]|\)|\.|\:|\-|\s))/i;
   const rawBlocks = textWithMathAndImages.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
   const questions: Question[] = [];
   let qIndex = 0;
 
   for (const block of rawBlocks) {
-    const matchHead = block.match(/^(?:<b>|<strong>|<u>)*\s*(?:Câu|Bài)\s*(\d+)[\.:\s]*(?:<\/b>|<\/strong>|<\/u>)*([\s\S]*)$/i);
+    const matchHead = block.match(/^(?:<b>|<strong>|<u>|<p[^>]*>)*\s*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI) *(\d+) *(?:\]|\)|\.|\:|\-|\s)*(?:<\/b>|<\/strong>|<\/u>|<\/p>)*([\s\S]*)$/i);
     if (!matchHead) continue;
 
     qIndex++;
@@ -251,8 +291,8 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       contentAndChoices = body.substring(0, lgMatch.index).trim();
     }
 
-    // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (kể cả trong bảng hoặc cách nhau bởi tab)
-    const choiceRegex = /(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>)?\s*([A-D])[\.\)]\s*(?:<\/b>|<\/strong>|<\/u>)?/gi;
+    // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (trên 1 dòng, nhiều dòng, hoặc ô bảng)
+    const choiceRegex = /(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([A-D])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s*/gi;
     const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
 
     let type: QuestionType = 'single_choice';
@@ -321,7 +361,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       if (!correctAnswer) correctAnswer = 'A';
     } else {
       // Kiểm tra xem có phải là dạng Đúng / Sai (a, b, c, d)
-      const tfMatches = Array.from(contentAndChoices.matchAll(/(?:^|\n|\t|\s{2,})\s*([a-d])\)\s*/gi));
+      const tfMatches = Array.from(contentAndChoices.matchAll(/(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>)?\s*(?:\[|\()?([a-d])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u)>)?\s*/gi));
       if (tfMatches.length >= 3) {
         type = 'true_false';
         part = 2;
@@ -353,7 +393,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       } else {
         // Kiểm tra xem có phải dạng Trả lời ngắn (điền số)
         const hasNumberAns = explanation && /(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i.test(explanation);
-        if (hasNumberAns || body.includes('Điền kết quả') || body.includes('bằng bao nhiêu')) {
+        if (hasNumberAns || body.includes('Điền kết quả') || body.includes('bằng bao nhiêu') || (p3Pos !== -1 && p4Pos === -1)) {
           type = 'short_answer';
           part = 3;
           points = 0.5;

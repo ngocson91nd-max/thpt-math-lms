@@ -656,16 +656,25 @@ Khi đó chiều cao $h = 2\\text{ m}$.
         </div>
 
         {isTeacher && (
-          <button
-            onClick={() => {
-              handleSelectFormat('standard_3_parts');
-              setShowCreateModal(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition self-start sm:self-auto cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Tạo Đề Thi Mới
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/exams/editor?new=1"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition self-start sm:self-auto cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" />
+              Soạn Đề Thi Mới (iExam Editor)
+            </Link>
+            <button
+              onClick={() => {
+                handleSelectFormat('standard_3_parts');
+                setShowCreateModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+            >
+              <Plus className="h-4 w-4 text-slate-500" />
+              Tạo Nhanh Ma Trận
+            </button>
+          </div>
         )}
       </div>
 
@@ -889,15 +898,14 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                   <div className="flex items-center gap-2">
                     {isTeacher && (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(exam)}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition cursor-pointer"
-                          title="Chỉnh sửa đề thi"
+                        <Link
+                          href={`/exams/editor?id=${exam.id}`}
+                          className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                          title="Mở trình soạn thảo sửa toàn bộ nội dung đề thi"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          <span>Sửa</span>
-                        </button>
+                          <span>Sửa Đề</span>
+                        </Link>
                         <button
                           type="button"
                           onClick={() => handleDeleteExam(exam.id, exam.title)}
