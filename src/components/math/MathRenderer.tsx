@@ -20,23 +20,51 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
     return renderMathToHtml(content || '');
   }, [content]);
 
+  // Kiểm tra xem nội dung đã render có chứa các phần tử khối (div, table, svg, details, pre, v.v.) hay không
+  // Nếu có, bắt buộc phải dùng thẻ <div> để tránh lỗi thẻ <div> lồng trong thẻ <span> làm vỡ cấu trúc DOM của trình duyệt
+  const containsBlockElement = useMemo(() => {
+    return /<(?:div|table|svg|pre|ul|ol|details|script)/i.test(html);
+  }, [html]);
+
+  const shouldUseDiv = !inline || containsBlockElement;
+
   // Kích hoạt render TikZ WebAssembly khi có hình vẽ TikZ trong nội dung
   useEffect(() => {
-    if (typeof window === 'undefined' || !html.includes('text/tikz')) return;
+    if (typeof window === 'undefined' || !containerRef.current) return;
 
-    const runTikz = () => {
-      try {
-        if ((window as any).tikzjax?.process) {
-          (window as any).tikzjax.process();
-        } else {
-          window.dispatchEvent(new Event('DOMContentLoaded'));
-        }
-      } catch (err) {
-        console.warn('TikZJax process error:', err);
-      }
-    };
+    const container = containerRef.current;
+    const tikzTargets = container.querySelectorAll('.tikz-target[data-tikz]');
+    if (tikzTargets.length === 0) return;
 
-    // Kiểm tra xem script TikZJax đã được nạp hay chưa
+    // 1. Cấu hình TikzJaxOptions toàn cục
+    if (!(window as any).TikzJaxOptions) {
+      (window as any).TikzJaxOptions = {
+        renderTimeout: 35000,
+        tex: {
+          tikzLibraries: ['arrows.meta', 'calc', 'positioning', 'shapes', 'through', 'intersections'],
+          addToPreamble: '\\usepackage{amsmath,amssymb}',
+        },
+      };
+    }
+
+    // 2. Chèn script tag TikZ thật sự vào từng target để kích hoạt MutationObserver của TikzJax
+    tikzTargets.forEach((target) => {
+      // Nếu đã có SVG được TikZJax render rồi thì không chèn lại
+      if (target.querySelector('svg.tikz, svg.tikzjax, svg')) return;
+
+      const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
+      if (!rawTikz) return;
+
+      // Xóa các thẻ cũ nếu có và tạo element script thật để MutationObserver bắt được
+      target.innerHTML = '';
+      const scriptTag = document.createElement('script');
+      scriptTag.type = 'text/tikz';
+      scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,calc,positioning,shapes,through,intersections');
+      scriptTag.textContent = rawTikz;
+      target.appendChild(scriptTag);
+    });
+
+    // 3. Đảm bảo nạp script TikZJax và Font CSS
     const existingScript = document.querySelector('script[src*="tikzjax"]');
     if (!existingScript) {
       const fontLink = document.createElement('link');
@@ -47,36 +75,24 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
       script.async = true;
-      script.onload = () => {
-        setTimeout(runTikz, 150);
-        setTimeout(runTikz, 800);
-      };
       document.head.appendChild(script);
-    } else {
-      runTikz();
-      const t1 = setTimeout(runTikz, 250);
-      const t2 = setTimeout(runTikz, 900);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
     }
   }, [html]);
 
-  if (inline) {
+  if (shouldUseDiv) {
     return (
-      <span
+      <div
         ref={containerRef as any}
-        className={`math-content inline ${className}`}
+        className={`math-content ${inline ? 'inline-block align-top' : 'leading-relaxed'} text-slate-800 ${className}`}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }
 
   return (
-    <div
+    <span
       ref={containerRef as any}
-      className={`math-content leading-relaxed text-slate-800 ${className}`}
+      className={`math-content inline ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

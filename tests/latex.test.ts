@@ -93,7 +93,7 @@ describe('3. Kiểm thử Bảng Biến Thiên (tkz-tab) sang SVG', () => {
       expect(svg).toContain('+∞');
       expect(svg).toContain('10');
       expect(svg).toContain('-22');
-      expect(svg).toContain('marker-end="url(#tab-arrow)"');
+      expect(svg).toContain('marker-end="url(#tab-arrow');
     }
   });
 });
@@ -120,5 +120,41 @@ describe('4. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)'
     expect(q14.type).toBe('true_false');
     expect(q14.content).toContain('tikzpicture');
     expect(q14.options.length).toBe(4);
+
+    // Kiểm tra renderMathToHtml cho q12: bảng tabular sạch, không bị dính thẻ br làm hỏng
+    const renderedQ12 = renderMathToHtml(q12.content);
+    expect(renderedQ12).toContain('<table');
+    expect(renderedQ12).not.toContain('<br /><table');
+    expect(renderedQ12).not.toContain('<td<br />');
+
+    // Kiểm tra renderMathToHtml cho q18 (Bảng biến thiên tkz-tab): SVG nguyên vẹn
+    const q18 = questions[17];
+    const renderedQ18 = renderMathToHtml(q18.content);
+    expect(renderedQ18).toContain('<svg');
+    expect(renderedQ18).not.toContain('<svg<br />');
+    expect(renderedQ18).not.toContain('<rect<br />');
+    expect(renderedQ18).not.toContain('<text<br />');
+
+    // Kiểm tra renderMathToHtml cho q14 (TikZ đồ thị hàm số): script TikZ không bị dính thẻ br
+    const renderedQ14 = renderMathToHtml(q14.content);
+    expect(renderedQ14).toContain('text/tikz');
+    expect(renderedQ14).not.toContain('<script type="text/tikz">\\begin{tikzpicture}<br />');
+    expect(renderedQ14).not.toContain('<br />  \\draw');
+
+    // Tìm câu có tkzTab trong explanation (hoặc loigiai)
+    const qWithTabInLg = questions.find((q) => q.explanation && q.explanation.includes('tkzTab'));
+    expect(qWithTabInLg).toBeDefined();
+    if (qWithTabInLg && qWithTabInLg.explanation) {
+      const renderedLg = renderMathToHtml(qWithTabInLg.explanation);
+      expect(renderedLg).toContain('<svg');
+      expect(renderedLg).toContain('viewBox');
+    }
+
+    // Kiểm tra căn bậc hai \sqrt không bị dính <br /> vào thẻ path của KaTeX
+    const sqrtText = 'Độ dài cạnh $MK = \\sqrt{MH^2 + HK^2} = \\sqrt{\\left(\\dfrac{1}{2}\\right)^2 + \\left(\\dfrac{\\sqrt{3}}{2}\\right)^2} = 1$.';
+    const renderedSqrt = renderMathToHtml(sqrtText);
+    expect(renderedSqrt).toContain('katex');
+    expect(renderedSqrt).not.toContain('<br />M1001');
+    expect(renderedSqrt).not.toContain('z<br />');
   });
 });

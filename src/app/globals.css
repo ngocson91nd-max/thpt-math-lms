@@ -32,3 +32,49 @@ body {
   font-size: 1.08em;
   text-rendering: auto;
 }
+
+/* Tabular & Bảng Số Liệu THPT */
+.math-content table {
+  border-collapse: collapse;
+  margin: 0.75rem auto;
+}
+.math-content td,
+.math-content th {
+  border: 1px solid #cbd5e1;
+  padding: 0.4rem 0.75rem;
+}
+
+/* Bảng Biến Thiên SVG (tkz-tab) */
+.tkz-tab-wrapper svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* TikZ WebAssembly / TikZJax Figures */
+.tikz-target svg,
+.tikzjax-wrapper svg,
+svg.tikz,
+svg.tikzjax {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Cấu trúc \immini (2 cột Đề + Hình) */
+.immini-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0.75rem 0;
+}
+
+@media (min-width: 768px) {
+  .immini-block {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
