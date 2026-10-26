@@ -111,6 +111,7 @@ export interface Question {
   teacher_id?: string;
   grade: 10 | 11 | 12;
   topic: string;
+  part?: 1 | 2 | 3 | 4;
   difficulty: QuestionDifficulty;
   type: QuestionType;
   content: string; // Đề bài có LaTeX KaTeX
@@ -142,6 +143,13 @@ export interface Exam {
   start_time?: string;
   end_time?: string;
   status: ExamStatus;
+  format?: 'standard_3_parts' | 'periodic_4_parts' | 'custom';
+  part_structure?: {
+    part1_count?: number;
+    part2_count?: number;
+    part3_count?: number;
+    part4_count?: number;
+  };
   is_view_answer_allowed: boolean;
   questions?: (Question & { custom_points?: number; order_index?: number })[];
   created_at?: string;

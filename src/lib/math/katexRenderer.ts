@@ -1,17 +1,64 @@
 import katex from 'katex';
 
 /**
+ * Tiền xử lý các macro LaTeX chuẩn sư phạm Toán THPT (gói ex_test, tkz-tab, v.v.)
+ * sang cú pháp mà KaTeX hiểu và render hoàn hảo.
+ */
+function preprocessLatex(raw: string): string {
+  if (!raw) return '';
+
+  let text = raw;
+
+  // 1. Chuyển đổi dấu ngoặc kép tiếng Việt \lq\lq và \rq\rq
+  text = text.replace(/\\lq\\lq/g, '“').replace(/\\rq\\rq/g, '”');
+
+  // 2. Chuyển đổi môi trường display math \[ ... \] thành $$ ... $$
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$1$$$');
+
+  // 3. Xử lý \immini{text}{tikzpicture}: lấy phần text trước, phần sau hiển thị gọn
+  text = text.replace(/\\immini\s*\{([\s\S]*?)\}\s*\{([\s\S]*?)\}/g, (_m, mainText, _side) => {
+    return mainText;
+  });
+
+  // 4. Xử lý môi trường \begin{itemchoice} ... \end{itemchoice}
+  text = text.replace(/\\begin\{itemchoice\}([\s\S]*?)\\end\{itemchoice\}/g, (_m, body) => {
+    return body.replace(/\\itemch\s*/g, '\n• ');
+  });
+
+  // 5. Chuẩn hóa macro \heva và \hoac cho KaTeX
+  // \heva{&x=1\\ &y=2} -> \begin{cases} x=1 \\ y=2 \end{cases}
+  text = text.replace(/\\heva\s*\{([\s\S]*?)\}/g, (_m, body) => {
+    const cleaned = body.replace(/&/g, '').trim();
+    return `\\begin{cases} ${cleaned} \\end{cases}`;
+  });
+
+  // \hoac{&x=1\\ &x=2} -> \left[ \begin{array}{l} x=1 \\ x=2 \end{array} \right.
+  text = text.replace(/\\hoac\s*\{([\s\S]*?)\}/g, (_m, body) => {
+    const cleaned = body.replace(/&/g, '').trim();
+    return `\\left[\\begin{array}{l} ${cleaned} \\end{array}\\right.`;
+  });
+
+  // 6. Xử lý \mathscr{D} thành \mathcal{D} hoặc D
+  text = text.replace(/\\mathscr\{([A-Za-z]+)\}/g, '\\mathcal{$1}');
+
+  // 7. Bỏ các lệnh trang trí không ảnh hưởng công thức: \limits sau \lim
+  text = text.replace(/\\lim\\limits/g, '\\lim');
+  text = text.replace(/\\max\\limits/g, '\\max');
+  text = text.replace(/\\min\\limits/g, '\\min');
+
+  return text;
+}
+
+/**
  * Phân tích và chuyển đổi chuỗi chứa công thức LaTeX ($...$ hoặc $$...$$) thành HTML an toàn.
- * Hỗ trợ cú pháp:
- * - Khối hiển thị (Display mode): $$công_thức$$
- * - Cùng dòng (Inline mode): $công_thức$
- * - Ký tự xuống dòng và các đoạn văn bản tiếng Việt
  */
 export function renderMathToHtml(content: string): string {
   if (!content) return '';
 
+  const preprocessed = preprocessLatex(content);
+
   // Bước 1: Thay thế các khối display math $$...$$
-  let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+  let processed = preprocessed.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
     try {
       return `<div class="my-3 overflow-x-auto text-center">${katex.renderToString(math.trim(), {
         displayMode: true,
@@ -23,7 +70,6 @@ export function renderMathToHtml(content: string): string {
   });
 
   // Bước 2: Thay thế các công thức inline $...$
-  // Chú ý regex cẩn thận không khớp với khoảng trắng rỗng hoặc tiền tệ thông thường
   processed = processed.replace(/(?<!\\)\$([^\$\n]+?)\$/g, (_, math) => {
     try {
       return katex.renderToString(math.trim(), {

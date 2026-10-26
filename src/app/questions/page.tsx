@@ -28,6 +28,7 @@ export default function QuestionsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [partFilter, setPartFilter] = useState<'all' | 1 | 2 | 3 | 4>('all');
 
   // Modal States
   const [showModal, setShowModal] = useState(false);
@@ -73,7 +74,9 @@ export default function QuestionsPage() {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setQuestions(parsed);
+            const existingIds = new Set(parsed.map((q: any) => q.id));
+            const missing = MOCK_QUESTIONS.filter((q) => !existingIds.has(q.id));
+            setQuestions([...parsed, ...missing]);
             return;
           }
         } catch (e) {
@@ -349,6 +352,10 @@ export default function QuestionsPage() {
     if (gradeFilter !== 'all' && q.grade !== Number(gradeFilter)) return false;
     if (typeFilter !== 'all' && q.type !== typeFilter) return false;
     if (difficultyFilter !== 'all' && q.difficulty !== difficultyFilter) return false;
+    if (partFilter !== 'all') {
+      const p = q.part || (q.type === 'essay' ? 4 : q.type === 'short_answer' ? 3 : q.type === 'true_false' ? 2 : 1);
+      if (p !== partFilter) return false;
+    }
     if (search.trim()) {
       const s = search.toLowerCase();
       return (
@@ -383,6 +390,32 @@ export default function QuestionsPage() {
             Thêm Câu Hỏi Mới
           </button>
         )}
+      </div>
+
+      {/* Part Filter Bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+          <Filter className="h-3.5 w-3.5" /> Phần trong đề:
+        </span>
+        {[
+          { id: 'all', label: 'Tất cả các phần' },
+          { id: 1, label: 'Phần I: TN 4 Lựa Chọn' },
+          { id: 2, label: 'Phần II: Đúng / Sai' },
+          { id: 3, label: 'Phần III: Điền Số Ngắn' },
+          { id: 4, label: 'Phần IV: Tự Luận VDC' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setPartFilter(tab.id as any)}
+            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              partFilter === tab.id
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Filter and Search Bar */}

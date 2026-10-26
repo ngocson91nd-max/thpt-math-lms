@@ -8,6 +8,7 @@ import {
   Material,
   ClassMember,
 } from '@/types/database';
+import { HUE_HSG_QUESTIONS, HUE_HSG_EXAM } from '@/lib/data/hueHsgExam';
 
 export const MOCK_USERS: Profile[] = [
   {
@@ -199,12 +200,13 @@ $$\\Delta = b^2 - 4ac, \\quad x_{1,2} = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}$$`,
   },
 ];
 
-export const MOCK_QUESTIONS: Question[] = [
+const BASE_MOCK_QUESTIONS: Question[] = [
   {
     id: 'a1111111-1111-1111-1111-111111111111',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Khảo sát hàm số',
+    part: 1,
     difficulty: 'nhan_biet',
     type: 'single_choice',
     content: 'Cho hàm số $y = f(x)$ có bảng biến thiên với $f\'(x) = 3x^2 - 6x$. Số điểm cực trị của hàm số đã cho là:',
@@ -224,6 +226,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Nguyên hàm - Tích phân',
+    part: 1,
     difficulty: 'thong_hieu',
     type: 'single_choice',
     content: 'Tích phân $I = \\int_0^1 e^{2x} \\, \\mathrm{d}x$ bằng:',
@@ -243,6 +246,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Đường tiệm cận',
+    part: 1,
     difficulty: 'thong_hieu',
     type: 'multiple_choice',
     content: 'Cho hàm số $y = \\frac{2x - 1}{x + 1}$. Trong các khẳng định sau, những khẳng định nào ĐÚNG? (Chọn tất cả các đáp án đúng)',
@@ -262,6 +266,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Khảo sát hàm số',
+    part: 2,
     difficulty: 'van_dung',
     type: 'true_false',
     content: 'Cho hàm số $f(x) = \\frac{x^2 - 3x + 6}{x - 1}$. Xét tính đúng hoặc sai của các mệnh đề sau:',
@@ -285,6 +290,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Giá trị lớn nhất, nhỏ nhất',
+    part: 3,
     difficulty: 'thong_hieu',
     type: 'short_answer',
     content: 'Tìm giá trị nhỏ nhất của hàm số $g(x) = x + \\frac{9}{x}$ trên đoạn $[1; 5]$.',
@@ -299,6 +305,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Hình học Oxyz',
+    part: 3,
     difficulty: 'van_dung',
     type: 'short_answer',
     content: 'Trong không gian $Oxyz$, cho mặt cầu $(S): (x - 1)^2 + (y + 2)^2 + (z - 3)^2 = 25$. Khoảng cách từ tâm $I$ của $(S)$ đến mặt phẳng $(P): 2x - 2y + z + 3 = 0$ bằng bao nhiêu?',
@@ -313,6 +320,7 @@ export const MOCK_QUESTIONS: Question[] = [
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Toán thực tế - Ứng dụng đạo hàm',
+    part: 4,
     difficulty: 'van_dung_cao',
     type: 'essay',
     content: 'Một hộ sản xuất dự định làm một bể chứa nước bằng inox hình hộp chữ nhật không nắp có thể tích $V = 32\\text{ m}^3$, đáy là hình vuông cạnh $x\\text{ (m)}$, chiều cao là $h\\text{ (m)}$. Hãy tìm kích thước $x$ và $h$ để diện tích inox cần sử dụng là nhỏ nhất (bỏ qua độ dày mối hàn). Trình bày đầy đủ các bước giải.',
@@ -328,7 +336,40 @@ export const MOCK_QUESTIONS: Question[] = [
   },
 ];
 
+export const MOCK_QUESTIONS: Question[] = [
+  ...BASE_MOCK_QUESTIONS,
+  ...HUE_HSG_QUESTIONS,
+];
+
 export const MOCK_EXAMS: Exam[] = [
+  HUE_HSG_EXAM,
+  {
+    id: 'e2222222-2222-2222-2222-222222222222',
+    title: 'Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (90 Phút - Chuẩn Bộ GD&ĐT)',
+    description: 'Đề thi chuẩn cấu trúc Bộ GD&ĐT 2025 gồm 3 phần: Phần I (12 câu TN 4 lựa chọn), Phần II (4 câu Đúng/Sai), Phần III (6 câu Trả lời ngắn). Điểm tối đa 10.0.',
+    class_id: 'c1111111-1111-1111-1111-111111111111',
+    class_name: 'Lớp 12A1 - Chuyên Toán & Luyện Thi THPT',
+    teacher_id: '22222222-2222-2222-2222-222222222222',
+    grade: 12,
+    duration_minutes: 90,
+    passing_score: 5.0,
+    shuffle_questions: false,
+    shuffle_options: false,
+    max_attempts: 2,
+    status: 'published',
+    format: 'standard_3_parts',
+    part_structure: {
+      part1_count: 12,
+      part2_count: 4,
+      part3_count: 6,
+    },
+    is_view_answer_allowed: true,
+    questions: HUE_HSG_QUESTIONS.filter((q) => q.part !== 4).map((q, idx) => ({
+      ...q,
+      order_index: idx + 1,
+      custom_points: q.points,
+    })),
+  },
   {
     id: 'e1111111-1111-1111-1111-111111111111',
     title: 'Đề Khảo Sát Toán 12: Đạo Hàm, Tích Phân & Oxyz (Format 2025)',
@@ -343,25 +384,9 @@ export const MOCK_EXAMS: Exam[] = [
     shuffle_options: true,
     max_attempts: 3,
     status: 'published',
+    format: 'custom',
     is_view_answer_allowed: true,
-    questions: MOCK_QUESTIONS.map((q, idx) => ({ ...q, order_index: idx + 1, custom_points: q.points })),
-  },
-  {
-    id: 'e2222222-2222-2222-2222-222222222222',
-    title: 'Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (90 Phút - Chuẩn Bộ GD&ĐT)',
-    description: 'Đề thi phân hóa cao độ, bấm giờ 90 phút nghiêm túc gồm đầy đủ các mức độ Nhận biết, Thông hiểu, Vận dụng và Vận dụng cao.',
-    class_id: 'c1111111-1111-1111-1111-111111111111',
-    class_name: 'Lớp 12A1 - Chuyên Toán & Luyện Thi THPT',
-    teacher_id: '22222222-2222-2222-2222-222222222222',
-    grade: 12,
-    duration_minutes: 90,
-    passing_score: 5.0,
-    shuffle_questions: true,
-    shuffle_options: true,
-    max_attempts: 2,
-    status: 'published',
-    is_view_answer_allowed: true,
-    questions: MOCK_QUESTIONS.map((q, idx) => ({ ...q, order_index: idx + 1, custom_points: q.points })),
+    questions: BASE_MOCK_QUESTIONS.map((q, idx) => ({ ...q, order_index: idx + 1, custom_points: q.points })),
   },
   {
     id: 'e3333333-3333-3333-3333-333333333333',

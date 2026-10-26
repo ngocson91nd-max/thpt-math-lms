@@ -18,6 +18,9 @@ import {
   CheckCircle2,
   HelpCircle,
   Upload,
+  BookOpen,
+  Award,
+  Sparkles,
 } from 'lucide-react';
 
 export default function TakeExamPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,17 +28,53 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const router = useRouter();
   const { user } = useAuth();
 
-  const exam: Exam | undefined =
-    MOCK_EXAMS.find((e) => e.id === resolvedParams.id) || MOCK_EXAMS[0];
-
-  const questions: Question[] = exam?.questions || [];
+  const [exam, setExam] = useState<Exam | undefined>(() => {
+    return MOCK_EXAMS.find((e) => e.id === resolvedParams.id) || MOCK_EXAMS[0];
+  });
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flagged, setFlagged] = useState<Record<string, boolean>>({});
-  const [timeLeft, setTimeLeft] = useState((exam?.duration_minutes || 45) * 60);
+  const [timeLeft, setTimeLeft] = useState((exam?.duration_minutes || 90) * 60);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Tải thông tin đề thi từ localStorage hoặc Supabase nếu có
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedExams = localStorage.getItem('lms_exams');
+      if (savedExams) {
+        try {
+          const parsed: Exam[] = JSON.parse(savedExams);
+          const found = parsed.find((e) => e.id === resolvedParams.id);
+          if (found) {
+            setExam(found);
+            setTimeLeft(found.duration_minutes * 60);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    const supabase = createClient();
+    if (supabase) {
+      supabase
+        .from('exams')
+        .select('*')
+        .eq('id', resolvedParams.id)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setExam(data as any);
+            setTimeLeft(data.duration_minutes * 60);
+          }
+        });
+    }
+  }, [resolvedParams.id]);
+
+  const questions: Question[] = exam?.questions || [];
 
   // Bộ đếm thời gian thực
   useEffect(() => {
@@ -52,8 +91,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   }, [timeLeft]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -94,6 +137,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     setAnswers((prev) => ({ ...prev, [qId]: val }));
   };
 
+  const handleInsertMathToEssay = (snippet: string) => {
+    if (!currentQ) return;
+    const existing = answers[currentQ.id] || '';
+    setAnswers((prev) => ({ ...prev, [currentQ.id]: existing + ' ' + snippet }));
+  };
+
   const toggleFlag = (qId: string) => {
     setFlagged((prev) => ({ ...prev, [qId]: !prev[qId] }));
   };
@@ -108,10 +157,13 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   }).length;
 
   const handleFinalSubmit = async () => {
+    if (!exam) return;
     setIsSubmitting(true);
 
     // Chấm điểm phía máy chủ
     const gradingResult = gradeExamSubmission(questions, answers);
+
+    const maxScore = exam.format === 'periodic_4_parts' ? 20.0 : 10.0;
 
     // Sử dụng UUID hợp lệ tương thích hoàn toàn với PostgreSQL UUID
     const newSubId =
@@ -133,11 +185,11 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       start_time: startTimeIso,
       submitted_at: submittedAtIso,
       score: gradingResult.score,
-      max_score: 10.0,
+      max_score: maxScore,
       status: gradingResult.hasPendingEssay ? ('grading' as const) : ('graded' as const),
       teacher_feedback: gradingResult.hasPendingEssay
-        ? 'Bài thi có câu tự luận, đang chờ giáo viên chấm và ghi nhận xét.'
-        : 'Hoàn thành bài thi trắc nghiệm.',
+        ? 'Bài thi có câu tự luận, đang chờ Thầy Sơn chấm điểm và ghi nhận xét.'
+        : 'Đã hoàn thành toàn bộ bài thi trắc nghiệm.',
       answers: gradingResult.answers.map((r) => ({
         question_id: r.questionId,
         student_answer: answers[r.questionId],
@@ -159,10 +211,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             start_time: startTimeIso,
             submitted_at: submittedAtIso,
             score: gradingResult.score,
-            max_score: 10.0,
+            max_score: maxScore,
             status: gradingResult.hasPendingEssay ? 'grading' : 'graded',
             teacher_feedback: gradingResult.hasPendingEssay
-              ? 'Bài thi có câu tự luận, đang chờ giáo viên chấm.'
+              ? 'Bài thi có câu tự luận, đang chờ Thầy chấm.'
               : 'Hoàn thành bài thi trắc nghiệm.',
           },
         ]);
@@ -186,7 +238,6 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     // Lưu vào localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
-      // Lưu vào danh sách các bài làm của học sinh
       const mySubmissionsKey = `my_submissions_${studentId}`;
       const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
       existingMySubs.unshift(newSubmission);
@@ -196,11 +247,58 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
 
-  if (!currentQ) {
+  if (!exam || questions.length === 0 || !currentQ) {
     return <div className="p-8 text-center text-slate-500">Đang tải đề thi...</div>;
   }
 
   const isLowTime = timeLeft < 300; // Dưới 5 phút
+
+  // Lấy thông tin Phần của câu hỏi hiện tại
+  const getPartDetails = (q: Question) => {
+    const p = q.part || (q.type === 'essay' ? 4 : q.type === 'short_answer' ? 3 : q.type === 'true_false' ? 2 : 1);
+    if (p === 1) {
+      return {
+        part: 1,
+        badge: 'PHẦN I',
+        title: 'CÂU TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN',
+        sub: 'Thí sinh trả lời từ câu 1 đến câu tương ứng. Mỗi câu hỏi chỉ chọn một phương án. (0.25đ/câu)',
+        theme: 'blue',
+      };
+    }
+    if (p === 2) {
+      return {
+        part: 2,
+        badge: 'PHẦN II',
+        title: 'CÂU TRẮC NGHIỆM ĐÚNG SAI',
+        sub: 'Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn Đúng hoặc Sai. Chuẩn Bộ: 1 ý=0.1đ • 2 ý=0.25đ • 3 ý=0.5đ • 4 ý=1.0đ.',
+        theme: 'indigo',
+      };
+    }
+    if (p === 3) {
+      return {
+        part: 3,
+        badge: 'PHẦN III',
+        title: 'CÂU TRẮC NGHIỆM TRẢ LỜI NGẮN',
+        sub: 'Thí sinh điền đáp số vào ô trống (chấp nhận số thập phân 2.25 hoặc 2,25, phân số 9/4). (0.5đ/câu)',
+        theme: 'amber',
+      };
+    }
+    return {
+      part: 4,
+      badge: 'PHẦN IV',
+      title: 'BÀI TẬP TỰ LUẬN VẬN DỤNG CAO',
+      sub: 'Thí sinh trình bày chi tiết các bước giải toán, lập luận và đáp số cuối cùng.',
+      theme: 'emerald',
+    };
+  };
+
+  const partInfo = getPartDetails(currentQ);
+
+  // Phân nhóm câu hỏi theo Phần cho Bảng điều khiển (Sidebar)
+  const part1Questions = questions.map((q, idx) => ({ q, idx })).filter((item) => (item.q.part || (item.q.type === 'essay' ? 4 : item.q.type === 'short_answer' ? 3 : item.q.type === 'true_false' ? 2 : 1)) === 1);
+  const part2Questions = questions.map((q, idx) => ({ q, idx })).filter((item) => (item.q.part || (item.q.type === 'essay' ? 4 : item.q.type === 'short_answer' ? 3 : item.q.type === 'true_false' ? 2 : 1)) === 2);
+  const part3Questions = questions.map((q, idx) => ({ q, idx })).filter((item) => (item.q.part || (item.q.type === 'essay' ? 4 : item.q.type === 'short_answer' ? 3 : item.q.type === 'true_false' ? 2 : 1)) === 3);
+  const part4Questions = questions.map((q, idx) => ({ q, idx })).filter((item) => (item.q.part || (item.q.type === 'essay' ? 4 : item.q.type === 'short_answer' ? 3 : item.q.type === 'true_false' ? 2 : 1)) === 4);
 
   return (
     <div className="space-y-6">
@@ -220,9 +318,20 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       {/* Top Bar: Title & Countdown Timer */}
       <div className="sticky top-16 z-40 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur-md">
         <div>
-          <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
-            Lớp {exam.grade}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
+              Lớp {exam.grade}
+            </span>
+            {exam.format === 'periodic_4_parts' ? (
+              <span className="rounded-md bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700">
+                Đề Định kỳ / HSG (4 Phần)
+              </span>
+            ) : exam.format === 'standard_3_parts' ? (
+              <span className="rounded-md bg-cyan-100 px-2 py-0.5 text-[11px] font-bold text-cyan-800">
+                Chuẩn Bộ GD&ĐT 2025
+              </span>
+            ) : null}
+          </div>
           <h1 className="text-lg font-bold text-slate-900 mt-1">{exam.title}</h1>
         </div>
 
@@ -240,7 +349,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
           <button
             onClick={() => setShowSubmitModal(true)}
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition active:scale-95"
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition active:scale-95 cursor-pointer"
           >
             <Send className="h-4 w-4" />
             Nộp bài
@@ -251,11 +360,42 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Question Area (3 Cols) */}
         <div className="lg:col-span-3 space-y-6">
+          {/* Section Indicator Banner */}
+          <div
+            className={`rounded-2xl border p-4 ${
+              partInfo.theme === 'blue'
+                ? 'border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50'
+                : partInfo.theme === 'indigo'
+                ? 'border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50'
+                : partInfo.theme === 'amber'
+                ? 'border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50'
+                : 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-lg px-2 py-0.5 text-xs font-black uppercase text-white ${
+                  partInfo.theme === 'blue'
+                    ? 'bg-blue-600'
+                    : partInfo.theme === 'indigo'
+                    ? 'bg-indigo-600'
+                    : partInfo.theme === 'amber'
+                    ? 'bg-amber-600'
+                    : 'bg-emerald-600'
+                }`}
+              >
+                {partInfo.badge}
+              </span>
+              <h2 className="font-bold text-sm text-slate-900">{partInfo.title}</h2>
+            </div>
+            <p className="text-xs text-slate-600 mt-1">{partInfo.sub}</p>
+          </div>
+
           <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs">
             {/* Question Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
               <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white shadow-xs">
                   {currentIndex + 1}
                 </span>
                 <div>
@@ -274,7 +414,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
               <button
                 onClick={() => toggleFlag(currentQ.id)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition cursor-pointer ${
                   flagged[currentQ.id]
                     ? 'border-amber-300 bg-amber-50 text-amber-700'
                     : 'border-slate-200 text-slate-500 hover:bg-slate-50'
@@ -388,7 +528,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                               <button
                                 type="button"
                                 onClick={() => handleTrueFalseSelect(currentQ.id, stmt.id, true)}
-                                className={`h-8 w-16 rounded-lg text-xs font-bold transition ${
+                                className={`h-8 w-16 rounded-lg text-xs font-bold transition cursor-pointer ${
                                   val === true
                                     ? 'bg-emerald-600 text-white shadow-xs'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -401,7 +541,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                               <button
                                 type="button"
                                 onClick={() => handleTrueFalseSelect(currentQ.id, stmt.id, false)}
-                                className={`h-8 w-16 rounded-lg text-xs font-bold transition ${
+                                className={`h-8 w-16 rounded-lg text-xs font-bold transition cursor-pointer ${
                                   val === false
                                     ? 'bg-rose-600 text-white shadow-xs'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -422,7 +562,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
               {currentQ.type === 'short_answer' && (
                 <div className="space-y-3">
                   <label className="block text-xs font-semibold text-slate-600">
-                    Điền kết quả / đáp số vào ô bên dưới (số nguyên, phân số như 5/2 hoặc số thập phân như 2.5):
+                    Điền kết quả / đáp số vào ô bên dưới (số nguyên, phân số như 5/2 hoặc số thập phân như 2.25):
                   </label>
                   <div className="flex items-center gap-3">
                     <input
@@ -442,22 +582,58 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 </div>
               )}
 
-              {/* 5. Essay */}
+              {/* 5. Essay with LaTeX Preview */}
               {currentQ.type === 'essay' && (
                 <div className="space-y-4">
-                  <label className="block text-xs font-semibold text-slate-600">
-                    Trình bày bài giải tự luận hoặc dán link ảnh/bài làm:
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Trình bày bài giải chi tiết các bước (hỗ trợ gõ công thức LaTeX):
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1 text-xs">
+                      <span className="text-slate-400 text-[11px] mr-1">Chèn nhanh:</span>
+                      {[
+                        { label: 'Phân số', val: '$\\frac{a}{b}$' },
+                        { label: 'Căn', val: '$\\sqrt{x}$' },
+                        { label: 'Tích phân', val: '$\\int_{0}^{1} f(x)\\,\\mathrm{d}x$' },
+                        { label: 'Giới hạn', val: '$\\lim_{x\\to 3}$' },
+                        { label: 'Hệ PT', val: '$\\heva{x+y=1 \\\\ x-y=2}$' },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => handleInsertMathToEssay(item.val)}
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition cursor-pointer"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <textarea
-                    rows={6}
+                    rows={8}
                     value={answers[currentQ.id] || ''}
                     onChange={(e) => handleEssayChange(currentQ.id, e.target.value)}
-                    placeholder="Nhập các bước chứng minh, lập luận và đáp số cuối cùng..."
-                    className="w-full rounded-2xl border border-slate-200 p-4 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none font-sans"
+                    placeholder="Trình bày lời giải toán, lập luận và các bước tính toán tại đây..."
+                    className="w-full rounded-2xl border border-slate-300 p-4 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none font-mono"
                   />
+
+                  {/* Realtime KaTeX Render Preview */}
+                  {answers[currentQ.id] && (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-1">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                        Bản Xem Trước Bài Trình Bày (KaTeX):
+                      </div>
+                      <div className="text-sm text-slate-800 pt-1">
+                        <MathRenderer content={answers[currentQ.id]} />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Upload className="h-4 w-4 text-slate-400" />
-                    <span>Học sinh có thể gõ trực tiếp công thức LaTeX hoặc chèn link ảnh bài giải viết tay.</span>
+                    <Upload className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span>Bài làm tự luận sẽ được lưu trữ và gửi trực tiếp cho Thầy Sơn chấm điểm chi tiết.</span>
                   </div>
                 </div>
               )}
@@ -469,7 +645,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 type="button"
                 disabled={currentIndex === 0}
                 onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Câu trước
@@ -483,7 +659,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 type="button"
                 disabled={currentIndex === questions.length - 1}
                 onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 Câu sau
                 <ChevronRight className="h-4 w-4" />
@@ -494,63 +670,82 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
         {/* Sidebar Question Palette (1 Col) */}
         <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
-            <h3 className="font-bold text-sm text-slate-900 mb-3">Danh Sách Câu Hỏi</h3>
-
-            <div className="grid grid-cols-5 gap-2.5">
-              {questions.map((q, idx) => {
-                const isCurrent = idx === currentIndex;
-                const isFlag = flagged[q.id];
-                const hasAns = answers[q.id] !== undefined && answers[q.id] !== '';
-
-                let btnClass = 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
-                if (isCurrent) {
-                  btnClass = 'ring-2 ring-blue-600 bg-blue-600 text-white font-bold';
-                } else if (isFlag) {
-                  btnClass = 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
-                } else if (hasAns) {
-                  btnClass = 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
-                }
-
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setCurrentIndex(idx)}
-                    className={`relative flex h-10 w-full items-center justify-center rounded-xl border text-xs transition ${btnClass}`}
-                  >
-                    {idx + 1}
-                    {isFlag && (
-                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500" />
-                    )}
-                  </button>
-                );
-              })}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-slate-900">Bảng Số Câu Hỏi</h3>
+              <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                Đã làm: {answeredCount}/{questions.length}
+              </span>
             </div>
 
-            {/* Legend */}
-            <div className="mt-6 pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-md bg-blue-50 border border-blue-200" />
-                <span>Đã trả lời ({answeredCount})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-md bg-amber-100 border border-amber-300" />
-                <span>Đã đánh dấu xem lại ({Object.values(flagged).filter(Boolean).length})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-md bg-slate-100 border border-slate-200" />
-                <span>Chưa trả lời ({questions.length - answeredCount})</span>
-              </div>
-            </div>
+            {/* Helper function to render group */}
+            {[
+              { title: 'Phần I: Trắc Nghiệm', list: part1Questions, color: 'blue' },
+              { title: 'Phần II: Đúng / Sai', list: part2Questions, color: 'indigo' },
+              { title: 'Phần III: Điền Số Ngắn', list: part3Questions, color: 'amber' },
+              { title: 'Phần IV: Tự Luận VDC', list: part4Questions, color: 'emerald' },
+            ].map((sec) => {
+              if (sec.list.length === 0) return null;
+              return (
+                <div key={sec.title} className="space-y-2">
+                  <div className="text-xs font-bold text-slate-600 flex items-center justify-between border-b border-slate-100 pb-1">
+                    <span>{sec.title}</span>
+                    <span className="text-[11px] font-normal text-slate-400">({sec.list.length} câu)</span>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    {sec.list.map(({ q, idx }) => {
+                      const isCurrent = idx === currentIndex;
+                      const isFlag = flagged[q.id];
+                      const hasAns = answers[q.id] !== undefined && answers[q.id] !== '';
 
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={() => setShowSubmitModal(true)}
-                className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition active:scale-98"
-              >
-                Nộp Bài Thi
-              </button>
+                      let btnClass = 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
+                      if (isCurrent) {
+                        btnClass = 'ring-2 ring-blue-600 bg-blue-600 text-white font-bold shadow-xs';
+                      } else if (isFlag) {
+                        btnClass = 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
+                      } else if (hasAns) {
+                        btnClass = 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
+                      }
+
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => setCurrentIndex(idx)}
+                          className={`relative flex h-9 w-full items-center justify-center rounded-xl border text-xs transition cursor-pointer ${btnClass}`}
+                        >
+                          {idx + 1}
+                          {isFlag && (
+                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Chú thích màu sắc */}
+            <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-blue-50 border border-blue-300" />
+                <span>Đã làm</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-slate-100 border border-slate-300" />
+                <span>Chưa làm</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-amber-100 border border-amber-300" />
+                <span>Đã đánh dấu</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-blue-600" />
+                <span>Đang chọn</span>
+              </div>
             </div>
           </div>
         </div>
@@ -559,26 +754,37 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       {/* Confirmation Submit Modal */}
       {showSubmitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-amber-600 mb-3">
-              <AlertTriangle className="h-6 w-6" />
-              <h3 className="text-lg font-bold text-slate-900">Xác Nhận Nộp Bài</h3>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">Xác Nhận Nộp Bài Thi</h3>
+            <div className="rounded-xl bg-slate-50 p-4 space-y-2 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <span>Tổng số câu hỏi:</span>
+                <span className="font-bold text-slate-900">{questions.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Số câu đã hoàn thành:</span>
+                <span className="font-bold text-emerald-600">{answeredCount} câu</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Số câu chưa làm:</span>
+                <span className="font-bold text-rose-500">{questions.length - answeredCount} câu</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Thời gian còn lại:</span>
+                <span className="font-bold text-blue-600">{formatTime(timeLeft)}</span>
+              </div>
             </div>
 
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Bạn đã hoàn thành <strong className="text-blue-600">{answeredCount}/{questions.length}</strong> câu hỏi.
-              {answeredCount < questions.length && (
-                <span className="block mt-2 text-rose-600 text-xs font-semibold">
-                  Cảnh báo: Còn {questions.length - answeredCount} câu chưa điền đáp án!
-                </span>
-              )}
+            <p className="text-xs text-slate-500">
+              Sau khi nộp bài, hệ thống sẽ tự động chấm điểm các phần trắc nghiệm và chuyển phần tự luận cho Thầy Sơn.
             </p>
 
-            <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setShowSubmitModal(false)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
                 Tiếp tục làm bài
               </button>
@@ -586,9 +792,9 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleFinalSubmit}
-                className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-500 transition disabled:opacity-50"
+                className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
               >
-                {isSubmitting ? 'Đang chấm điểm...' : 'Đồng ý nộp bài'}
+                {isSubmitting ? 'Đang chấm điểm...' : 'Xác Nhận Nộp Bài'}
               </button>
             </div>
           </div>

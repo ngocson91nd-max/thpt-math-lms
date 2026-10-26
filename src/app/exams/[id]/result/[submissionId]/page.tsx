@@ -40,10 +40,22 @@ export default function ExamResultPage({
     submission = MOCK_SUBMISSIONS[0];
   }
 
-  const exam = MOCK_EXAMS.find((e) => e.id === resolvedParams.id) || submission.exam || MOCK_EXAMS[0];
+  let exam = submission?.exam || MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
+  if (!exam && typeof window !== 'undefined') {
+    const savedExams = localStorage.getItem('lms_exams');
+    if (savedExams) {
+      try {
+        const parsed = JSON.parse(savedExams);
+        const found = parsed.find((e: any) => e.id === resolvedParams.id);
+        if (found) exam = found;
+      } catch {}
+    }
+  }
+  if (!exam) exam = MOCK_EXAMS[0];
 
+  const maxScore = submission.max_score || (exam.format === 'periodic_4_parts' ? 20.0 : 10.0);
   const score = submission.score ?? 0;
-  const isHighScorer = score >= 8.0;
+  const isHighScorer = score >= (maxScore * 0.8);
 
   useEffect(() => {
     if (isHighScorer) {
@@ -79,7 +91,7 @@ export default function ExamResultPage({
               </span>
               <div className="text-4xl font-black mt-1">
                 {score.toFixed(2)}
-                <span className="text-lg font-normal text-blue-200">/10</span>
+                <span className="text-lg font-normal text-blue-200">/{maxScore}</span>
               </div>
               <span className="text-[11px] text-blue-200 mt-1 font-medium">
                 {score >= 8.5
