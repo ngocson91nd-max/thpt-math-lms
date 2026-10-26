@@ -90,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const savedUserId = localStorage.getItem('lms_current_user_id');
 
           if (savedUserId) {
-            // Kiểm tra trong custom_user hoặc MOCK_USERS
+            // Kiểm tra trong custom_user, lms_registered_users hoặc MOCK_USERS
             const customUserRaw = localStorage.getItem(`custom_user_${savedUserId}`);
             if (customUserRaw) {
               try {
@@ -101,6 +101,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error(e);
               }
             }
+
+            const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
+            const foundReg = registeredList.find((u: any) => u.id === savedUserId);
+            if (foundReg) {
+              const { password: _, ...cleanProf } = foundReg;
+              setUser(cleanProf);
+              setIsLoading(false);
+              return;
+            }
+
             const found = MOCK_USERS.find((u) => u.id === savedUserId);
             if (found) {
               setUser(found);
@@ -186,6 +196,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (typeof window !== 'undefined') {
             localStorage.setItem('lms_current_user_id', newProfile.id);
             localStorage.setItem(`custom_user_${newProfile.id}`, JSON.stringify(newProfile));
+
+            // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
+            const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
+            const cleanAccEmail = email.toLowerCase().trim();
+            const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
+            const accountToSave = { ...newProfile, password };
+            if (idx >= 0) registeredList[idx] = accountToSave;
+            else registeredList.push(accountToSave);
+            localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+
             localStorage.removeItem('lms_is_logged_out');
           }
           return { success: true };
@@ -214,6 +234,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (typeof window !== 'undefined') {
         localStorage.setItem('lms_current_user_id', newProfile.id);
         localStorage.setItem(`custom_user_${newProfile.id}`, JSON.stringify(newProfile));
+
+        // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
+        const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
+        const cleanAccEmail = email.toLowerCase().trim();
+        const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
+        const accountToSave = { ...newProfile, password };
+        if (idx >= 0) registeredList[idx] = accountToSave;
+        else registeredList.push(accountToSave);
+        localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+
         localStorage.removeItem('lms_is_logged_out');
       }
       return { success: true };
@@ -301,7 +331,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 3. Kiểm tra danh sách người dùng mẫu và học sinh đã lưu cục bộ
+      // 3. Kiểm tra danh sách tài khoản học sinh đã đăng ký (lms_registered_users)
+      if (typeof window !== 'undefined') {
+        const registeredList: Array<Profile & { password?: string }> = JSON.parse(
+          localStorage.getItem('lms_registered_users') || '[]'
+        );
+        const found = registeredList.find(
+          (u) => u.email.toLowerCase() === cleanEmail
+        );
+        if (found && found.password === cleanPassword) {
+          const { password: _, ...cleanProfile } = found;
+          setUser(cleanProfile as Profile);
+          localStorage.setItem('lms_current_user_id', cleanProfile.id);
+          localStorage.removeItem('lms_is_logged_out');
+          return { success: true };
+        }
+      }
+
+      // 4. Kiểm tra danh sách người dùng mẫu và giáo viên
       const matched = MOCK_USERS.find(
         (u) => u.email.toLowerCase() === cleanEmail
       );
