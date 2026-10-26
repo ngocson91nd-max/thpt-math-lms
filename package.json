@@ -14,6 +14,8 @@
     "@supabase/supabase-js": "^2.118.0",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "docx-to-html-mathml": "^1.1.5",
+    "dwml-ts": "^0.5.3",
     "katex": "^0.19.1",
     "lucide-react": "^1.61.0",
     "mammoth": "^1.13.0",

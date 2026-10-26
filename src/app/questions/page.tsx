@@ -116,7 +116,32 @@ export default function QuestionsPage() {
     if (!file) return;
     setIsUploadingWord(true);
     try {
-      const { questions: extracted } = await parseWordDocx(file);
+      let extracted: Question[] = [];
+
+      // 1. Thử qua API server
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/upload-docx', {
+          method: 'POST',
+          body: fd,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.questions)) {
+            extracted = data.questions;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API upload-docx failed, falling back to client:', apiErr);
+      }
+
+      // 2. Dự phòng phân tích phía client
+      if (extracted.length === 0) {
+        const result = await parseWordDocx(file);
+        extracted = result.questions;
+      }
+
       if (extracted.length === 0) {
         alert('Không tìm thấy câu hỏi nào (định dạng "Câu 1:", "Bài 1:", v.v.) trong file Word!');
       } else {

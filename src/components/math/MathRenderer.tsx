@@ -29,15 +29,15 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
           (window as any).tikzjax.process();
         } else {
           // Nạp script TikZJax nếu chưa có trên trang
-          const existingScript = document.querySelector('script[src*="tikzjax.js"]');
+          const existingScript = document.querySelector('script[src*="tikzjax"]');
           if (!existingScript) {
             const fontLink = document.createElement('link');
             fontLink.rel = 'stylesheet';
-            fontLink.href = 'https://tikzjax.com/v1/fonts.css';
+            fontLink.href = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
             document.head.appendChild(fontLink);
 
             const script = document.createElement('script');
-            script.src = 'https://tikzjax.com/v1/tikzjax.js';
+            script.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
             script.async = true;
             document.head.appendChild(script);
           }

@@ -236,12 +236,37 @@ export default function ExamsPage() {
     setIsParsingWord(true);
     setWordNotice(null);
     try {
-      const { questions } = await parseWordDocx(file);
-      if (questions.length === 0) {
+      let extractedQuestions: Question[] = [];
+
+      // 1. Thử gửi qua API server
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/upload-docx', {
+          method: 'POST',
+          body: fd,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.questions)) {
+            extractedQuestions = data.questions;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API upload-docx failed, falling back to client:', apiErr);
+      }
+
+      // 2. Dự phòng phân tích trực tiếp phía client nếu server không phản hồi
+      if (extractedQuestions.length === 0) {
+        const result = await parseWordDocx(file);
+        extractedQuestions = result.questions;
+      }
+
+      if (extractedQuestions.length === 0) {
         setWordNotice('Không tìm thấy câu hỏi nào (định dạng "Câu 1:", "Bài 1:", v.v.) trong file Word!');
       } else {
-        setSelectedQuestions(questions);
-        setWordNotice(`Đã trích xuất thành công ${questions.length} câu hỏi từ file "${file.name}"!`);
+        setSelectedQuestions(extractedQuestions);
+        setWordNotice(`Đã trích xuất thành công ${extractedQuestions.length} câu hỏi từ file "${file.name}"!`);
         const cleanName = file.name.replace(/\.[^/.]+$/, '');
         if (newTitle.includes('Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán') || !newTitle) {
           setNewTitle(cleanName);

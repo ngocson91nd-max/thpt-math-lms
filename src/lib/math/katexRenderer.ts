@@ -1,4 +1,5 @@
 import katex from 'katex';
+import { parseTkzTabCode, generateTkzTabSvg } from './tkzTabRenderer';
 
 function extractBracedGroup(str: string, pos: number): { text: string; nextPos: number } | null {
   let depth = 0;
@@ -56,10 +57,19 @@ function preprocessLatex(raw: string): string {
   // 4. Xử lý khối TikZ \begin{tikzpicture} ... \end{tikzpicture}
   text = text.replace(/\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g, (_m, body) => {
     const cleanTikz = `\\begin{tikzpicture}${body}\\end{tikzpicture}`;
+
+    // Kiểm tra nếu là Bảng biến thiên (gói tkz-tab) -> Render SVG trực tiếp 0ms siêu nét!
+    if (body.includes('\\tkzTabInit') || body.includes('tkzTab')) {
+      const parsedTab = parseTkzTabCode(cleanTikz);
+      if (parsedTab) {
+        return `<div class="tkz-tab-wrapper my-3 overflow-x-auto flex flex-col items-center">${generateTkzTabSvg(parsedTab)}</div>`;
+      }
+    }
+
     return `<div class="tikz-wrapper my-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center overflow-x-auto shadow-2xs w-full max-w-lg mx-auto">
       <div class="flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 uppercase tracking-wider mb-2">
         <span class="h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></span>
-        Hình Vẽ Hình Học TikZ / Đồ Thị
+        Hình Vẽ Hình Học TikZ / Đồ Thị Hàm Số
       </div>
       <div class="tikz-target flex justify-center py-2" data-tikz="${encodeURIComponent(cleanTikz)}">
         <script type="text/tikz">${cleanTikz}</script>
