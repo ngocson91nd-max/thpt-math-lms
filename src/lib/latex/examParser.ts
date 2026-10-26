@@ -72,7 +72,7 @@ export function parseExamLatex(rawTex: string): {
   }
 
   // Tách theo \subsection*{Phần ...} nếu có
-  const exRegex = /\\begin\{ex\}([\s\S]*?)\\end\{ex\}/g;
+  const exRegex = /\\begin\{(?:ex|bt|cau)\}([\s\S]*?)\\end\{(?:ex|bt|cau)\}/g;
   let match;
   const questions: Question[] = [];
   let qIndex = 0;
@@ -87,6 +87,10 @@ export function parseExamLatex(rawTex: string): {
     qIndex++;
     const blockIndex = match.index;
     const block = match[1];
+
+    // Trích xuất mã ID bài toán nếu có (ví dụ: \begin{ex}[2D1-1.1] hoặc [TH])
+    const tagMatch = block.match(/^\s*\[(.*?)\]/);
+    const customTag = tagMatch ? tagMatch[1].trim() : '';
 
     let part: 1 | 2 | 3 | 4 = 1;
     if (p4Pos !== -1 && blockIndex >= p4Pos) part = 4;
@@ -151,6 +155,9 @@ export function parseExamLatex(rawTex: string): {
       .filter((line) => !line.trim().startsWith('%'))
       .join('\n')
       .trim();
+
+    // Bỏ thẻ mã câu hỏi [ID] ở đầu đề bài nếu có (ví dụ: [2D1-1.1] hoặc [TH])
+    content = content.replace(/^\s*\[[^\]]+\]\s*/, '').trim();
 
     let options: any = [];
     let correct_answer: any = null;
@@ -217,7 +224,7 @@ export function parseExamLatex(rawTex: string): {
       correct_answer = explanation || 'Hướng dẫn chấm bài tự luận';
     }
 
-    const topic = detectMathTopic(content);
+    const topic = customTag || detectMathTopic(content);
     let difficulty: QuestionDifficulty = 'thong_hieu';
     if (part === 1 && qIndex <= 4) difficulty = 'nhan_biet';
     else if (part === 1) difficulty = 'thong_hieu';
