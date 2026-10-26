@@ -1,4 +1,4 @@
-import {
+﻿import {
   Profile,
   ClassItem,
   Course,
@@ -201,7 +201,7 @@ $$\\Delta = b^2 - 4ac, \\quad x_{1,2} = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}$$`,
 
 export const MOCK_QUESTIONS: Question[] = [
   {
-    id: 'q1111111-1111-1111-1111-111111111111',
+    id: 'a1111111-1111-1111-1111-111111111111',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Khảo sát hàm số',
@@ -220,7 +220,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q2222222-2222-2222-2222-222222222222',
+    id: 'a2222222-2222-2222-2222-222222222222',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Nguyên hàm - Tích phân',
@@ -239,7 +239,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q3333333-3333-3333-3333-333333333333',
+    id: 'a3333333-3333-3333-3333-333333333333',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Đường tiệm cận',
@@ -258,7 +258,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q4444444-4444-4444-4444-444444444444',
+    id: 'a4444444-4444-4444-4444-444444444444',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Khảo sát hàm số',
@@ -281,7 +281,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q5555555-5555-5555-5555-555555555555',
+    id: 'a5555555-5555-5555-5555-555555555555',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Giá trị lớn nhất, nhỏ nhất',
@@ -295,7 +295,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q6666666-6666-6666-6666-666666666666',
+    id: 'a6666666-6666-6666-6666-666666666666',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Hình học Oxyz',
@@ -309,7 +309,7 @@ export const MOCK_QUESTIONS: Question[] = [
     is_public: true,
   },
   {
-    id: 'q7777777-7777-7777-7777-777777777777',
+    id: 'a7777777-7777-7777-7777-777777777777',
     teacher_id: '22222222-2222-2222-2222-222222222222',
     grade: 12,
     topic: 'Toán thực tế - Ứng dụng đạo hàm',
@@ -363,13 +363,13 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     teacher_feedback: 'Em làm bài rất tốt, câu tự luận trình bày logic, cần chú ý tính toán cẩn thận hơn ở câu tiệm cận xiên.',
     ai_feedback: 'Học sinh nắm vững kiến thức khảo sát hàm số và tích phân. Kỹ năng vận dụng cao đạt mức Khá-Giỏi.',
     answers: [
-      { question_id: 'q1111111-1111-1111-1111-111111111111', student_answer: 'C', is_correct: true, earned_points: 0.25, max_points: 0.25 },
-      { question_id: 'q2222222-2222-2222-2222-222222222222', student_answer: 'A', is_correct: true, earned_points: 0.25, max_points: 0.25 },
-      { question_id: 'q3333333-3333-3333-3333-333333333333', student_answer: ['A', 'B', 'D'], is_correct: true, earned_points: 1.0, max_points: 1.0 },
-      { question_id: 'q4444444-4444-4444-4444-444444444444', student_answer: { a: true, b: true, c: false, d: true }, is_correct: true, earned_points: 1.0, max_points: 1.0 },
-      { question_id: 'q5555555-5555-5555-5555-555555555555', student_answer: '6', is_correct: true, earned_points: 0.5, max_points: 0.5 },
-      { question_id: 'q6666666-6666-6666-6666-666666666666', student_answer: '4', is_correct: true, earned_points: 0.5, max_points: 0.5 },
-      { question_id: 'q7777777-7777-7777-7777-777777777777', student_answer: 'Em đặt hàm S(x) = x^2 + 128/x, đạo hàm S\'(x) = 2x - 128/x^2 = 0 <=> x = 4 (m). Chiều cao h = 32/16 = 2 (m).', is_correct: true, earned_points: 1.0, max_points: 1.0, teacher_comment: 'Trình bày ngắn gọn, kết quả chính xác.' },
+      { question_id: 'a1111111-1111-1111-1111-111111111111', student_answer: 'C', is_correct: true, earned_points: 0.25, max_points: 0.25 },
+      { question_id: 'a2222222-2222-2222-2222-222222222222', student_answer: 'A', is_correct: true, earned_points: 0.25, max_points: 0.25 },
+      { question_id: 'a3333333-3333-3333-3333-333333333333', student_answer: ['A', 'B', 'D'], is_correct: true, earned_points: 1.0, max_points: 1.0 },
+      { question_id: 'a4444444-4444-4444-4444-444444444444', student_answer: { a: true, b: true, c: false, d: true }, is_correct: true, earned_points: 1.0, max_points: 1.0 },
+      { question_id: 'a5555555-5555-5555-5555-555555555555', student_answer: '6', is_correct: true, earned_points: 0.5, max_points: 0.5 },
+      { question_id: 'a6666666-6666-6666-6666-666666666666', student_answer: '4', is_correct: true, earned_points: 0.5, max_points: 0.5 },
+      { question_id: 'a7777777-7777-7777-7777-777777777777', student_answer: 'Em đặt hàm S(x) = x^2 + 128/x, đạo hàm S\'(x) = 2x - 128/x^2 = 0 <=> x = 4 (m). Chiều cao h = 32/16 = 2 (m).', is_correct: true, earned_points: 1.0, max_points: 1.0, teacher_comment: 'Trình bày ngắn gọn, kết quả chính xác.' },
     ],
   },
   {
@@ -385,13 +385,13 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     status: 'grading',
     teacher_feedback: 'Bài làm ở mức khá, cần ôn thêm dạng toán thực tế.',
     answers: [
-      { question_id: 'q1111111-1111-1111-1111-111111111111', student_answer: 'C', is_correct: true, earned_points: 0.25, max_points: 0.25 },
-      { question_id: 'q2222222-2222-2222-2222-222222222222', student_answer: 'A', is_correct: true, earned_points: 0.25, max_points: 0.25 },
-      { question_id: 'q3333333-3333-3333-3333-333333333333', student_answer: ['A', 'B'], is_correct: false, earned_points: 0.5, max_points: 1.0 },
-      { question_id: 'q4444444-4444-4444-4444-444444444444', student_answer: { a: true, b: true, c: true, d: false }, is_correct: false, earned_points: 0.25, max_points: 1.0 },
-      { question_id: 'q5555555-5555-5555-5555-555555555555', student_answer: '6', is_correct: true, earned_points: 0.5, max_points: 0.5 },
-      { question_id: 'q6666666-6666-6666-6666-666666666666', student_answer: '4', is_correct: true, earned_points: 0.5, max_points: 0.5 },
-      { question_id: 'q7777777-7777-7777-7777-777777777777', student_answer: 'V = x^2 * h = 32 => h = 32 / x^2. S = x^2 + 4xh. Đạo hàm S\' = 2x - 128/x^2.', is_correct: undefined, earned_points: 0, max_points: 1.0 },
+      { question_id: 'a1111111-1111-1111-1111-111111111111', student_answer: 'C', is_correct: true, earned_points: 0.25, max_points: 0.25 },
+      { question_id: 'a2222222-2222-2222-2222-222222222222', student_answer: 'A', is_correct: true, earned_points: 0.25, max_points: 0.25 },
+      { question_id: 'a3333333-3333-3333-3333-333333333333', student_answer: ['A', 'B'], is_correct: false, earned_points: 0.5, max_points: 1.0 },
+      { question_id: 'a4444444-4444-4444-4444-444444444444', student_answer: { a: true, b: true, c: true, d: false }, is_correct: false, earned_points: 0.25, max_points: 1.0 },
+      { question_id: 'a5555555-5555-5555-5555-555555555555', student_answer: '6', is_correct: true, earned_points: 0.5, max_points: 0.5 },
+      { question_id: 'a6666666-6666-6666-6666-666666666666', student_answer: '4', is_correct: true, earned_points: 0.5, max_points: 0.5 },
+      { question_id: 'a7777777-7777-7777-7777-777777777777', student_answer: 'V = x^2 * h = 32 => h = 32 / x^2. S = x^2 + 4xh. Đạo hàm S\' = 2x - 128/x^2.', is_correct: undefined, earned_points: 0, max_points: 1.0 },
     ],
   },
 ];
@@ -419,3 +419,4 @@ export const MOCK_MATERIALS: Material[] = [
     description: 'Bí quyết gắn hệ trục Oxyz giải quyết mọi bài toán khoảng cách và góc thi tốt nghiệp.',
   },
 ];
+

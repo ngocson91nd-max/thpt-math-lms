@@ -33,11 +33,11 @@ export default function GradeEssayPage({
     exam.questions?.filter((q) => q.type === 'essay') || [];
 
   const [essayScores, setEssayScores] = useState<Record<string, number>>({
-    'q7777777-7777-7777-7777-777777777777': 0.85,
+    'a7777777-7777-7777-7777-777777777777': 0.85,
   });
 
   const [teacherComments, setTeacherComments] = useState<Record<string, string>>({
-    'q7777777-7777-7777-7777-777777777777':
+    'a7777777-7777-7777-7777-777777777777':
       'Các bước đạo hàm và tìm điểm cực trị tốt, lưu ý kết luận thêm đơn vị mét (m).',
   });
 

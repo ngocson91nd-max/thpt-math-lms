@@ -1,4 +1,4 @@
--- ====================================================================
+﻿-- ====================================================================
 -- HỆ THỐNG LMS TOÁN THPT - TOÀN BỘ CẤU TRÚC DATABASE & DỮ LIỆU MẪU
 -- Bạn chỉ cần copy TOÀN BỘ file này, dán vào Supabase SQL Editor và nhấn RUN
 -- ====================================================================
@@ -324,14 +324,14 @@ ON CONFLICT (id) DO NOTHING;
 -- Chương bài học
 INSERT INTO public.chapters (id, course_id, title, order_index)
 VALUES
-    ('ch111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 'Chương 1: Tính đơn điệu và cực trị của hàm số', 1),
-    ('ch222222-2222-2222-2222-222222222222', 'd1111111-1111-1111-1111-111111111111', 'Chương 2: Giá trị lớn nhất, nhỏ nhất và Đường tiệm cận', 2)
+    ('ca111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 'Chương 1: Tính đơn điệu và cực trị của hàm số', 1),
+    ('ca222222-2222-2222-2222-222222222222', 'd1111111-1111-1111-1111-111111111111', 'Chương 2: Giá trị lớn nhất, nhỏ nhất và Đường tiệm cận', 2)
 ON CONFLICT (id) DO NOTHING;
 
 -- Bài học
 INSERT INTO public.lessons (id, chapter_id, title, order_index, content, video_url, attachments, is_free_preview)
 VALUES
-    ('l1111111-1111-1111-1111-111111111111', 'ch111111-1111-1111-1111-111111111111', 'Bài 1: Tính đơn điệu của hàm số và định lý dấu đạo hàm', 1, 
+    ('b1111111-1111-1111-1111-111111111111', 'ca111111-1111-1111-1111-111111111111', 'Bài 1: Tính đơn điệu của hàm số và định lý dấu đạo hàm', 1, 
     '# Bài 1: Tính Đơn Điệu Của Hàm Số
 
 ### 1. Định lý mở rộng về tính đơn điệu
@@ -356,28 +356,28 @@ ON CONFLICT (id) DO NOTHING;
 -- Ngân hàng câu hỏi Toán THPT
 INSERT INTO public.questions (id, teacher_id, grade, topic, difficulty, type, content, options, correct_answer, explanation, points, is_public)
 VALUES
-    ('q1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 12, 'Khảo sát hàm số', 'nhan_biet', 'single_choice',
+    ('a1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 12, 'Khảo sát hàm số', 'nhan_biet', 'single_choice',
     'Cho hàm số $y = f(x)$ có bảng biến thiên với $f''(x) = 3x^2 - 6x$. Số điểm cực trị của hàm số đã cho là:',
     '[{"id": "A", "text": "$0$"}, {"id": "B", "text": "$1$"}, {"id": "C", "text": "$2$"}, {"id": "D", "text": "$3$"}]'::jsonb,
     '"C"'::jsonb,
     'Ta có phương trình $f''(x) = 0 \iff 3x(x - 2) = 0 \iff x = 0$ hoặc $x = 2$. Do đạo hàm đổi dấu khi qua cả 2 nghiệm đơn này nên hàm số có 2 điểm cực trị.',
     0.25, true),
 
-    ('q2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 12, 'Nguyên hàm - Tích phân', 'thong_hieu', 'single_choice',
+    ('a2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 12, 'Nguyên hàm - Tích phân', 'thong_hieu', 'single_choice',
     'Tích phân $I = \int_0^1 e^{2x} \, \mathrm{d}x$ bằng:',
     '[{"id": "A", "text": "$\\frac{e^2 - 1}{2}$"}, {"id": "B", "text": "$e^2 - 1$"}, {"id": "C", "text": "$\\frac{e^2}{2}$"}, {"id": "D", "text": "$2(e^2 - 1)$"}]'::jsonb,
     '"A"'::jsonb,
     'Ta có: $I = \left[ \frac{1}{2} e^{2x} \right]_0^1 = \frac{1}{2}(e^2 - e^0) = \frac{e^2 - 1}{2}$.',
     0.25, true),
 
-    ('q3333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 12, 'Đường tiệm cận', 'thong_hieu', 'multiple_choice',
+    ('a3333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 12, 'Đường tiệm cận', 'thong_hieu', 'multiple_choice',
     'Cho hàm số $y = \frac{2x - 1}{x + 1}$. Trong các khẳng định sau, những khẳng định nào ĐÚNG? (Chọn tất cả các đáp án đúng)',
     '[{"id": "A", "text": "Đồ thị hàm số có tiệm cận đứng là đường thẳng $x = -1$"}, {"id": "B", "text": "Đồ thị hàm số có tiệm cận ngang là đường thẳng $y = 2$"}, {"id": "C", "text": "Hàm số đồng biến trên toàn bộ $\\mathbb{R}$"}, {"id": "D", "text": "Tâm đối xứng của đồ thị là điểm $I(-1; 2)$"}]'::jsonb,
     '["A", "B", "D"]'::jsonb,
     'Tập xác định $D = \mathbb{R} \setminus \{-1\}$. Tiệm cận đứng $x = -1$, tiệm cận ngang $y = \lim_{x\to \pm\infty}\frac{2x-1}{x+1} = 2$. Tâm đối xứng $I(-1; 2)$. Hàm số chỉ đồng biến trên từng khoảng xác định chứ không đồng biến trên $\mathbb{R}$. Do đó A, B, D đúng.',
     1.0, true),
 
-    ('q4444444-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222', 12, 'Khảo sát hàm số', 'van_dung', 'true_false',
+    ('a4444444-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222', 12, 'Khảo sát hàm số', 'van_dung', 'true_false',
     'Cho hàm số $f(x) = \frac{x^2 - 3x + 6}{x - 1}$. Xét tính đúng hoặc sai của các mệnh đề sau:',
     '[
         {"id": "a", "text": "Tập xác định của hàm số là $D = \\mathbb{R} \\setminus \\{1\\}$"},
@@ -393,21 +393,21 @@ VALUES
 - Ý d) Ta có $f(x) = x - 2 + \frac{4}{x - 1}$. Vì $\lim_{x\to\pm\infty} \frac{4}{x - 1} = 0$ nên tiệm cận xiên là $y = x - 2$. (Đúng)',
     1.0, true),
 
-    ('q5555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', 12, 'Giá trị lớn nhất, nhỏ nhất', 'thong_hieu', 'short_answer',
+    ('a5555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', 12, 'Giá trị lớn nhất, nhỏ nhất', 'thong_hieu', 'short_answer',
     'Tìm giá trị nhỏ nhất của hàm số $g(x) = x + \frac{9}{x}$ trên đoạn $[1; 5]$.',
     '[]'::jsonb,
     '["6", "6.0", "6,0"]'::jsonb,
     'Với $x \in [1; 5]$, ta có $g(x) \ge 2\sqrt{x \cdot \frac{9}{x}} = 6$ (bất đẳng thức AM-GM). Dấu bằng xảy ra khi $x = \frac{9}{x} \iff x^2 = 9 \iff x = 3 \in [1; 5]$. Vậy $\min_{[1; 5]} g(x) = 6$.',
     0.5, true),
 
-    ('q6666666-6666-6666-6666-666666666666', '22222222-2222-2222-2222-222222222222', 12, 'Hình học Oxyz', 'van_dung', 'short_answer',
+    ('a6666666-6666-6666-6666-666666666666', '22222222-2222-2222-2222-222222222222', 12, 'Hình học Oxyz', 'van_dung', 'short_answer',
     'Trong không gian $Oxyz$, cho mặt cầu $(S): (x - 1)^2 + (y + 2)^2 + (z - 3)^2 = 25$. Khoảng cách từ tâm $I$ của $(S)$ đến mặt phẳng $(P): 2x - 2y + z + 3 = 0$ bằng bao nhiêu?',
     '[]'::jsonb,
     '["4", "4.0", "4,0"]'::jsonb,
     'Tâm mặt cầu là $I(1; -2; 3)$. Khoảng cách là: $d(I, (P)) = \frac{|2(1) - 2(-2) + 3 + 3|}{\sqrt{2^2 + (-2)^2 + 1^2}} = \frac{|2 + 4 + 3 + 3|}{\sqrt{9}} = \frac{12}{3} = 4$.',
     0.5, true),
 
-    ('q7777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 12, 'Toán thực tế - Ứng dụng đạo hàm', 'van_dung_cao', 'essay',
+    ('a7777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 12, 'Toán thực tế - Ứng dụng đạo hàm', 'van_dung_cao', 'essay',
     'Một hộ sản xuất dự định làm một bể chứa nước bằng inox hình hộp chữ nhật không nắp có thể tích $V = 32\text{ m}^3$, đáy là hình vuông cạnh $x\text{ (m)}$, chiều cao là $h\text{ (m)}$. Hãy tìm kích thước $x$ và $h$ để diện tích inox cần sử dụng là nhỏ nhất (bỏ qua độ dày mối hàn). Trình bày đầy đủ các bước giải.',
     '[]'::jsonb,
     '"Hướng dẫn chấm:
@@ -428,18 +428,19 @@ ON CONFLICT (id) DO NOTHING;
 -- Gắn câu hỏi vào đề thi
 INSERT INTO public.exam_questions (exam_id, question_id, order_index, custom_points)
 VALUES
-    ('e1111111-1111-1111-1111-111111111111', 'q1111111-1111-1111-1111-111111111111', 1, 0.25),
-    ('e1111111-1111-1111-1111-111111111111', 'q2222222-2222-2222-2222-222222222222', 2, 0.25),
-    ('e1111111-1111-1111-1111-111111111111', 'q3333333-3333-3333-3333-333333333333', 3, 1.0),
-    ('e1111111-1111-1111-1111-111111111111', 'q4444444-4444-4444-4444-444444444444', 4, 1.0),
-    ('e1111111-1111-1111-1111-111111111111', 'q5555555-5555-5555-5555-555555555555', 5, 0.5),
-    ('e1111111-1111-1111-1111-111111111111', 'q6666666-6666-6666-6666-666666666666', 6, 0.5),
-    ('e1111111-1111-1111-1111-111111111111', 'q7777777-7777-7777-7777-777777777777', 7, 1.0)
+    ('e1111111-1111-1111-1111-111111111111', 'a1111111-1111-1111-1111-111111111111', 1, 0.25),
+    ('e1111111-1111-1111-1111-111111111111', 'a2222222-2222-2222-2222-222222222222', 2, 0.25),
+    ('e1111111-1111-1111-1111-111111111111', 'a3333333-3333-3333-3333-333333333333', 3, 1.0),
+    ('e1111111-1111-1111-1111-111111111111', 'a4444444-4444-4444-4444-444444444444', 4, 1.0),
+    ('e1111111-1111-1111-1111-111111111111', 'a5555555-5555-5555-5555-555555555555', 5, 0.5),
+    ('e1111111-1111-1111-1111-111111111111', 'a6666666-6666-6666-6666-666666666666', 6, 0.5),
+    ('e1111111-1111-1111-1111-111111111111', 'a7777777-7777-7777-7777-777777777777', 7, 1.0)
 ON CONFLICT (exam_id, question_id) DO NOTHING;
 
 -- Học liệu mẫu
 INSERT INTO public.materials (id, teacher_id, class_id, title, type, file_url, file_size, grade, description)
 VALUES
-    ('m1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'c1111111-1111-1111-1111-111111111111', 'Tóm Tắt Công Thức Giải Nhanh Toán 12 Chuẩn 2025.pdf', 'pdf', 'https://raw.githubusercontent.com/math-resources/cheatsheet.pdf', 2450000, 12, 'Sổ tay bỏ túi toàn bộ công thức Đạo hàm, Tích phân, Mũ - Logarit, Hình Oxyz.'),
-    ('m2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'c1111111-1111-1111-1111-111111111111', 'Video Bài Giảng: Phương Pháp Tọa Độ Hóa Hình Học Không Gian', 'video', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', NULL, 12, 'Bí quyết gắn hệ trục Oxyz giải quyết mọi bài toán khoảng cách và góc thi tốt nghiệp.')
+    ('f1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'c1111111-1111-1111-1111-111111111111', 'Tóm Tắt Công Thức Giải Nhanh Toán 12 Chuẩn 2025.pdf', 'pdf', 'https://raw.githubusercontent.com/math-resources/cheatsheet.pdf', 2450000, 12, 'Sổ tay bỏ túi toàn bộ công thức Đạo hàm, Tích phân, Mũ - Logarit, Hình Oxyz.'),
+    ('f2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'c1111111-1111-1111-1111-111111111111', 'Video Bài Giảng: Phương Pháp Tọa Độ Hóa Hình Học Không Gian', 'video', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', NULL, 12, 'Bí quyết gắn hệ trục Oxyz giải quyết mọi bài toán khoảng cách và góc thi tốt nghiệp.')
 ON CONFLICT (id) DO NOTHING;
+
