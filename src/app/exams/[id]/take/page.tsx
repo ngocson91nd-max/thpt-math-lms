@@ -7,6 +7,7 @@ import { MOCK_EXAMS, MOCK_SUBMISSIONS } from '@/lib/supabase/mockStore';
 import { Exam, Question } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import { gradeExamSubmission } from '@/lib/grading/grader';
+import { createClient } from '@/lib/supabase/client';
 import {
   Clock,
   Flag,
@@ -106,22 +107,31 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     return true;
   }).length;
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     setIsSubmitting(true);
 
     // Chấm điểm phía máy chủ
     const gradingResult = gradeExamSubmission(questions, answers);
 
-    const newSubId = `sub-${Date.now()}`;
+    // Sử dụng UUID hợp lệ tương thích hoàn toàn với PostgreSQL UUID
+    const newSubId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : '99999999-9999-9999-9999-999999999999';
+
+    const startTimeIso = new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
+    const submittedAtIso = new Date().toISOString();
+    const studentId = user?.id || '33333333-3333-3333-3333-333333333333';
+
     const newSubmission = {
       id: newSubId,
       exam_id: exam.id,
       exam,
-      student_id: user?.id || '33333333-3333-3333-3333-333333333333',
+      student_id: studentId,
       student: user || undefined,
       attempt_number: 1,
-      start_time: new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString(),
-      submitted_at: new Date().toISOString(),
+      start_time: startTimeIso,
+      submitted_at: submittedAtIso,
       score: gradingResult.score,
       max_score: 10.0,
       status: gradingResult.hasPendingEssay ? ('grading' as const) : ('graded' as const),
@@ -137,11 +147,50 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       })),
     };
 
+    // Đồng bộ lưu trực tiếp vào cơ sở dữ liệu Supabase nếu có
+    try {
+      const supabase = createClient();
+      if (supabase && user) {
+        await supabase.from('submissions').insert([
+          {
+            id: newSubId,
+            exam_id: exam.id,
+            student_id: user.id,
+            start_time: startTimeIso,
+            submitted_at: submittedAtIso,
+            score: gradingResult.score,
+            max_score: 10.0,
+            status: gradingResult.hasPendingEssay ? 'grading' : 'graded',
+            teacher_feedback: gradingResult.hasPendingEssay
+              ? 'Bài thi có câu tự luận, đang chờ giáo viên chấm.'
+              : 'Hoàn thành bài thi trắc nghiệm.',
+          },
+        ]);
+
+        const answersData = gradingResult.answers.map((r) => ({
+          submission_id: newSubId,
+          question_id: r.questionId,
+          student_answer: answers[r.questionId] ?? null,
+          is_correct: r.isCorrect ?? null,
+          earned_points: r.earnedPoints,
+          max_points: r.maxPoints,
+        }));
+        await supabase.from('submission_answers').insert(answersData);
+      }
+    } catch (err) {
+      console.warn('Supabase submission save info:', err);
+    }
+
     MOCK_SUBMISSIONS.unshift(newSubmission as any);
 
     // Lưu vào localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
+      // Lưu vào danh sách các bài làm của học sinh
+      const mySubmissionsKey = `my_submissions_${studentId}`;
+      const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
+      existingMySubs.unshift(newSubmission);
+      localStorage.setItem(mySubmissionsKey, JSON.stringify(existingMySubs));
     }
 
     router.push(`/exams/${exam.id}/result/${newSubId}`);
@@ -155,6 +204,19 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   return (
     <div className="space-y-6">
+      {!user && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              Bạn đang làm bài với tư cách <strong>Khách</strong>. Điểm số vẫn được chấm đầy đủ, nhưng hãy{' '}
+              <a href="/login" target="_blank" className="font-bold underline text-blue-700">Đăng nhập</a> hoặc{' '}
+              <a href="/register" target="_blank" className="font-bold underline text-blue-700">Đăng ký</a> để lưu vào học bạ cá nhân của Thầy Sơn!
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar: Title & Countdown Timer */}
       <div className="sticky top-16 z-40 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur-md">
         <div>
