@@ -22,15 +22,21 @@ body {
 
 /* Custom Math Styling */
 .katex-display {
-  margin: 1rem 0 !important;
+  margin: 1.25rem 0 !important;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.5rem 0;
+  font-size: 1.28em !important;
 }
 
 .katex {
-  font-size: 1.08em;
+  font-size: 1.22em !important;
   text-rendering: auto;
+}
+
+.math-content {
+  font-size: 1.08em;
+  line-height: 1.85;
 }
 
 /* Tabular & Bảng Số Liệu THPT */

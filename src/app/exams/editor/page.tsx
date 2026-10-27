@@ -696,26 +696,28 @@ function ExamEditorContent() {
         </div>
 
         {/* Tiêu đề & Nội dung đề bài */}
-        <div className="leading-relaxed text-sm text-slate-900">
+        <div className="leading-relaxed text-base sm:text-[17px] text-slate-900 font-medium">
           <span className="font-extrabold text-blue-900 mr-2">Câu {qNum}.</span>
           <MathRenderer content={q.content} inline />
         </div>
 
         {/* Các phương án A, B, C, D (Phần I) */}
         {q.type === 'single_choice' && Array.isArray(q.options) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5 pt-1 pl-4 text-xs text-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 pt-1 pl-3 text-sm sm:text-[15px] text-slate-800">
             {q.options.map((opt: any) => {
               const isCorrect = q.correct_answer === opt.id;
               return (
                 <div
                   key={opt.id}
-                  className={`flex items-start gap-1.5 p-1 rounded-lg ${
+                  className={`flex items-start gap-2 p-1.5 rounded-lg ${
                     isCorrect ? 'text-emerald-800 font-semibold bg-emerald-50/70 border border-emerald-200' : ''
                   }`}
                 >
-                  <span className="font-bold">{opt.id}.</span>
-                  <MathRenderer content={opt.text} inline />
-                  {isCorrect && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5 ml-auto" />}
+                  <span className="font-bold text-slate-700">{opt.id}.</span>
+                  <div className="flex-1">
+                    <MathRenderer content={opt.text} inline />
+                  </div>
+                  {isCorrect && <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5 ml-auto" />}
                 </div>
               );
             })}
@@ -724,18 +726,18 @@ function ExamEditorContent() {
 
         {/* Các ý Đúng/Sai (Phần II) */}
         {q.type === 'true_false' && Array.isArray(q.options) && (
-          <div className="space-y-1.5 mt-2.5 pt-1 pl-4 text-xs text-slate-800">
+          <div className="space-y-2 mt-3 pt-1 pl-3 text-sm sm:text-[15px] text-slate-800">
             {q.options.map((stmt: any) => {
               const correctMap = q.correct_answer || {};
               const isTrue = !!correctMap[stmt.id];
               return (
-                <div key={stmt.id} className="flex items-start justify-between gap-3 p-1 rounded-lg hover:bg-slate-50">
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold">{stmt.id})</span>
+                <div key={stmt.id} className="flex items-start justify-between gap-3 p-1.5 rounded-lg hover:bg-slate-50">
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-slate-700">{stmt.id})</span>
                     <MathRenderer content={stmt.text} inline />
                   </div>
                   <span
-                    className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold ${
+                    className={`shrink-0 px-2 py-0.5 rounded text-xs font-bold ${
                       isTrue ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                     }`}
                   >
@@ -749,9 +751,9 @@ function ExamEditorContent() {
 
         {/* Điền số ngắn (Phần III) */}
         {q.type === 'short_answer' && (
-          <div className="mt-2.5 pl-4 flex items-center gap-2 text-xs">
+          <div className="mt-3 pl-3 flex items-center gap-2 text-sm">
             <span className="font-semibold text-slate-500">Đáp số:</span>
-            <span className="rounded-md bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 font-bold text-emerald-800 font-mono">
+            <span className="rounded-md bg-emerald-50 border border-emerald-300 px-3 py-1 font-bold text-emerald-800 font-mono text-base">
               {Array.isArray(q.correct_answer) ? q.correct_answer[0] : q.correct_answer || 'Chưa điền'}
             </span>
           </div>
@@ -759,8 +761,8 @@ function ExamEditorContent() {
 
         {/* Lời giải chi tiết rút gọn */}
         {q.explanation && (
-          <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-xs text-slate-600 bg-slate-50/60 p-2.5 rounded-lg">
-            <span className="font-bold text-slate-700 mr-1.5">Lời giải:</span>
+          <div className="mt-3 pt-2.5 border-t border-dashed border-slate-200 text-sm text-slate-700 bg-slate-50/70 p-3 rounded-xl">
+            <span className="font-bold text-slate-900 mr-1.5">Lời giải:</span>
             <MathRenderer content={q.explanation} inline />
           </div>
         )}

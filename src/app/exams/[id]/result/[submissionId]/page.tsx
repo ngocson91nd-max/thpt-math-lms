@@ -209,20 +209,20 @@ export default function ExamResultPage({
               </div>
 
               {/* Question Content */}
-              <div className="text-sm text-slate-900 font-medium leading-relaxed">
+              <div className="text-base sm:text-[17.5px] text-slate-900 font-medium leading-relaxed">
                 <MathRenderer content={q.content} />
               </div>
 
               {/* Answers Breakdown */}
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 rounded-2xl bg-slate-50 p-4 text-xs">
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 rounded-2xl bg-slate-50 p-4 text-sm">
                 <div>
-                  <span className="font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                  <span className="font-semibold text-slate-500 uppercase tracking-wider block mb-1 text-xs">
                     Câu trả lời của bạn:
                   </span>
-                  <div className="font-medium text-slate-900">
+                  <div className="font-medium text-slate-900 text-sm sm:text-base">
                     {ans?.student_answer ? (
                       typeof ans.student_answer === 'object' ? (
-                        <pre className="text-xs font-mono bg-white p-2 rounded border border-slate-200">
+                        <pre className="text-xs font-mono bg-white p-2.5 rounded border border-slate-200">
                           {JSON.stringify(ans.student_answer, null, 2)}
                         </pre>
                       ) : (
@@ -235,12 +235,12 @@ export default function ExamResultPage({
                 </div>
 
                 <div>
-                  <span className="font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+                  <span className="font-semibold text-slate-500 uppercase tracking-wider block mb-1 text-xs">
                     Đáp án chính xác:
                   </span>
-                  <div className="font-semibold text-emerald-700">
+                  <div className="font-semibold text-emerald-700 text-sm sm:text-base">
                     {typeof q.correct_answer === 'object' ? (
-                      <pre className="text-xs font-mono bg-white p-2 rounded border border-slate-200 text-slate-800">
+                      <pre className="text-xs font-mono bg-white p-2.5 rounded border border-slate-200 text-slate-800">
                         {JSON.stringify(q.correct_answer, null, 2)}
                       </pre>
                     ) : (
@@ -281,7 +281,7 @@ export default function ExamResultPage({
                   <div className="text-xs font-bold uppercase tracking-wider text-blue-800 mb-2">
                     💡 Hướng Dẫn Giải Chi Tiết Chuẩn Sư Phạm:
                   </div>
-                  <MathRenderer content={q.explanation} className="text-xs text-slate-800 leading-relaxed" />
+                  <MathRenderer content={q.explanation} className="text-sm sm:text-[15.5px] text-slate-800 leading-relaxed" />
                 </div>
               )}
             </div>

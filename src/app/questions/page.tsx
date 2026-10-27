@@ -600,20 +600,20 @@ export default function QuestionsPage() {
               </div>
 
               {/* Question Content */}
-              <div className="text-sm text-slate-800 leading-relaxed font-medium">
+              <div className="text-base sm:text-[17px] text-slate-900 leading-relaxed font-medium">
                 <MathRenderer content={q.content} />
               </div>
 
               {/* Options Preview */}
               {q.options && q.options.length > 0 && (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm sm:text-[15.5px]">
                   {q.options.map((opt: any) => (
                     <div
                       key={opt.id}
-                      className="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-100"
+                      className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100"
                     >
-                      <span className="font-bold text-slate-600 uppercase">{opt.id}.</span>
-                      <div className="text-slate-800">
+                      <span className="font-bold text-slate-700 uppercase">{opt.id}.</span>
+                      <div className="text-slate-800 flex-1">
                         <MathRenderer content={opt.text} />
                       </div>
                     </div>
@@ -623,10 +623,10 @@ export default function QuestionsPage() {
 
               {/* Correct Answer & Explanation Preview */}
               {q.explanation && (
-                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-3 text-xs">
-                  <div className="font-bold text-blue-900 mb-1">
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4 text-sm">
+                  <div className="font-bold text-blue-900 mb-1.5">
                     Đáp án đúng:{' '}
-                    <span className="font-mono text-emerald-700">
+                    <span className="font-mono text-emerald-700 font-semibold">
                       {typeof q.correct_answer === 'object'
                         ? JSON.stringify(q.correct_answer)
                         : String(q.correct_answer)}

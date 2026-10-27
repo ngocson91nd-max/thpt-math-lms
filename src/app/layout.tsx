@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
+import AppLayout from '@/components/layout/AppLayout';
 
 export const metadata: Metadata = {
   title: 'Toán Thầy Sơn - Nền Tảng Dạy & Học Toán THPT Trực Tuyến',
@@ -22,17 +21,11 @@ export default function RootLayout({
         <link rel="stylesheet" type="text/css" href="https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css" />
         <script src="https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js" async defer></script>
       </head>
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans">
+      <body className="min-h-full bg-slate-50 text-slate-900 font-sans">
         <AuthProvider>
-          <Suspense fallback={<div className="h-16 bg-white border-b border-slate-200" />}>
-            <Navbar />
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">Đang khởi tạo hệ thống...</div>}>
+            <AppLayout>{children}</AppLayout>
           </Suspense>
-          <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <Suspense fallback={<div className="p-8 text-center text-slate-400">Đang tải dữ liệu...</div>}>
-              {children}
-            </Suspense>
-          </main>
-          <Footer />
         </AuthProvider>
       </body>
     </html>

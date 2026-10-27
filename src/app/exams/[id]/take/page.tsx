@@ -512,12 +512,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   const fontSizeClass =
     fontSize === 'sm'
-      ? 'text-sm'
+      ? 'text-base sm:text-[17px]'
       : fontSize === 'base'
-      ? 'text-base'
+      ? 'text-[17.5px] sm:text-[18.5px]'
       : fontSize === 'lg'
-      ? 'text-lg'
-      : 'text-xl';
+      ? 'text-[19.5px] sm:text-[21px]'
+      : 'text-[22px] sm:text-[24px]';
 
   // Render các ô điều khiển đáp án cho từng câu
   const renderAnswerControls = (q: Question) => {
@@ -525,7 +525,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       <div className="mt-6 space-y-4">
         {/* 1. Trắc nghiệm 1 đáp án (Phần I) */}
         {q.type === 'single_choice' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {q.options?.map((opt: any) => {
               const isSelected = answers[q.id] === opt.id;
               return (
@@ -539,15 +539,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                   }`}
                 >
                   <div
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition mt-0.5 ${
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs sm:text-sm font-bold transition mt-0.5 ${
                       isSelected
                         ? 'border-blue-600 bg-blue-600 text-white'
-                        : 'border-slate-300 text-slate-600'
+                        : 'border-slate-300 text-slate-600 bg-slate-50'
                     }`}
                   >
                     {opt.id}
                   </div>
-                  <div className="flex-1 text-slate-800 text-sm leading-relaxed">
+                  <div className="flex-1 text-slate-800 text-[15.5px] sm:text-[16.5px] leading-relaxed">
                     <MathRenderer content={opt.text} />
                   </div>
                 </label>
@@ -559,8 +559,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         {/* 2. Trắc nghiệm nhiều lựa chọn */}
         {q.type === 'multiple_choice' && (
           <div className="space-y-3">
-            <div className="text-xs font-medium text-blue-600">* Chọn tất cả các phương án đúng:</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="text-xs font-semibold text-blue-600">* Chọn tất cả các phương án đúng:</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {q.options?.map((opt: any) => {
                 const isSelected = (answers[q.id] || []).includes(opt.id);
                 return (
@@ -574,15 +574,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                     }`}
                   >
                     <div
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold transition mt-0.5 ${
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-xs sm:text-sm font-bold transition mt-0.5 ${
                         isSelected
                           ? 'border-indigo-600 bg-indigo-600 text-white'
-                          : 'border-slate-300 text-slate-600'
+                          : 'border-slate-300 text-slate-600 bg-slate-50'
                       }`}
                     >
                       {opt.id}
                     </div>
-                    <div className="flex-1 text-slate-800 text-sm leading-relaxed">
+                    <div className="flex-1 text-slate-800 text-[15.5px] sm:text-[16.5px] leading-relaxed">
                       <MathRenderer content={opt.text} />
                     </div>
                   </label>
@@ -595,13 +595,13 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         {/* 3. Trắc nghiệm Đúng / Sai (Phần II) */}
         {q.type === 'true_false' && (
           <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-2xs">
-            <table className="w-full text-left text-sm border-collapse bg-white">
+            <table className="w-full text-left text-sm sm:text-base border-collapse bg-white">
               <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">Ý</th>
                   <th className="py-3 px-4">Nội dung mệnh đề</th>
-                  <th className="py-3 px-4 w-24 text-center">Đúng</th>
-                  <th className="py-3 px-4 w-24 text-center">Sai</th>
+                  <th className="py-3 px-4 w-28 text-center">Đúng</th>
+                  <th className="py-3 px-4 w-28 text-center">Sai</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -609,17 +609,17 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                   const val = (answers[q.id] || {})[stmt.id];
                   return (
                     <tr key={stmt.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-center text-slate-700 uppercase">
+                      <td className="py-3.5 px-4 font-bold text-center text-slate-700 uppercase text-sm sm:text-base">
                         {stmt.id})
                       </td>
-                      <td className="py-3.5 px-4 text-slate-800">
+                      <td className="py-3.5 px-4 text-slate-800 text-[15.5px] sm:text-[16.5px] leading-relaxed">
                         <MathRenderer content={stmt.text} />
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <button
                           type="button"
                           onClick={() => handleTrueFalseSelect(q.id, stmt.id, true)}
-                          className={`h-8 w-18 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
                             val === true
                               ? 'bg-emerald-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -632,7 +632,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                         <button
                           type="button"
                           onClick={() => handleTrueFalseSelect(q.id, stmt.id, false)}
-                          className={`h-8 w-18 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
                             val === false
                               ? 'bg-rose-600 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -661,11 +661,11 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 value={answers[q.id] || ''}
                 onChange={(e) => handleShortAnswerChange(q.id, e.target.value)}
                 placeholder="Nhập kết quả..."
-                className="w-full max-w-sm rounded-xl border border-slate-300 bg-white p-3 text-base font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                className="w-full max-w-sm rounded-xl border border-slate-300 bg-white p-3.5 text-lg font-bold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
               />
               {answers[q.id] && (
-                <div className="rounded-xl bg-white px-3 py-2 border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
-                  <span>Xem trước KaTeX:</span>
+                <div className="rounded-xl bg-white px-3.5 py-2.5 border border-slate-200 text-sm text-slate-700 flex items-center gap-2">
+                  <span className="font-semibold text-xs text-slate-500">Xem trước:</span>
                   <MathRenderer content={`$${answers[q.id]}$`} inline />
                 </div>
               )}
@@ -797,7 +797,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       onCopy={(e) => e.preventDefault()}
     >
       {/* 1. THANH ĐIỀU KHIỂN & ĐỒNG HỒ TRÊN CÙNG (Sticky TopBar) */}
-      <div className="sticky top-16 z-40 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white/95 px-6 py-3.5 shadow-sm backdrop-blur-md">
+      <div className="sticky top-3 z-40 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white/95 px-6 py-3.5 shadow-sm backdrop-blur-md">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
