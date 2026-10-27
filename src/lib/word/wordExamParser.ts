@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { ommlToLatex } from 'dwml-ts';
+import { renderToSvg } from 'wmf-emf-renderer';
 import { Question, QuestionType, QuestionDifficulty } from '../../types/database';
 import { detectMathTopic } from '../latex/examParser';
 
@@ -15,7 +16,7 @@ try {
  * Chuẩn hóa buffer byte WMF:
  * 1. Cắt bỏ 22 byte tiêu đề Aldus APM (Placeable Metafile 0x9AC6CDD7) nếu có.
  * 2. Thay thế record META_ESCAPE 1574 (chứa comment MathType) thành dummy record
- *    để thư viện WMF giải mã trơn tru mà không bị văng Exception Escape Comment.
+ *    để thư viện WMF / SVG giải mã trơn tru mà không bị treo hoặc văng Exception.
  */
 export function sanitizeWmfBytes(bytes: Uint8Array): Uint8Array {
   let u = bytes;
@@ -41,7 +42,7 @@ export function sanitizeWmfBytes(bytes: Uint8Array): Uint8Array {
 
 /**
  * Trích xuất toàn bộ hình ảnh và ánh xạ quan hệ rId trong file .docx
- * Tự động chuyển đổi công thức MathType (WMF) sang PNG Base64 trong môi trường client (Canvas)
+ * Tự động chuyển đổi công thức MathType (WMF/EMF) sang SVG vector siêu nét, hiển thị mượt mà trên mọi trình duyệt
  */
 async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
   const rIdToDataUrl = new Map<string, string>();
@@ -56,24 +57,38 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
     const lower = path.toLowerCase();
     let dataUrl = '';
 
-    // Xử lý chuyển đổi WMF của MathType sang PNG thông qua Canvas
-    if ((lower.endsWith('.wmf') || lower.endsWith('.emf')) && WMF) {
+    // Xử lý chuyển đổi WMF/EMF của MathType sang SVG vector chuẩn
+    if (lower.endsWith('.wmf') || lower.endsWith('.emf')) {
       try {
         const rawBytes = await file.async('uint8array');
         const cleanBytes = sanitizeWmfBytes(rawBytes);
-
-        if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-          const size = WMF.image_size(cleanBytes);
-          const w = Math.max(size ? size[0] : 180, 40);
-          const h = Math.max(size ? size[1] : 60, 20);
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          WMF.draw_canvas(cleanBytes, canvas);
-          dataUrl = canvas.toDataURL('image/png');
+        const svg = renderToSvg(cleanBytes);
+        if (svg && svg.includes('<svg')) {
+          // Bỏ khung viền trắng nền đặc để công thức hòa nhập tự nhiên vào màu nền
+          const cleanSvg = svg.replace(/<rect\s+[^>]*fill="#ffffff"[^>]*\/>/gi, '');
+          const base64 = typeof Buffer !== 'undefined'
+            ? Buffer.from(cleanSvg).toString('base64')
+            : btoa(unescape(encodeURIComponent(cleanSvg)));
+          dataUrl = `data:image/svg+xml;base64,${base64}`;
         }
       } catch (e) {
-        console.warn('WMF canvas conversion fallback:', e);
+        // Fallback canvas nếu renderToSvg gặp sự cố
+        try {
+          if (typeof window !== 'undefined' && typeof document !== 'undefined' && WMF) {
+            const rawBytes = await file.async('uint8array');
+            const cleanBytes = sanitizeWmfBytes(rawBytes);
+            const size = WMF.image_size(cleanBytes);
+            const w = Math.max(size ? size[0] : 180, 40);
+            const h = Math.max(size ? size[1] : 60, 20);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            WMF.draw_canvas(cleanBytes, canvas);
+            dataUrl = canvas.toDataURL('image/png');
+          }
+        } catch {
+          //
+        }
       }
     }
 
@@ -111,10 +126,234 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
   return rIdToDataUrl;
 }
 
+export interface ParsedTailAnswers {
+  part1: Map<number, string>;
+  part2: Map<number, Record<string, boolean>>;
+  part3: Map<number, string[]>;
+  explanations: Map<string, string>;
+}
+
+/**
+ * Phân tích phần đuôi đề thi: BẢNG ĐÁP ÁN và HƯỚNG DẪN GIẢI CHI TIẾT
+ * Bóc tách đáp án Phần I (A,B,C,D), Phần II (Đúng/Sai), Phần III (Điền số) và lời giải chi tiết
+ */
+export function parseAnswerKeySection(tailXmlOrText: string): ParsedTailAnswers {
+  const result: ParsedTailAnswers = {
+    part1: new Map(),
+    part2: new Map(),
+    part3: new Map(),
+    explanations: new Map(),
+  };
+
+  // Cắt bỏ phần Ma trận đề thi / Bản đặc tả đề thi nếu có ở cuối
+  const matrixMatch = tailXmlOrText.search(/(?:MA\s*TRẬN|BẢN\s*ĐẶC\s*TẢ)/i);
+  const cleanTail = matrixMatch !== -1 ? tailXmlOrText.substring(0, matrixMatch) : tailXmlOrText;
+
+  // Xác định vị trí các phần trong đuôi tài liệu
+  const p1Pos = cleanTail.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
+  const p2Pos = cleanTail.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
+  const p3Pos = cleanTail.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
+  const lgPos = cleanTail.search(/(?:HƯỚNG\s*DẪN\s*GIẢI\s*CHI\s*TIẾT|LỜI\s*GIẢI\s*CHI\s*TIẾT|HƯỚNG\s*DẪN\s*GIẢI\s*ĐỀ)/i);
+
+  let p1Block = '';
+  let p2Block = '';
+  let p3Block = '';
+  let lgBlock = '';
+
+  if (p1Pos !== -1) {
+    const end = p2Pos !== -1 ? p2Pos : p3Pos !== -1 ? p3Pos : lgPos !== -1 ? lgPos : cleanTail.length;
+    p1Block = cleanTail.substring(p1Pos, end);
+  }
+  if (p2Pos !== -1) {
+    const end = p3Pos !== -1 ? p3Pos : lgPos !== -1 ? lgPos : cleanTail.length;
+    p2Block = cleanTail.substring(p2Pos, end);
+  }
+  if (p3Pos !== -1) {
+    const end = lgPos !== -1 ? lgPos : cleanTail.length;
+    p3Block = cleanTail.substring(p3Pos, end);
+  }
+  if (lgPos !== -1) {
+    lgBlock = cleanTail.substring(lgPos);
+  }
+
+  // Helper trích xuất các ô trong bảng OpenXML
+  const extractRows = (block: string): string[][] => {
+    const rows: string[][] = [];
+    const rowMatches = block.match(/<w:tr\b[\s\S]*?<\/w:tr>/gi);
+    if (!rowMatches) return rows;
+    for (const tr of rowMatches) {
+      const cells = tr.match(/<w:tc\b[\s\S]*?<\/w:tc>/gi) || [];
+      const rowData = cells.map((c) => {
+        const textMatches = c.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi) || [];
+        return textMatches
+          .map((t) => t.replace(/<[^>]+>/g, ''))
+          .join('')
+          .replace(/\u00A0/g, ' ')
+          .trim();
+      });
+      if (rowData.some((cell) => cell.length > 0)) {
+        rows.push(rowData);
+      }
+    }
+    return rows;
+  };
+
+  // 1. PHẦN I: Trắc nghiệm nhiều lựa chọn
+  if (p1Block) {
+    const p1Rows = extractRows(p1Block);
+    for (let r = 0; r < p1Rows.length; r++) {
+      const row = p1Rows[r];
+      // Dạng hàng ngang: [Mã đề/Câu, 1, 2, 3... 12], Hàng dưới: [1201, D, B, C...]
+      const numIdxs: { col: number; qNum: number }[] = [];
+      row.forEach((cell, cIdx) => {
+        const n = parseInt(cell.trim(), 10);
+        if (!isNaN(n) && n >= 1 && n <= 12) {
+          numIdxs.push({ col: cIdx, qNum: n });
+        }
+      });
+      if (numIdxs.length >= 4 && r + 1 < p1Rows.length) {
+        const nextRow = p1Rows[r + 1];
+        for (const item of numIdxs) {
+          const ans = (nextRow[item.col] || '').trim().toUpperCase();
+          if (/^[A-D]$/.test(ans) && !result.part1.has(item.qNum)) {
+            result.part1.set(item.qNum, ans);
+          }
+        }
+      }
+      // Dạng cột dọc: [1, D, C, A...], [2, A, B, C...]
+      const firstNum = parseInt((row[0] || '').replace(/Câu\s*/i, '').trim(), 10);
+      if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 12 && row.length >= 2) {
+        for (let c = 1; c < row.length; c++) {
+          const val = row[c].trim().toUpperCase();
+          if (/^[A-D]$/.test(val)) {
+            if (!result.part1.has(firstNum)) result.part1.set(firstNum, val);
+            break;
+          }
+        }
+      }
+    }
+    // Dạng văn bản inline: "1.A 2.B 3.C..."
+    const inlineRegex = /(?:^|\s|\>)(?:Câu\s*)?(\d+)[\.\s:\-]+([A-D])(?:\s|$|\<)/gi;
+    let m;
+    while ((m = inlineRegex.exec(p1Block)) !== null) {
+      const q = parseInt(m[1], 10);
+      const a = m[2].toUpperCase();
+      if (q >= 1 && q <= 12 && !result.part1.has(q)) {
+        result.part1.set(q, a);
+      }
+    }
+  }
+
+  // 2. PHẦN II: Trắc nghiệm đúng sai
+  if (p2Block) {
+    const p2Rows = extractRows(p2Block);
+    for (let r = 0; r < p2Rows.length; r++) {
+      const row = p2Rows[r];
+      row.forEach((cell, cIdx) => {
+        // Khớp "a)S - b)Đ - c)S - d)Đ"
+        const tfParts = Array.from(cell.matchAll(/([a-d])[\s\)\.\:\-]+([ĐSđsDSds])/gi));
+        if (tfParts.length >= 4) {
+          let qNum = cIdx;
+          if (p2Rows[r - 1] && p2Rows[r - 1][cIdx]) {
+            const hNum = parseInt(p2Rows[r - 1][cIdx].replace(/\D/g, ''), 10);
+            if (!isNaN(hNum)) qNum = hNum;
+          }
+          if (qNum >= 1 && qNum <= 4 && !result.part2.has(qNum)) {
+            const tfMap: Record<string, boolean> = {};
+            tfParts.forEach((p) => {
+              const letter = p[1].toLowerCase();
+              const val = p[2].toUpperCase();
+              tfMap[letter] = val === 'Đ' || val === 'D';
+            });
+            result.part2.set(qNum, tfMap);
+          }
+        }
+
+        // Khớp "S S Đ Đ", "Đ S S Đ", "ĐSSĐ"
+        const cleanTF = cell.replace(/[\s\-\,]/g, '').toUpperCase();
+        if (/^[ĐS]{4}$/.test(cleanTF)) {
+          let qNum = 0;
+          const rowHeadNum = parseInt((row[0] || '').replace(/\D/g, ''), 10);
+          if (!isNaN(rowHeadNum) && rowHeadNum >= 1 && rowHeadNum <= 4) qNum = rowHeadNum;
+          else if (p2Rows[r - 1] && p2Rows[r - 1][cIdx]) {
+            const hNum = parseInt(p2Rows[r - 1][cIdx].replace(/\D/g, ''), 10);
+            if (!isNaN(hNum)) qNum = hNum;
+          }
+          if (qNum >= 1 && qNum <= 4 && !result.part2.has(qNum)) {
+            const chars = cleanTF.split('');
+            result.part2.set(qNum, {
+              a: chars[0] === 'Đ',
+              b: chars[1] === 'Đ',
+              c: chars[2] === 'Đ',
+              d: chars[3] === 'Đ',
+            });
+          }
+        }
+      });
+    }
+  }
+
+  // 3. PHẦN III: Trắc nghiệm trả lời ngắn (điền số)
+  if (p3Block) {
+    const p3Rows = extractRows(p3Block);
+    for (let r = 0; r < p3Rows.length; r++) {
+      const row = p3Rows[r];
+      // Hàng ngang có header câu 1..6
+      if (p3Rows[r - 1]) {
+        const prev = p3Rows[r - 1];
+        const prevHeaders = prev.map((h) => parseInt(h.replace(/\D/g, ''), 10));
+        const hasQCols = prevHeaders.some((h) => !isNaN(h) && h >= 1 && h <= 6);
+        if (hasQCols) {
+          prevHeaders.forEach((qNum, cIdx) => {
+            if (!isNaN(qNum) && qNum >= 1 && qNum <= 6 && row[cIdx] && !result.part3.has(qNum)) {
+              const rawVal = row[cIdx].trim();
+              if (/^[\-\+]?[\d\.\,]+$/.test(rawVal)) {
+                result.part3.set(qNum, [rawVal, rawVal.replace(',', '.')]);
+              }
+            }
+          });
+        }
+      }
+      // Dạng cột dọc: Ô 0 là Câu 1, các ô sau là đáp án
+      const firstNum = parseInt((row[0] || '').replace(/Câu\s*/i, '').trim(), 10);
+      if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 6 && row.length >= 2 && !result.part3.has(firstNum)) {
+        for (let c = 1; c < row.length; c++) {
+          const rawVal = row[c].trim();
+          if (/^[\-\+]?[\d\.\,]+$/.test(rawVal)) {
+            result.part3.set(firstNum, [rawVal, rawVal.replace(',', '.')]);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // 4. HƯỚNG DẪN GIẢI CHI TIẾT
+  if (lgBlock) {
+    const splitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*\d+)/i;
+    const blocks = lgBlock.split(splitter);
+    blocks.forEach((b) => {
+      const m = b.match(/^(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*(\d+)[\.\:\-\s]*(?:<[^>]+>|\s)*([\s\S]*)$/i);
+      if (m) {
+        const qNum = parseInt(m[1], 10);
+        const explText = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (explText.length > 5) {
+          result.explanations.set(`q-${qNum}`, explText);
+        }
+      }
+    });
+  }
+
+  return result;
+}
+
 /**
  * Phân tích trực tiếp XML nội bộ của file Word (OMML to LaTeX, MathType & Images)
  */
-async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
+async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
+  cleanText: string;
+  tailAnswers: ParsedTailAnswers;
+}> {
   const zip = await JSZip.loadAsync(arrayBuffer);
   const docFile = zip.file('word/document.xml');
   if (!docFile) throw new Error('Không tìm thấy word/document.xml trong file .docx');
@@ -124,6 +363,23 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
 
   // Chuẩn hóa ký tự khoảng trắng không ngắt \u00A0
   xml = xml.replace(/\u00A0/g, ' ');
+
+  // BÓC TÁCH ĐÁP ÁN VÀ LỜI GIẢI TỪ RAW XML TRƯỚC KHI BỎ CÁC THẺ BẢNG VÀ ĐOẠN VĂN!
+  const tailRegex = /(?:BẢNG\s+ĐÁP\s+ÁN|HƯỚNG\s+DẪN\s+CHẤM|HƯỚNG\s+DẪN\s+GIẢI|ĐÁP\s+ÁN\s+VÀ\s+LỜI\s+GIẢI|ĐÁP\s+ÁN\s+CÁC\s+CÂU|ĐÁP\s+ÁN\s+ĐỀ\s+KIỂM\s+TRA|ĐÁP\s+ÁN)/i;
+  const tailMatch = xml.match(tailRegex);
+  let tailAnswers: ParsedTailAnswers = {
+    part1: new Map(),
+    part2: new Map(),
+    part3: new Map(),
+    explanations: new Map(),
+  };
+
+  if (tailMatch && tailMatch.index) {
+    const answerKeyXml = xml.substring(tailMatch.index);
+    tailAnswers = parseAnswerKeySection(answerKeyXml);
+    // Cắt bỏ phần đáp án/hướng dẫn giải khỏi nội dung đề bài chính
+    xml = xml.substring(0, tailMatch.index);
+  }
 
   // 1. Chuyển đổi mọi khối công thức toán OMML <m:oMath> và <m:oMathPara> sang LaTeX
   xml = xml.replace(/<m:oMathPara[\s\S]*?<\/m:oMathPara>/gi, (m) => {
@@ -154,14 +410,14 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     const rId = idMatch[1];
     const dataUrl = rIdToDataUrl.get(rId);
     return dataUrl
-      ? ` <img src="${dataUrl}" class="inline-math-img inline align-middle mx-1 my-0.5 max-h-8 object-contain" alt="công thức MathType" /> `
+      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 max-h-7 object-contain" alt="công thức MathType" /> `
       : '';
   });
 
   xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
     const dataUrl = rIdToDataUrl.get(rId);
     return dataUrl
-      ? ` <img src="${dataUrl}" class="inline-math-img inline align-middle mx-1 my-0.5 max-h-8 object-contain" alt="công thức MathType" /> `
+      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 max-h-7 object-contain" alt="công thức MathType" /> `
       : '';
   });
 
@@ -203,10 +459,24 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     return `\n<div class="my-4 overflow-x-auto flex justify-center"><table class="border-collapse border border-slate-300 bg-white rounded-lg shadow-2xs"><tbody>${tableRowsHtml}</tbody></table></div>\n`;
   });
 
-  // 5. Xử lý các đoạn văn bản <w:p>
+  // 5. Xử lý danh sách đánh số tự động <w:numPr> cho các phương án trắc nghiệm
+  // Nếu đoạn có <w:numPr> và chứa các lựa chọn B. hoặc b) thì chèn thêm nhãn A. hoặc a)
+  xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/gi, (pXml) => {
+    if (/<w:numPr\b/i.test(pXml)) {
+      if (/(?:<w:tab[^>]*>|\t|\s+)(?:<b>|<strong>)?\s*B[\.\)]/i.test(pXml) && !/(?:^|\>)\s*A[\.\)]/i.test(pXml)) {
+        pXml = pXml.replace(/(<w:r\b[\s\S]*?<w:t[^>]*>)/i, '$1A. ');
+      } else if (/(?:<w:tab[^>]*>|\t|\s+)(?:<b>|<strong>)?\s*b[\.\)]/i.test(pXml) && !/(?:^|\>)\s*a[\.\)]/i.test(pXml)) {
+        pXml = pXml.replace(/(<w:r\b[\s\S]*?<w:t[^>]*>)/i, '$1a) ');
+      }
+    }
+    return pXml;
+  });
+
+  // 6. Xử lý các đoạn văn bản <w:p>
+  xml = xml.replace(/<w:p\b[^>]*>/gi, '\n');
   xml = xml.replace(/<\/w:p>/gi, '\n');
 
-  // 6. Giữ lại đánh dấu gạch chân (u), in đậm (b), và màu đỏ (đáp án) trong các text run <w:r>
+  // 7. Giữ lại đánh dấu gạch chân (u), in đậm (b), và màu đỏ (đáp án) trong các text run <w:r>
   xml = xml.replace(/<w:r\b[\s\S]*?<\/w:r>/gi, (runXml) => {
     const textMatches = runXml.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi);
     if (!textMatches) {
@@ -229,17 +499,17 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     return runText;
   });
 
-  // 7. Loại bỏ tất cả các thẻ XML OpenXML còn lại (hỗ trợ mọi namespace w, w14, w15, w16, v, o, m, a, wp, pic...)
+  // 8. Loại bỏ tất cả các thẻ XML OpenXML còn lại
   let cleanText = xml
     .replace(/<\/?[a-zA-Z0-9_-]+:[^>]+>/gi, ' ')
     .trim();
 
-  // Hợp nhất các thẻ in đậm, in nghiêng liền kề và xóa thẻ định dạng rỗng
+  // Hợp nhất các thẻ liền kề chỉ cách nhau bởi khoảng trắng ngang, không nuốt dòng ngắt \n
   cleanText = cleanText
-    .replace(/<\/b>\s*<b>/gi, ' ')
-    .replace(/<\/strong>\s*<strong>/gi, ' ')
-    .replace(/<\/u>\s*<u>/gi, ' ')
-    .replace(/<(?:b|strong|u|span)[^>]*>\s*<\/(?:b|strong|u|span)>/gi, ' ');
+    .replace(/<\/b>[ \t]*<b>/gi, ' ')
+    .replace(/<\/strong>[ \t]*<strong>/gi, ' ')
+    .replace(/<\/u>[ \t]*<u>/gi, ' ')
+    .replace(/<(?:b|strong|u|span)[^>]*>[ \t]*<\/(?:b|strong|u|span)>/gi, ' ');
 
   // Giải mã các thực thể HTML cơ bản
   cleanText = cleanText
@@ -248,9 +518,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"');
 
-  return cleanText;
-
-  return cleanText;
+  return { cleanText, tailAnswers };
 }
 
 /**
@@ -271,10 +539,18 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     arrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   }
 
-  let textWithMathAndImages = '';
+  let examContent = '';
+  let tailAnswers: ParsedTailAnswers = {
+    part1: new Map(),
+    part2: new Map(),
+    part3: new Map(),
+    explanations: new Map(),
+  };
 
   try {
-    textWithMathAndImages = await parseDocxXmlDirectly(arrayBuffer);
+    const parsed = await parseDocxXmlDirectly(arrayBuffer);
+    examContent = parsed.cleanText;
+    tailAnswers = parsed.tailAnswers;
   } catch (err) {
     console.warn('Fallback to mammoth parser:', err);
     const options = {
@@ -285,32 +561,13 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       }),
     };
     const res = await mammoth.convertToHtml({ arrayBuffer }, options);
-    textWithMathAndImages = res.value
+    examContent = res.value
       .replace(/<\/p>/gi, '\n')
       .replace(/<\/div>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n');
   }
 
-  // Cắt bỏ phần BẢNG ĐÁP ÁN / HƯỚNG DẪN GIẢI CHI TIẾT ở cuối đề thi nếu có
-  const tailMatch = textWithMathAndImages.match(/(?:BẢNG ĐÁP ÁN|HƯỚNG DẪN GIẢI CHI TIẾT|ĐÁP ÁN VÀ LỜI GIẢI|ĐÁP ÁN CÁC CÂU)/i);
-  let examContent = textWithMathAndImages;
-  let answerKeyBlock = '';
-  if (tailMatch && tailMatch.index) {
-    examContent = textWithMathAndImages.substring(0, tailMatch.index);
-    answerKeyBlock = textWithMathAndImages.substring(tailMatch.index);
-  }
-
-  // Quét bảng đáp án ở cuối đề thi nếu có (VD: "BẢNG ĐÁP ÁN: 1.A 2.B 3.C...")
-  const answerKeyMap = new Map<number, string>();
-  const targetAnsText = answerKeyBlock || textWithMathAndImages;
-  const ansRegex = /(\d+)[\.\s:\-]+([A-D])/gi;
-  let m;
-  while ((m = ansRegex.exec(targetAnsText)) !== null) {
-    answerKeyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
-  }
-
   // 0. BẢO VỆ TOÀN BỘ THẺ <img ...> VÀ DỮ LIỆU BASE64 TRƯỚC KHI TÁCH CÂU VÀ ĐÁP ÁN!
-  // Đảm bảo tuyệt đối không để chuỗi base64 bị dính từ khóa như "HDG", "A.", "B.", v.v.
   const imgPlaceholders = new Map<string, string>();
   let imgCounter = 0;
   const safeExamContent = examContent.replace(/<img\b[^>]*>/gi, (imgTag) => {
@@ -324,20 +581,20 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     return str.replace(/@@DOCX_IMG_\d+@@/g, (token) => imgPlaceholders.get(token) || token);
   };
 
-  // Vị trí các phần trong tài liệu (tính trên chuỗi an toàn safeExamContent đồng nhất với blockPos)
+  // Vị trí các phần trong tài liệu
   const p1Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
   const p2Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
   const p3Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
   const p4Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
 
   // Tách câu hỏi theo biểu thức đa dạng, hỗ trợ mọi thẻ lồng giữa "Câu" và số
-  const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
+  const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
   const rawBlocks = safeExamContent.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
   const questions: Question[] = [];
   let qIndex = 0;
-
   let currentCursor = 0;
+
   for (const block of rawBlocks) {
     const matchHead = block.match(/^(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*(\d+)(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s)*(?:<[^>]+>|\s)*([\s\S]*)$/i);
     if (!matchHead) continue;
@@ -346,7 +603,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     const questionNumber = parseInt(matchHead[1], 10) || qIndex;
     const body = matchHead[2].trim();
 
-    // 1. Tách Lời giải / Hướng dẫn giải (yêu cầu đầu dòng hoặc thẻ mở, và ranh giới từ \bHDG\b)
+    // 1. Tách Lời giải / Hướng dẫn giải inline
     let contentAndChoices = body;
     let explanation = '';
     const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b)[\.:\s]*([\s\S]*)$/i);
@@ -370,7 +627,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     else if (p2Pos !== -1 && blockPos >= p2Pos) sectionPart = 2;
     else if (p1Pos !== -1 && blockPos >= p1Pos) sectionPart = 1;
 
-    // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (trên 1 dòng, nhiều dòng, hoặc ô bảng)
+    // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. và a), b), c), d)
     const choiceRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([A-D])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
     const tfRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([a-d])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
 
@@ -414,15 +671,16 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
           const optEnd = next ? next.start : contentAndChoices.length;
           let optText = contentAndChoices.substring(optStart, optEnd).trim();
 
-          // Kiểm tra xem phương án có được gạch chân, in đậm hoặc bôi đỏ đáp án không
+          // Chỉ xem là được đánh dấu đáp án nếu gạch chân <u> hoặc có màu đỏ
           const isMarked =
             cur.fullMatch.includes('<u>') ||
-            cur.fullMatch.includes('<strong>') ||
-            cur.fullMatch.includes('<b>') ||
             optText.includes('<u>') ||
             optText.includes('color:red') ||
             optText.includes('color: red') ||
-            optText.includes('FF0000');
+            optText.includes('FF0000') ||
+            cur.fullMatch.includes('color:red') ||
+            cur.fullMatch.includes('color: red') ||
+            cur.fullMatch.includes('FF0000');
 
           optText = optText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
 
@@ -436,9 +694,9 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
           });
         }
 
-        // Kiểm tra thêm từ bảng đáp án ở cuối tài liệu
-        if (!correctAnswer && answerKeyMap.has(questionNumber)) {
-          correctAnswer = answerKeyMap.get(questionNumber);
+        // Ưu tiên lấy đáp án từ bảng đáp án ở cuối tài liệu nếu có
+        if (!correctAnswer && tailAnswers.part1.has(questionNumber)) {
+          correctAnswer = tailAnswers.part1.get(questionNumber);
         }
 
         if (!correctAnswer && explanation) {
@@ -457,7 +715,10 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
         const firstTfPos = tfMatches[0].index ?? 0;
         questionContent = contentAndChoices.substring(0, firstTfPos).trim();
 
-        const correctMap: Record<string, boolean> = { a: false, b: false, c: false, d: false };
+        const tailTf = tailAnswers.part2.get(questionNumber);
+        const correctMap: Record<string, boolean> = tailTf
+          ? { ...tailTf }
+          : { a: false, b: false, c: false, d: false };
 
         for (let i = 0; i < tfMatches.length; i++) {
           const cur = tfMatches[i];
@@ -467,8 +728,10 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
           const end = next ? (next.index ?? 0) : contentAndChoices.length;
           let stmtText = contentAndChoices.substring(start, end).trim();
 
-          const isTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
-          if (isTrue) correctMap[label] = true;
+          if (!tailTf) {
+            const isTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
+            if (isTrue) correctMap[label] = true;
+          }
 
           stmtText = stmtText.replace(/[\(\[]?\s*(?:Đúng|Sai)\s*[\)\]]?/gi, '').trim();
           options.push({
@@ -484,12 +747,16 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       part = 3;
       points = 0.5;
 
-      const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
-      if (numMatch) {
-        const rawAns = numMatch[1].trim();
-        correctAnswer = [rawAns, rawAns.replace(',', '.')];
+      if (tailAnswers.part3.has(questionNumber)) {
+        correctAnswer = tailAnswers.part3.get(questionNumber);
       } else {
-        correctAnswer = ['0'];
+        const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
+        if (numMatch) {
+          const rawAns = numMatch[1].trim();
+          correctAnswer = [rawAns, rawAns.replace(',', '.')];
+        } else {
+          correctAnswer = ['0'];
+        }
       }
     } else {
       // Mặc định là Tự luận (Phần IV)
@@ -497,6 +764,11 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       part = 4;
       points = 2.0;
       correctAnswer = explanation || 'Trình bày lời giải chi tiết';
+    }
+
+    // Nếu chưa có lời giải inline, lấy từ phần HƯỚNG DẪN GIẢI CHI TIẾT ở đuôi tài liệu
+    if (!explanation && tailAnswers.explanations.has(`q-${questionNumber}`)) {
+      explanation = tailAnswers.explanations.get(`q-${questionNumber}`)!;
     }
 
     // Làm sạch câu hỏi nhưng giữ lại các thẻ <img> và <table>
@@ -533,7 +805,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     });
   }
 
-  return { questions, rawText: textWithMathAndImages };
+  return { questions, rawText: examContent };
 }
 
 /**

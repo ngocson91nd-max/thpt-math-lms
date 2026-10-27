@@ -27,39 +27,78 @@ describe('Word Exam Parser', () => {
     expect(q1.explanation).not.toContain('hUeXBlAABQ');
   });
 
-  it('phân tích chính xác file GK1-12-Xuân Trường.docx (chuẩn đề 2025: 12 TN + 4 ĐS + 6 TLN)', async () => {
+  it('bóc tách chính xác đề thi và bảng đáp án THPT Xuân Trường', async () => {
     const filePath = 'E:/Nam2627/GK1-12/GK1-12-Xuân Trường.docx';
     if (!fs.existsSync(filePath)) return;
-    const buffer = fs.readFileSync(filePath);
-    const result = await parseWordDocx(buffer);
 
-    console.log('--- XUÂN TRƯỜNG TOTAL QUESTIONS ---', result.questions.length);
-    const p1 = result.questions.filter((q) => q.part === 1);
-    const p2 = result.questions.filter((q) => q.part === 2);
-    const p3 = result.questions.filter((q) => q.part === 3);
-    console.log(`Phần I: ${p1.length}, Phần II: ${p2.length}, Phần III: ${p3.length}`);
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
 
-    // Tổng số câu hỏi phải là 22 câu (12 Phần I, 4 Phần II, 6 Phần III)
-    expect(result.questions.length).toBe(22);
+    expect(res.questions.length).toBe(22);
+    const p1 = res.questions.filter((q) => q.part === 1);
+    const p2 = res.questions.filter((q) => q.part === 2);
+    const p3 = res.questions.filter((q) => q.part === 3);
+
     expect(p1.length).toBe(12);
     expect(p2.length).toBe(4);
     expect(p3.length).toBe(6);
 
-    // Kiểm tra câu 1 Phần I
-    expect(p1[0].type).toBe('single_choice');
-    expect(p1[0].content).toContain('Điểm cực tiểu của hàm số');
-    expect(p1[0].options.length).toBe(4);
+    // Kiểm tra trích xuất bảng đáp án Phần 2 (Đúng / Sai)
+    expect(p2[0].correct_answer).toEqual({ a: false, b: true, c: false, d: true });
+    expect(p2[1].correct_answer).toEqual({ a: false, b: true, c: true, d: true });
+    expect(p2[2].correct_answer).toEqual({ a: true, b: true, c: false, d: false });
+    expect(p2[3].correct_answer).toEqual({ a: true, b: false, c: false, d: true });
 
-    // Kiểm tra câu 2 Phần I
-    expect(p1[1].type).toBe('single_choice');
-    expect(p1[1].content).toContain('nghịch biến trên khoảng nào');
-    expect(p1[1].options.length).toBe(4);
+    // Kiểm tra trích xuất bảng đáp án Phần 3 (Trả lời ngắn)
+    expect(p3[0].correct_answer).toEqual(['2', '2']);
+    expect(p3[1].correct_answer).toEqual(['10', '10']);
+    expect(p3[2].correct_answer).toEqual(['6', '6']);
+    expect(p3[3].correct_answer).toEqual(['7,46', '7.46']);
 
-    // Kiểm tra câu 1 Phần II (Đúng/Sai)
-    expect(p2[0].type).toBe('true_false');
-    expect(p2[0].options.length).toBe(4);
+    // Kiểm tra công thức MathType chuyển sang SVG
+    expect(p1[0].content).toContain('data:image/svg+xml;base64,');
+  });
 
-    // Kiểm tra câu 1 Phần III (Điền số)
-    expect(p3[0].type).toBe('short_answer');
+  it('bóc tách chính xác đề thi và bảng đáp án THPT Nguyễn Công Trứ', async () => {
+    const filePath = 'E:/Nam2627/GK1-12/GK1-12-Nguyễn Công Trứ.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    expect(res.questions.length).toBe(22);
+    const p1 = res.questions.filter((q) => q.part === 1);
+    const p2 = res.questions.filter((q) => q.part === 2);
+    const p3 = res.questions.filter((q) => q.part === 3);
+
+    expect(p1.length).toBe(12);
+    expect(p2.length).toBe(4);
+    expect(p3.length).toBe(6);
+
+    // Phần 1: Bảng đáp án
+    const p1Answers = p1.map((q) => q.correct_answer);
+    expect(p1Answers).toEqual(['C', 'D', 'B', 'D', 'B', 'B', 'B', 'D', 'B', 'B', 'C', 'B']);
+
+    // Phần 2: Đúng / Sai
+    expect(p2[0].correct_answer).toEqual({ a: true, b: true, c: false, d: false });
+
+    // Phần 3: Trả lời ngắn
+    expect(p3[0].correct_answer).toEqual(['25', '25']);
+    expect(p3[1].correct_answer).toEqual(['3', '3']);
+    expect(p3[2].correct_answer).toEqual(['4', '4']);
+  });
+
+  it('nhận diện đầy đủ phương án A và số lượng câu ở file A Phủ Lý', async () => {
+    const filePath = 'E:/Nam2627/GK1-12/GK1-12-A Phủ Lý.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    expect(res.questions.length).toBeGreaterThanOrEqual(20);
+    const q1 = res.questions[0];
+    expect(q1.options.length).toBe(4);
+    expect(q1.options[0].id).toBe('A');
+    expect(q1.content).toContain('data:image/svg+xml;base64,');
   });
 });

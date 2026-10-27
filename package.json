@@ -23,7 +23,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.7.0",
-    "wmf": "^1.0.2"
+    "wmf": "^1.0.2",
+    "wmf-emf-renderer": "^0.2.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
