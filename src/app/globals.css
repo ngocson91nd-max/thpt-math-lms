@@ -100,3 +100,12 @@ svg.tikzjax {
     max-width: 42%;
   }
 }
+
+/* MathType SVG Inline Formulas */
+.inline-math-svg {
+  display: inline-block;
+  vertical-align: -0.32em;
+  max-width: 100%;
+  object-fit: contain;
+}
+

@@ -101,4 +101,45 @@ describe('Word Exam Parser', () => {
     expect(q1.options[0].id).toBe('A');
     expect(q1.content).toContain('data:image/svg+xml;base64,');
   });
+
+  it('nhận diện hoàn hảo công thức MathType và bóc tách đề thi THPT Giao Thủy B', async () => {
+    const filePath = 'E:/Nam2627/GK1-12/GK1-12-Giao Thủy B.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    expect(res.questions.length).toBe(22);
+
+    // Kiểm tra Câu 4 (vectơ u = 3j - i - 5k)
+    const q4 = res.questions.find((q) => q.content.includes('cho  vectơ') || q.content.includes('cho vectơ'));
+    expect(q4).toBeDefined();
+    if (q4) {
+      expect(q4.type).toBe('single_choice');
+      expect(q4.options.length).toBe(4);
+      expect(q4.options[0].id).toBe('A');
+      // Đảm bảo không còn ký tự 'r' từ font MT Extra hiển thị đè lên chữ vector
+      expect(q4.content).not.toContain('font-family="MT Extra">r</text>');
+      // Đảm bảo các mũi tên vector đã được chuyển đổi thành thẻ vector path chuẩn SVG
+      const b64 = q4.content.match(/data:image\/svg\+xml;base64,([^"]+)/);
+      expect(b64).toBeTruthy();
+      if (b64) {
+        const decodedSvg = Buffer.from(b64[1], 'base64').toString('utf8');
+        expect(decodedSvg).toContain('<path d="M');
+        expect(decodedSvg).not.toContain('font-family="MT Extra"');
+      }
+
+      // Đảm bảo các phương án A, B, C, D có tỷ lệ chiều cao/rộng tự nhiên (style="height:...;width:auto")
+      expect(q4.options[0].text).toContain('style="height:');
+      expect(q4.options[0].text).toContain('width:auto');
+    }
+
+    // Kiểm tra Câu 5 (điểm A, B và vectơ BA)
+    const q5 = res.questions[4];
+    expect(q5).toBeDefined();
+    expect(q5.type).toBe('single_choice');
+    expect(q5.options.length).toBe(4);
+    expect(q5.options[0].id).toBe('A');
+    expect(q5.content).toContain('cho hai điểm');
+  });
 });

@@ -14,18 +14,21 @@ try {
 
 /**
  * Chuẩn hóa buffer byte WMF:
- * 1. Cắt bỏ 22 byte tiêu đề Aldus APM (Placeable Metafile 0x9AC6CDD7) nếu có.
- * 2. Thay thế record META_ESCAPE 1574 (chứa comment MathType) thành dummy record
- *    để thư viện WMF / SVG giải mã trơn tru mà không bị treo hoặc văng Exception.
+ * 1. Giữ nguyên 22 byte tiêu đề Aldus APM (0x9AC6CDD7) khi render sang SVG (stripApm = false)
+ *    để wmf-emf-renderer xác định đúng tỷ lệ khung hình (aspect ratio) và kích thước chuẩn xác.
+ * 2. Cắt bỏ 22 byte khi dùng với thư viện WMF canvas thuần túy (stripApm = true).
+ * 3. Thay thế record META_ESCAPE 1574 (chứa comment MathType) thành dummy record META_SAVEDC
+ *    để thư viện WMF / SVG giải mã trơn tru mà không bị văng Exception.
  */
-export function sanitizeWmfBytes(bytes: Uint8Array): Uint8Array {
+export function sanitizeWmfBytes(bytes: Uint8Array, stripApm = false): Uint8Array {
+  const hasApm = bytes.length >= 22 && bytes[0] === 0xd7 && bytes[1] === 0xcd && bytes[2] === 0xc6 && bytes[3] === 0x9a;
   let u = bytes;
-  // Bóc tách 22 bytes Aldus APM header (0x9AC6CDD7) nếu có
-  if (u.length >= 22 && u[0] === 0xd7 && u[1] === 0xcd && u[2] === 0xc6 && u[3] === 0x9a) {
-    u = u.slice(22);
+  if (stripApm && hasApm) {
+    u = bytes.slice(22);
   }
   const copy = new Uint8Array(u);
-  let offset = 18;
+  let offset = (!stripApm && hasApm) ? 22 + 18 : 18;
+
   while (offset + 6 <= copy.length) {
     const rdSize = (copy[offset] | (copy[offset + 1] << 8) | (copy[offset + 2] << 16) | (copy[offset + 3] << 24)) >>> 0;
     const rdFunc = copy[offset + 4] | (copy[offset + 5] << 8);
@@ -38,6 +41,132 @@ export function sanitizeWmfBytes(bytes: Uint8Array): Uint8Array {
     offset += rdSize * 2;
   }
   return copy;
+}
+
+/**
+ * Hậu xử lý SVG sinh ra từ MathType WMF để hiển thị siêu nét, chuẩn sư phạm trên mọi trình duyệt:
+ * 1. Khử triệt để lỗi chữ 'r' (hoặc 'u u u r') hiển thị đè lên các chữ cái vector:
+ *    Chuyển đổi ký tự mũi tên của MT Extra & Euclid Extra thành đường vẽ SVG path vector tuyệt đẹp.
+ * 2. Thay thế ký hiệu tập hợp Blackboard Bold (¡, ¢, £, ¤, ¥) thành ℝ, ℤ, ℕ, ℚ, ℂ chuẩn Unicode.
+ * 3. Thay thế dấu trừ '-' trong Symbol font thành ký tự toán học Unicode minus '−' (U+2212).
+ * 4. Chuẩn hóa font-family sang các font toán quốc tế có sẵn trên mọi hệ điều hành (Cambria Math, Times New Roman, STIXGeneral).
+ * 5. Loại bỏ khung viền trắng đặc để công thức toán hòa nhập tự nhiên vào giao diện ứng dụng.
+ */
+export function postProcessMathTypeSvg(rawSvg: string): string {
+  if (!rawSvg) return rawSvg;
+
+  // 1. Xóa rect nền trắng đặc
+  let svg = rawSvg.replace(/<rect\s+[^>]*fill="#ffffff"[^>]*\/>/gi, '');
+
+  // 2. Chuyển đổi các ký tự MT Extra blackboard bold và ký hiệu đặc biệt
+  svg = svg.replace(/<text([^>]+font-family="(?:MT Extra|Euclid Extra)"[^>]*)>([^<]+)<\/text>/g, (match, attrs, char) => {
+    let mapped = char;
+    if (char === '¡') mapped = '&#x211D;'; // ℝ
+    else if (char === '¢') mapped = '&#x2124;'; // ℤ
+    else if (char === '£') mapped = '&#x2115;'; // ℕ
+    else if (char === '¤') mapped = '&#x211A;'; // ℚ
+    else if (char === '¥') mapped = '&#x2102;'; // ℂ
+    else if (char === '`' || char === '\'') mapped = '&#x2032;'; // ′ prime
+    
+    if (mapped !== char) {
+      const newAttrs = attrs.replace(/font-family="[^"]+"/, 'font-family="\'Cambria Math\', \'Times New Roman\', serif"');
+      return `<text${newAttrs}>${mapped}</text>`;
+    }
+    return match;
+  });
+
+  // 3. XỬ LÝ VECTOR ARROWS TRONG MT EXTRA / EUCLID EXTRA (chuỗi 'u...r' hoặc 'r' đơn)
+  interface ArrowPart {
+    fullTag: string;
+    char: string;
+    x: number;
+    y: number;
+    fontSize: number;
+  }
+  
+  const arrowRegex = /<text\s+([^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*font-family="(?:MT Extra|Euclid Extra)"[^>]*font-size="([^"]+)"[^>]*)>([ur])<\/text>/gi;
+  const parts: ArrowPart[] = [];
+  let m;
+  while ((m = arrowRegex.exec(svg)) !== null) {
+    parts.push({
+      fullTag: m[0],
+      char: m[5],
+      x: parseFloat(m[2]),
+      y: parseFloat(m[3]),
+      fontSize: parseFloat(m[4]),
+    });
+  }
+
+  // Nhóm các phần tử mũi tên theo cao độ y và khoảng cách ngang liền kề (dx <= fontSize * 0.8)
+  const groups: ArrowPart[][] = [];
+  parts.sort((a, b) => a.x - b.x);
+
+  for (const part of parts) {
+    let placed = false;
+    for (const group of groups) {
+      const last = group[group.length - 1];
+      const sameY = Math.abs(last.y - part.y) <= last.fontSize * 0.15;
+      const closeX = (part.x - last.x) <= last.fontSize * 0.8;
+      if (sameY && closeX) {
+        group.push(part);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      groups.push([part]);
+    }
+  }
+
+  // Thay thế từng nhóm thành đường vẽ mũi tên SVG (path)
+  for (const group of groups) {
+    const first = group[0];
+    const last = group[group.length - 1];
+    const fontSize = first.fontSize;
+    const yBase = first.y;
+
+    const startX = first.x;
+    let endX: number;
+    let headWidth = fontSize * 0.18;
+    let headHeight = fontSize * 0.12;
+
+    if (group.length === 1 && first.char === 'r') {
+      // Mũi tên đơn trên 1 chữ cái vector (như \vec{u}, \vec{j}, \vec{i}, \vec{k})
+      endX = startX + fontSize * 0.48;
+    } else {
+      // Mũi tên kép trên 2 chữ cái vector trở lên (như \overrightarrow{AB}, \overrightarrow{BA})
+      endX = last.x + fontSize * 0.22;
+      headWidth = fontSize * 0.20;
+      headHeight = fontSize * 0.14;
+    }
+
+    const lineY = yBase - fontSize * 0.12;
+    const strokeW = Math.max(fontSize * 0.065, 1.5);
+
+    const pathD = `M ${startX.toFixed(1)} ${lineY.toFixed(1)} L ${endX.toFixed(1)} ${lineY.toFixed(1)} l -${headWidth.toFixed(1)} -${headHeight.toFixed(1)} m ${headWidth.toFixed(1)} ${headHeight.toFixed(1)} l -${headWidth.toFixed(1)} ${headHeight.toFixed(1)}`;
+    const pathTag = `<path d="${pathD}" stroke="#000000" stroke-width="${strokeW.toFixed(1)}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`;
+
+    let replacedFirst = false;
+    for (const item of group) {
+      if (!replacedFirst) {
+        svg = svg.replace(item.fullTag, pathTag);
+        replacedFirst = true;
+      } else {
+        svg = svg.replace(item.fullTag, '');
+      }
+    }
+  }
+
+  // 4. Chuẩn hóa dấu trừ '-' trong Symbol font thành ký tự toán học Unicode minus '−' (U+2212)
+  svg = svg.replace(/<text([^>]+font-family="(?:Symbol|Euclid Symbol)"[^>]*)>-<\/text>/g, (_m, attrs) => {
+    return `<text${attrs}>&#x2212;</text>`;
+  });
+
+  // 5. Chuẩn hóa font-family sang các font có độ tương thích cao trên mọi OS
+  svg = svg.replace(/font-family="(?:Symbol|Euclid Symbol)"/g, 'font-family="\'Cambria Math\', \'Times New Roman\', \'STIXGeneral\', serif"');
+  svg = svg.replace(/font-family="(?:MT Extra|Euclid Extra)"/g, 'font-family="\'Cambria Math\', \'Times New Roman\', serif"');
+
+  return svg;
 }
 
 /**
@@ -61,11 +190,11 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
     if (lower.endsWith('.wmf') || lower.endsWith('.emf')) {
       try {
         const rawBytes = await file.async('uint8array');
-        const cleanBytes = sanitizeWmfBytes(rawBytes);
+        // Giữ nguyên 22 byte APM header để SVG có đúng tỷ lệ khung hình thật (aspect ratio)
+        const cleanBytes = sanitizeWmfBytes(rawBytes, false);
         const svg = renderToSvg(cleanBytes);
         if (svg && svg.includes('<svg')) {
-          // Bỏ khung viền trắng nền đặc để công thức hòa nhập tự nhiên vào màu nền
-          const cleanSvg = svg.replace(/<rect\s+[^>]*fill="#ffffff"[^>]*\/>/gi, '');
+          const cleanSvg = postProcessMathTypeSvg(svg);
           const base64 = typeof Buffer !== 'undefined'
             ? Buffer.from(cleanSvg).toString('base64')
             : btoa(unescape(encodeURIComponent(cleanSvg)));
@@ -76,7 +205,7 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
         try {
           if (typeof window !== 'undefined' && typeof document !== 'undefined' && WMF) {
             const rawBytes = await file.async('uint8array');
-            const cleanBytes = sanitizeWmfBytes(rawBytes);
+            const cleanBytes = sanitizeWmfBytes(rawBytes, true);
             const size = WMF.image_size(cleanBytes);
             const w = Math.max(size ? size[0] : 180, 40);
             const h = Math.max(size ? size[1] : 60, 20);
@@ -409,15 +538,29 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     if (!idMatch) return '';
     const rId = idMatch[1];
     const dataUrl = rIdToDataUrl.get(rId);
-    return dataUrl
-      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 max-h-7 object-contain" alt="công thức MathType" /> `
-      : '';
+    if (!dataUrl) return '';
+
+    // Trích xuất chiều cao từ Word XML (pt hoặc dxa) để tự động căn chỉnh tỷ lệ cân đối theo cỡ chữ
+    let heightEm = 1.45;
+    const styleMatch = objXml.match(/height:\s*([\d\.]+)\s*pt/i);
+    if (styleMatch) {
+      const pt = parseFloat(styleMatch[1]);
+      if (!isNaN(pt) && pt > 0) heightEm = Math.max(1.1, Math.min(6.0, pt / 13.0));
+    } else {
+      const dyaMatch = objXml.match(/w:dyaOrig="(\d+)"/i);
+      if (dyaMatch) {
+        const pt = parseInt(dyaMatch[1], 10) / 20.0;
+        if (!isNaN(pt) && pt > 0) heightEm = Math.max(1.1, Math.min(6.0, pt / 13.0));
+      }
+    }
+
+    return ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:${heightEm.toFixed(2)}em;width:auto;vertical-align:-0.32em;" alt="công thức MathType" /> `;
   });
 
   xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
     const dataUrl = rIdToDataUrl.get(rId);
     return dataUrl
-      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 max-h-7 object-contain" alt="công thức MathType" /> `
+      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:1.45em;width:auto;vertical-align:-0.32em;" alt="công thức MathType" /> `
       : '';
   });
 
@@ -823,7 +966,7 @@ export function convertWmfDataUrlToPng(dataUrl: string): string {
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
-    const cleanBytes = sanitizeWmfBytes(bytes);
+    const cleanBytes = sanitizeWmfBytes(bytes, true);
     const size = WMF.image_size(cleanBytes);
     const w = Math.max(size ? size[0] : 180, 40);
     const h = Math.max(size ? size[1] : 60, 20);
