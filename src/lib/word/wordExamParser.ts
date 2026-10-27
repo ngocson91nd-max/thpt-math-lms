@@ -229,23 +229,17 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     return runText;
   });
 
-  // 7. Loại bỏ tất cả các thẻ XML OpenXML còn lại
+  // 7. Loại bỏ tất cả các thẻ XML OpenXML còn lại (hỗ trợ mọi namespace w, w14, w15, w16, v, o, m, a, wp, pic...)
   let cleanText = xml
-    .replace(/<w:[^>]+>/gi, '')
-    .replace(/<\/w:[^>]+>/gi, '')
-    .replace(/<m:[^>]+>/gi, '')
-    .replace(/<\/m:[^>]+>/gi, '')
-    .replace(/<v:[^>]+>/gi, '')
-    .replace(/<\/v:[^>]+>/gi, '')
-    .replace(/<o:[^>]+>/gi, '')
-    .replace(/<\/o:[^>]+>/gi, '')
-    .replace(/<a:[^>]+>/gi, '')
-    .replace(/<\/a:[^>]+>/gi, '')
-    .replace(/<wp:[^>]+>/gi, '')
-    .replace(/<\/wp:[^>]+>/gi, '')
-    .replace(/<pic:[^>]+>/gi, '')
-    .replace(/<\/pic:[^>]+>/gi, '')
+    .replace(/<\/?[a-zA-Z0-9_-]+:[^>]+>/gi, ' ')
     .trim();
+
+  // Hợp nhất các thẻ in đậm, in nghiêng liền kề và xóa thẻ định dạng rỗng
+  cleanText = cleanText
+    .replace(/<\/b>\s*<b>/gi, ' ')
+    .replace(/<\/strong>\s*<strong>/gi, ' ')
+    .replace(/<\/u>\s*<u>/gi, ' ')
+    .replace(/<(?:b|strong|u|span)[^>]*>\s*<\/(?:b|strong|u|span)>/gi, ' ');
 
   // Giải mã các thực thể HTML cơ bản
   cleanText = cleanText
@@ -253,6 +247,8 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"');
+
+  return cleanText;
 
   return cleanText;
 }
@@ -295,28 +291,29 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       .replace(/<br\s*\/?>/gi, '\n');
   }
 
-  // Quét bảng đáp án ở cuối đề thi nếu có (VD: "BẢNG ĐÁP ÁN: 1.A 2.B 3.C...")
-  const answerKeyMap = new Map<number, string>();
-  const answerKeyBlockMatch = textWithMathAndImages.match(/(?:BẢNG ĐÁP ÁN|ĐÁP ÁN CÁC CÂU)[\s\S]*$/i);
-  if (answerKeyBlockMatch) {
-    const ansRegex = /(\d+)[\.\s:\-]+([A-D])/gi;
-    let m;
-    while ((m = ansRegex.exec(answerKeyBlockMatch[0])) !== null) {
-      answerKeyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
-    }
+  // Cắt bỏ phần BẢNG ĐÁP ÁN / HƯỚNG DẪN GIẢI CHI TIẾT ở cuối đề thi nếu có
+  const tailMatch = textWithMathAndImages.match(/(?:BẢNG ĐÁP ÁN|HƯỚNG DẪN GIẢI CHI TIẾT|ĐÁP ÁN VÀ LỜI GIẢI|ĐÁP ÁN CÁC CÂU)/i);
+  let examContent = textWithMathAndImages;
+  let answerKeyBlock = '';
+  if (tailMatch && tailMatch.index) {
+    examContent = textWithMathAndImages.substring(0, tailMatch.index);
+    answerKeyBlock = textWithMathAndImages.substring(tailMatch.index);
   }
 
-  // Vị trí các phần trong tài liệu nếu có
-  const p1Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
-  const p2Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
-  const p3Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
-  const p4Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
+  // Quét bảng đáp án ở cuối đề thi nếu có (VD: "BẢNG ĐÁP ÁN: 1.A 2.B 3.C...")
+  const answerKeyMap = new Map<number, string>();
+  const targetAnsText = answerKeyBlock || textWithMathAndImages;
+  const ansRegex = /(\d+)[\.\s:\-]+([A-D])/gi;
+  let m;
+  while ((m = ansRegex.exec(targetAnsText)) !== null) {
+    answerKeyMap.set(parseInt(m[1], 10), m[2].toUpperCase());
+  }
 
   // 0. BẢO VỆ TOÀN BỘ THẺ <img ...> VÀ DỮ LIỆU BASE64 TRƯỚC KHI TÁCH CÂU VÀ ĐÁP ÁN!
   // Đảm bảo tuyệt đối không để chuỗi base64 bị dính từ khóa như "HDG", "A.", "B.", v.v.
   const imgPlaceholders = new Map<string, string>();
   let imgCounter = 0;
-  const safeText = textWithMathAndImages.replace(/<img\b[^>]*>/gi, (imgTag) => {
+  const safeExamContent = examContent.replace(/<img\b[^>]*>/gi, (imgTag) => {
     const token = `@@DOCX_IMG_${imgCounter++}@@`;
     imgPlaceholders.set(token, imgTag);
     return token;
@@ -327,15 +324,22 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     return str.replace(/@@DOCX_IMG_\d+@@/g, (token) => imgPlaceholders.get(token) || token);
   };
 
-  // Tách câu hỏi theo biểu thức đa dạng: "Câu 1:", "Câu 1.", "Câu 1 ", "Bài 1:", "[Câu 1]", "CÂU 1"
-  const questionSplitter = /(?=(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)*\s*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI) *\d+ *(?:\]|\)|\.|\:|\-|\s))/i;
-  const rawBlocks = safeText.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
+  // Vị trí các phần trong tài liệu (tính trên chuỗi an toàn safeExamContent đồng nhất với blockPos)
+  const p1Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
+  const p2Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
+  const p3Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
+  const p4Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
+
+  // Tách câu hỏi theo biểu thức đa dạng, hỗ trợ mọi thẻ lồng giữa "Câu" và số
+  const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
+  const rawBlocks = safeExamContent.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
   const questions: Question[] = [];
   let qIndex = 0;
 
+  let currentCursor = 0;
   for (const block of rawBlocks) {
-    const matchHead = block.match(/^(?:<b>|<strong>|<u>|<p[^>]*>)*\s*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI) *(\d+) *(?:\]|\)|\.|\:|\-|\s)*(?:<\/b>|<\/strong>|<\/u>|<\/p>)*([\s\S]*)$/i);
+    const matchHead = block.match(/^(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*(\d+)(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s)*(?:<[^>]+>|\s)*([\s\S]*)$/i);
     if (!matchHead) continue;
 
     qIndex++;
@@ -351,82 +355,105 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       contentAndChoices = body.substring(0, lgMatch.index).trim();
     }
 
+    // Xác định phần của câu hỏi dựa trên vị trí con trỏ trong tài liệu
+    let blockPos = safeExamContent.indexOf(block, currentCursor);
+    if (blockPos === -1) {
+      blockPos = safeExamContent.indexOf(block);
+    } else {
+      currentCursor = blockPos + 20;
+    }
+
+    const hasSections = p1Pos !== -1 || p2Pos !== -1 || p3Pos !== -1 || p4Pos !== -1;
+    let sectionPart: 1 | 2 | 3 | 4 = 1;
+    if (p4Pos !== -1 && blockPos >= p4Pos) sectionPart = 4;
+    else if (p3Pos !== -1 && blockPos >= p3Pos) sectionPart = 3;
+    else if (p2Pos !== -1 && blockPos >= p2Pos) sectionPart = 2;
+    else if (p1Pos !== -1 && blockPos >= p1Pos) sectionPart = 1;
+
     // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (trên 1 dòng, nhiều dòng, hoặc ô bảng)
-    const choiceRegex = /(?:^|[\n\t]|(?:\s{2,})|(?:\s+(?=<b>|<strong>|<u>|<span[^>]*>))|(?<=\n)\s*)(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([A-D])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s+/gi;
+    const choiceRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([A-D])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
+    const tfRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([a-d])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
+
     const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
+    const tfMatches = Array.from(contentAndChoices.matchAll(tfRegex));
 
     let type: QuestionType = 'single_choice';
-    let part: 1 | 2 | 3 | 4 = 1;
+    let part: 1 | 2 | 3 | 4 = sectionPart;
     let points = 0.25;
     let options: any[] = [];
     let correctAnswer: any = null;
     let questionContent = contentAndChoices;
 
-    if (choicesMatches.length >= 3) {
+    const isPart1 = hasSections ? sectionPart === 1 : choicesMatches.length >= 3;
+    const isPart2 = hasSections ? sectionPart === 2 : !isPart1 && tfMatches.length >= 3;
+    const isPart3 = hasSections ? sectionPart === 3 : !isPart1 && !isPart2 && (body.includes('Điền kết quả') || body.includes('bằng bao nhiêu'));
+
+    if (isPart1) {
       // Dạng Trắc nghiệm 4 lựa chọn (Phần I)
       type = 'single_choice';
       part = 1;
       points = 0.25;
 
-      const firstChoicePos = choicesMatches[0].index ?? 0;
-      questionContent = contentAndChoices.substring(0, firstChoicePos).trim();
+      if (choicesMatches.length >= 3) {
+        const firstChoicePos = choicesMatches[0].index ?? 0;
+        questionContent = contentAndChoices.substring(0, firstChoicePos).trim();
 
-      const choicePositions: { label: string; start: number; fullMatch: string }[] = [];
-      choicesMatches.forEach((m) => {
-        choicePositions.push({
-          label: m[1].toUpperCase(),
-          start: m.index ?? 0,
-          fullMatch: m[0],
+        const choicePositions: { label: string; start: number; fullMatch: string }[] = [];
+        choicesMatches.forEach((m) => {
+          choicePositions.push({
+            label: m[1].toUpperCase(),
+            start: m.index ?? 0,
+            fullMatch: m[0],
+          });
         });
-      });
 
-      for (let i = 0; i < choicePositions.length; i++) {
-        const cur = choicePositions[i];
-        const next = choicePositions[i + 1];
-        const optStart = cur.start + cur.fullMatch.length;
-        const optEnd = next ? next.start : contentAndChoices.length;
-        let optText = contentAndChoices.substring(optStart, optEnd).trim();
+        for (let i = 0; i < choicePositions.length; i++) {
+          const cur = choicePositions[i];
+          const next = choicePositions[i + 1];
+          const optStart = cur.start + cur.fullMatch.length;
+          const optEnd = next ? next.start : contentAndChoices.length;
+          let optText = contentAndChoices.substring(optStart, optEnd).trim();
 
-        // Kiểm tra xem phương án có được gạch chân, in đậm hoặc bôi đỏ đáp án không
-        const isMarked =
-          cur.fullMatch.includes('<u>') ||
-          cur.fullMatch.includes('<strong>') ||
-          cur.fullMatch.includes('<b>') ||
-          optText.includes('<u>') ||
-          optText.includes('color:red') ||
-          optText.includes('color: red') ||
-          optText.includes('FF0000');
+          // Kiểm tra xem phương án có được gạch chân, in đậm hoặc bôi đỏ đáp án không
+          const isMarked =
+            cur.fullMatch.includes('<u>') ||
+            cur.fullMatch.includes('<strong>') ||
+            cur.fullMatch.includes('<b>') ||
+            optText.includes('<u>') ||
+            optText.includes('color:red') ||
+            optText.includes('color: red') ||
+            optText.includes('FF0000');
 
-        optText = optText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
+          optText = optText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
 
-        if (isMarked && !correctAnswer) {
-          correctAnswer = cur.label;
+          if (isMarked && !correctAnswer) {
+            correctAnswer = cur.label;
+          }
+
+          options.push({
+            id: cur.label,
+            text: optText,
+          });
         }
 
-        options.push({
-          id: cur.label,
-          text: optText,
-        });
-      }
+        // Kiểm tra thêm từ bảng đáp án ở cuối tài liệu
+        if (!correctAnswer && answerKeyMap.has(questionNumber)) {
+          correctAnswer = answerKeyMap.get(questionNumber);
+        }
 
-      // Kiểm tra thêm từ bảng đáp án ở cuối tài liệu
-      if (!correctAnswer && answerKeyMap.has(questionNumber)) {
-        correctAnswer = answerKeyMap.get(questionNumber);
+        if (!correctAnswer && explanation) {
+          const ansMatch = explanation.match(/(?:Chọn|Đáp án|Đ\/A)[\s:]*([A-D])/i);
+          if (ansMatch) correctAnswer = ansMatch[1].toUpperCase();
+        }
+        if (!correctAnswer) correctAnswer = 'A';
       }
+    } else if (isPart2) {
+      // Dạng Đúng / Sai (Phần II)
+      type = 'true_false';
+      part = 2;
+      points = 1.0;
 
-      if (!correctAnswer && explanation) {
-        const ansMatch = explanation.match(/(?:Chọn|Đáp án|Đ\/A)[\s:]*([A-D])/i);
-        if (ansMatch) correctAnswer = ansMatch[1].toUpperCase();
-      }
-      if (!correctAnswer) correctAnswer = 'A';
-    } else {
-      // Kiểm tra xem có phải là dạng Đúng / Sai (a, b, c, d)
-      const tfMatches = Array.from(contentAndChoices.matchAll(/(?:^|[\n\t]|(?:\s{2,})|(?:\s+(?=<b>|<strong>|<u>|<span[^>]*>))|(?<=\n)\s*)(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([a-d])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s+/gi));
       if (tfMatches.length >= 3) {
-        type = 'true_false';
-        part = 2;
-        points = 1.0;
-
         const firstTfPos = tfMatches[0].index ?? 0;
         questionContent = contentAndChoices.substring(0, firstTfPos).trim();
 
@@ -450,29 +477,26 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
           });
         }
         correctAnswer = correctMap;
-      } else {
-        // Kiểm tra xem có phải dạng Trả lời ngắn (điền số)
-        const hasNumberAns = explanation && /(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i.test(explanation);
-        if (hasNumberAns || body.includes('Điền kết quả') || body.includes('bằng bao nhiêu') || (p3Pos !== -1 && p4Pos === -1)) {
-          type = 'short_answer';
-          part = 3;
-          points = 0.5;
-
-          const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
-          if (numMatch) {
-            const rawAns = numMatch[1].trim();
-            correctAnswer = [rawAns, rawAns.replace(',', '.')];
-          } else {
-            correctAnswer = ['0'];
-          }
-        } else {
-          // Mặc định là Tự luận (Phần IV)
-          type = 'essay';
-          part = 4;
-          points = 2.0;
-          correctAnswer = explanation || 'Trình bày lời giải chi tiết';
-        }
       }
+    } else if (isPart3) {
+      // Dạng Trả lời ngắn / điền số (Phần III)
+      type = 'short_answer';
+      part = 3;
+      points = 0.5;
+
+      const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
+      if (numMatch) {
+        const rawAns = numMatch[1].trim();
+        correctAnswer = [rawAns, rawAns.replace(',', '.')];
+      } else {
+        correctAnswer = ['0'];
+      }
+    } else {
+      // Mặc định là Tự luận (Phần IV)
+      type = 'essay';
+      part = 4;
+      points = 2.0;
+      correctAnswer = explanation || 'Trình bày lời giải chi tiết';
     }
 
     // Làm sạch câu hỏi nhưng giữ lại các thẻ <img> và <table>
