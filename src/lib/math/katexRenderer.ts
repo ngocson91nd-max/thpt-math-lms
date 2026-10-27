@@ -186,9 +186,9 @@ export function renderMathToHtml(content: string): string {
     const optimizedTikz = cleanTikz.replace(/samples\s*=\s*(?:1[0-9]{2}|[2-9][0-9]{2})/g, 'samples=60');
     const encodedTikz = encodeURIComponent(optimizedTikz);
 
-    // 8c. Nếu đã có pureSvg: nhúng trực tiếp SVG (0ms, đánh dấu data-processed="true" để TikzJax không can thiệp đè)
+    // 8c. Nếu đã có pureSvg: nhúng TRỰC TIẾP DUY NHẤT SVG (0ms, tuyệt đối không chèn script để tránh TikzJax vẽ thêm hình thứ 2 ở góc)
     if (pureSvg) {
-      const pureWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${pureSvg}\n<script type="text/tikz" data-processed="true" class="hidden" style="display:none" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script></div></div>`;
+      const pureWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${pureSvg}</div></div>`;
       return savePlaceholder(pureWrapper);
     }
 

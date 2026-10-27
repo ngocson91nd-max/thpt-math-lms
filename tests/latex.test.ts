@@ -192,11 +192,11 @@ describe('5. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)'
     expect(renderedQ18).not.toContain('<rect<br />');
     expect(renderedQ18).not.toContain('<text<br />');
 
-    // Kiểm tra renderMathToHtml cho q14 (TikZ đồ thị hàm số): script TikZ không bị dính thẻ br
+    // Kiểm tra renderMathToHtml cho q14 (TikZ đồ thị hàm số): SVG thuần túy được dựng tức thì
     const renderedQ14 = renderMathToHtml(q14.content);
-    expect(renderedQ14).toContain('text/tikz');
-    expect(renderedQ14).not.toContain('<script type="text/tikz">\\begin{tikzpicture}<br />');
-    expect(renderedQ14).not.toContain('<br />  \\draw');
+    expect(renderedQ14).toContain('<svg');
+    expect(renderedQ14).toContain('tikz-wrapper');
+    expect(renderedQ14).not.toContain('<svg<br />');
 
     // Tìm câu có tkzTab trong explanation (hoặc loigiai)
     const qWithTabInLg = questions.find((q) => q.explanation && q.explanation.includes('tkzTab'));
@@ -233,8 +233,9 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
     expect(rendered).not.toContain('$OA$');
     expect(rendered).not.toContain('$\\vv{F_1}');
     expect(rendered).not.toContain('5000\\,\\text{N}$');
-    // Hình TikZ vẫn được bao gói chính xác
-    expect(rendered).toContain('text/tikz');
+    // Hình TikZ được render thành SVG thuần túy và bao gói chính xác
+    expect(rendered).toContain('tikz-wrapper');
+    expect(rendered).toContain('<svg');
   });
 
   it('Bóc tách chuẩn xác \\immini có tham số dòng ngoặc vuông \\immini[1]{...}{...} và \\choice[2]', () => {
@@ -267,10 +268,9 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
 
     const rendered = renderMathToHtml(q.content);
     expect(rendered).toContain('immini-block');
-    expect(rendered).toContain('text/tikz');
-    // samples=150 phải được tự động tối ưu thành samples=60
-    expect(rendered).toContain('samples=60');
-    expect(rendered).toContain('arrows.meta,arrows');
+    expect(rendered).toContain('tikz-wrapper');
+    expect(rendered).toContain('<svg');
+    expect(rendered).toContain('viewBox=');
   });
 
   it('renderTikzToSvg biên dịch đồ thị hàm số và hình học không gian THPT thành SVG thuần túy (0ms)', () => {

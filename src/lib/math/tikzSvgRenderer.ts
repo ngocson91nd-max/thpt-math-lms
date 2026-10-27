@@ -463,11 +463,33 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       let dx = 0, dy = 0;
       let anchor = 'middle';
       const pos = item.pos || '';
-      if (pos.includes('below')) dy = 14;
-      if (pos.includes('above')) dy = -8;
-      if (pos.includes('left')) { dx = -10; anchor = 'end'; }
-      if (pos.includes('right')) { dx = 10; anchor = 'start'; }
-      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12.5" font-style="italic" font-weight="bold" fill="#0f172a" text-anchor="${anchor}">${item.text}</text>`);
+      
+      const isBelow = pos.includes('below');
+      const isAbove = pos.includes('above');
+      const isLeft = pos.includes('left');
+      const isRight = pos.includes('right');
+
+      if (isBelow && isLeft) {
+        dx = -8; dy = 14; anchor = 'end';
+      } else if (isBelow && isRight) {
+        dx = 8; dy = 14; anchor = 'start';
+      } else if (isAbove && isLeft) {
+        dx = -8; dy = -8; anchor = 'end';
+      } else if (isAbove && isRight) {
+        dx = 8; dy = -8; anchor = 'start';
+      } else if (isBelow) {
+        dy = 14; anchor = 'middle';
+      } else if (isAbove) {
+        dy = -8; anchor = 'middle';
+      } else if (isLeft) {
+        dx = -9; dy = 4; anchor = 'end';
+      } else if (isRight) {
+        dx = 9; dy = 4; anchor = 'start';
+      } else {
+        dy = 4; anchor = 'middle';
+      }
+
+      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12.5" font-style="italic" font-weight="bold" fill="#0f172a" paint-order="stroke fill" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round" text-anchor="${anchor}">${item.text}</text>`);
     }
   }
 
