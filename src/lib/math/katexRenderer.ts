@@ -167,7 +167,7 @@ export function renderMathToHtml(content: string): string {
   // 8. XỬ LÝ KHỐI TIKZ \begin{tikzpicture} ... \end{tikzpicture}
   // Bóc tách trước và lưu thành placeholder để không bị bất kỳ regex nào làm hỏng cú pháp TeX
   text = text.replace(/\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g, (_m, body) => {
-    const cleanTikz = `\\begin{tikzpicture}${body}\\end{tikzpicture}`.trim();
+    let cleanTikz = `\\begin{tikzpicture}${body}\\end{tikzpicture}`.trim();
 
     // 8a. Kiểm tra nếu là Bảng biến thiên (tkz-tab) -> Render SVG trực tiếp 0ms siêu nét!
     if (body.includes('\\tkzTabInit') || body.includes('tkzTab')) {
@@ -179,9 +179,10 @@ export function renderMathToHtml(content: string): string {
       }
     }
 
-    // 8b. Hình vẽ hình học / Đồ thị hàm số TikZ: Render hình thuần túy, sạch sẽ, không banner thừa
-    const encodedTikz = encodeURIComponent(cleanTikz);
-    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,calc,positioning,shapes,through,intersections">${cleanTikz}</script></div></div>`;
+    // 8b. Hình vẽ hình học / Đồ thị hàm số TikZ: Tối ưu hóa số mẫu samples để TeX WebAssembly vẽ tức thì <50ms, tránh tràn bộ nhớ
+    const optimizedTikz = cleanTikz.replace(/samples\s*=\s*(?:1[0-9]{2}|[2-9][0-9]{2})/g, 'samples=60');
+    const encodedTikz = encodeURIComponent(optimizedTikz);
+    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script></div></div>`;
 
     return savePlaceholder(tikzWrapper);
   });
@@ -192,11 +193,19 @@ export function renderMathToHtml(content: string): string {
     return savePlaceholder(tableHtml);
   });
 
-  // 10. XỬ LÝ \immini{mainText}{figure} với độ sâu ngoặc nhọn chuẩn xác và bố cục co giãn an toàn
+  // 10. XỬ LÝ \immini{mainText}{figure} với độ sâu ngoặc nhọn chuẩn xác và bố cục co giãn an toàn (hỗ trợ cả \immini[1]{...}{...})
   let imminiIdx = text.indexOf('\\immini');
   while (imminiIdx !== -1) {
     let pos = imminiIdx + 7;
     while (pos < text.length && /\s/.test(text[pos])) pos++;
+    // Hỗ trợ tham số ngoặc vuông tùy chọn: \immini[1]{...}{...}
+    if (text[pos] === '[') {
+      const closeBracket = text.indexOf(']', pos);
+      if (closeBracket !== -1) {
+        pos = closeBracket + 1;
+        while (pos < text.length && /\s/.test(text[pos])) pos++;
+      }
+    }
     const g1 = extractBracedGroup(text, pos);
     if (!g1) break;
     pos = g1.nextPos;

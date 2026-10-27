@@ -236,4 +236,40 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
     // Hình TikZ vẫn được bao gói chính xác
     expect(rendered).toContain('text/tikz');
   });
+
+  it('Bóc tách chuẩn xác \\immini có tham số dòng ngoặc vuông \\immini[1]{...}{...} và \\choice[2]', () => {
+    const rawQuestion = `\\begin{ex}
+\\immini[1]{
+  Cho hàm số $y=ax^3+bx^2+cx+d$ có đồ thị như hình vẽ.
+  \\choice[2]
+  {\\True $a > 0$}
+  {$a < 0$}
+  {$b > 0$}
+  {$c < 0$}
+}{
+  \\begin{tikzpicture}[>=stealth, samples=150]
+    \\draw[->] (-2,0) -- (2,0) node[right] {$x$};
+    \\draw[->] (0,-2) -- (0,2) node[above] {$y$};
+    \\draw[thick, domain=-1.5:1.5] plot (\\x, {(\\x)^3 - (\\x)});
+  \\end{tikzpicture}
+}
+\\loigiai{Nhìn vào đồ thị ta thấy nhánh cuối đi lên nên $a > 0$.}
+\\end{ex}`;
+
+    const { questions } = parseExamLatex(rawQuestion);
+    expect(questions.length).toBe(1);
+    const q = questions[0];
+    expect(q.type).toBe('single_choice');
+    expect(q.options.length).toBe(4);
+    expect(q.correct_answer).toBe('A');
+    expect(q.content).toContain('tikzpicture');
+    expect(q.content).toContain('\\immini');
+
+    const rendered = renderMathToHtml(q.content);
+    expect(rendered).toContain('immini-block');
+    expect(rendered).toContain('text/tikz');
+    // samples=150 phải được tự động tối ưu thành samples=60
+    expect(rendered).toContain('samples=60');
+    expect(rendered).toContain('arrows.meta,arrows');
+  });
 });

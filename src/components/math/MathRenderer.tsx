@@ -36,12 +36,23 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
     const tikzTargets = container.querySelectorAll('.tikz-target[data-tikz]');
     if (tikzTargets.length === 0) return;
 
-    // 1. Cấu hình TikzJaxOptions toàn cục
+    // 1. Cấu hình TikzJaxOptions toàn cục với đầy đủ thư viện mũi tên & đồ thị
     if (!(window as any).TikzJaxOptions) {
       (window as any).TikzJaxOptions = {
         renderTimeout: 35000,
         tex: {
-          tikzLibraries: ['arrows.meta', 'calc', 'positioning', 'shapes', 'through', 'intersections'],
+          tikzLibraries: [
+            'arrows.meta',
+            'arrows',
+            'calc',
+            'positioning',
+            'shapes',
+            'through',
+            'intersections',
+            'patterns',
+            'decorations.pathmorphing',
+            'backgrounds',
+          ],
           addToPreamble: '\\usepackage{amsmath,amssymb}',
         },
       };
@@ -59,7 +70,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       target.innerHTML = '';
       const scriptTag = document.createElement('script');
       scriptTag.type = 'text/tikz';
-      scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,calc,positioning,shapes,through,intersections');
+      scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
       scriptTag.textContent = rawTikz;
       target.appendChild(scriptTag);
     });

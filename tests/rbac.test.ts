@@ -8,6 +8,8 @@ import {
   canTakeExam,
   UserContext,
 } from '../src/lib/auth/rbac';
+import { isUserEnrolledInAnyClass } from '../src/lib/auth/enrollment';
+import { Profile } from '../src/types/database';
 
 describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
   const admin: UserContext = { id: 'admin-1', role: 'admin' };
@@ -50,5 +52,39 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
     expect(canTakeExam(student)).toBe(true);
     expect(canTakeExam(teacherA)).toBe(true);
     expect(canTakeExam(null)).toBe(false);
+  });
+
+  it('6. Phân quyền duyệt lớp: Giáo viên/Admin luôn mở khóa, học sinh chưa vào lớp bị khóa', () => {
+    const teacherProfile: Profile = {
+      id: 'teacher-1',
+      email: 'teacher@thpt.vn',
+      full_name: 'Thầy Sơn',
+      role: 'teacher',
+      grade: 12,
+    };
+    const guestUser = null;
+    const unenrolledStudent: Profile = {
+      id: 'new-student-999',
+      email: 'newstudent@gmail.com',
+      full_name: 'Học sinh mới',
+      role: 'student',
+      grade: 12,
+    };
+    const enrolledStudent: Profile = {
+      id: '33333333-3333-3333-3333-333333333333', // Đã có trong MOCK_CLASS_MEMBERS
+      email: 'student.mai@thpt-math-lms.vn',
+      full_name: 'Nguyễn Thị Mai',
+      role: 'student',
+      grade: 12,
+    };
+
+    // Giáo viên luôn mở khóa
+    expect(isUserEnrolledInAnyClass(teacherProfile)).toBe(true);
+    // Khách chưa đăng nhập bị khóa
+    expect(isUserEnrolledInAnyClass(guestUser)).toBe(false);
+    // Học sinh chưa add vào lớp bị khóa
+    expect(isUserEnrolledInAnyClass(unenrolledStudent)).toBe(false);
+    // Học sinh đã add vào lớp được mở khóa
+    expect(isUserEnrolledInAnyClass(enrolledStudent)).toBe(true);
   });
 });

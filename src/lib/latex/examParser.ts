@@ -119,6 +119,15 @@ export function parseExamLatex(rawTex: string): {
     if (imminiIdx !== -1) {
       let pos = imminiIdx + 7;
       while (pos < block.length && /\s/.test(block[pos])) pos++;
+      // Hỗ trợ tham số tùy chọn ngoặc vuông: \immini[1]{...}{...} hoặc \immini[0.5]{...}{...}
+      if (block[pos] === '[') {
+        const closeBracket = block.indexOf(']', pos);
+        if (closeBracket !== -1) {
+          pos = closeBracket + 1;
+          while (pos < block.length && /\s/.test(block[pos])) pos++;
+        }
+      }
+
       const g1 = extractBracedGroup(block, pos);
       if (g1) {
         pos = g1.nextPos;
@@ -183,6 +192,15 @@ export function parseExamLatex(rawTex: string): {
       const cIdx = block.indexOf('\\choice');
       if (cIdx !== -1) {
         let pos = cIdx + 7;
+        while (pos < block.length && /\s/.test(block[pos])) pos++;
+        // Hỗ trợ \choice[2]{A}{B}{C}{D} hoặc \choice[4]{...}
+        if (block[pos] === '[') {
+          const closeBracket = block.indexOf(']', pos);
+          if (closeBracket !== -1) {
+            pos = closeBracket + 1;
+            while (pos < block.length && /\s/.test(block[pos])) pos++;
+          }
+        }
         const labels = ['A', 'B', 'C', 'D'];
         for (let i = 0; i < 4; i++) {
           while (pos < block.length && /\s/.test(block[pos])) pos++;
@@ -202,6 +220,15 @@ export function parseExamLatex(rawTex: string): {
       const tfIdx = block.indexOf('\\choiceTF');
       if (tfIdx !== -1) {
         let pos = tfIdx + 9;
+        while (pos < block.length && /\s/.test(block[pos])) pos++;
+        // Hỗ trợ \choiceTF[t]{a}{b}{c}{d}
+        if (block[pos] === '[') {
+          const closeBracket = block.indexOf(']', pos);
+          if (closeBracket !== -1) {
+            pos = closeBracket + 1;
+            while (pos < block.length && /\s/.test(block[pos])) pos++;
+          }
+        }
         const labels = ['a', 'b', 'c', 'd'];
         const correctMap: Record<string, boolean> = { a: false, b: false, c: false, d: false };
         for (let i = 0; i < 4; i++) {
@@ -223,12 +250,26 @@ export function parseExamLatex(rawTex: string): {
       points = 0.5;
       const saIdx = block.indexOf('\\shortans');
       if (saIdx !== -1) {
-        const braceIdx = block.indexOf('{', saIdx);
-        if (braceIdx !== -1) {
-          const g = extractBracedGroup(block, braceIdx);
+        let pos = saIdx + 9;
+        while (pos < block.length && /\s/.test(block[pos])) pos++;
+        // Hỗ trợ \shortans[0]{$1440$} hoặc \shortans[0]{1440} hoặc \shortans{$1440$}
+        if (block[pos] === '[') {
+          const closeBracket = block.indexOf(']', pos);
+          if (closeBracket !== -1) {
+            const innerBracket = block.substring(pos + 1, closeBracket).trim();
+            pos = closeBracket + 1;
+            while (pos < block.length && /\s/.test(block[pos])) pos++;
+            // Nếu không có cặp ngoặc nhọn theo sau, lấy luôn giá trị trong ngoặc vuông
+            if (block[pos] !== '{' && innerBracket) {
+              const ans = innerBracket.replace(/[\$]/g, '').replace(/\{,\}/g, ',').trim();
+              correct_answer = [ans, ans.replace(',', '.')];
+            }
+          }
+        }
+        if (block[pos] === '{') {
+          const g = extractBracedGroup(block, pos);
           if (g) {
             let ans = g.text.replace(/[\$]/g, '').trim();
-            // Chuẩn hóa dấu phẩy thập phân ví dụ 2{,}25 thành 2.25 và 2,25
             ans = ans.replace(/\{,\}/g, ',');
             correct_answer = [ans, ans.replace(',', '.')];
           }

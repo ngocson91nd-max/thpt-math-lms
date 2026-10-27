@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Sparkles,
   Pencil,
+  Clock,
 } from 'lucide-react';
 
 export default function ClassesPage() {
@@ -309,9 +310,27 @@ export default function ClassesPage() {
             >
               <div>
                 <div className="flex items-center justify-between gap-3 mb-4">
-                  <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                    Toán Lớp {c.grade}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                      Toán Lớp {c.grade}
+                    </span>
+                    {(() => {
+                      if (typeof window === 'undefined') return null;
+                      try {
+                        const raw = localStorage.getItem(`lms_class_pending_requests_${c.id}`);
+                        const count = raw ? JSON.parse(raw).length : 0;
+                        if (count > 0) {
+                          return (
+                            <span className="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-800 animate-pulse flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-amber-600" />
+                              <span>{count} chờ duyệt</span>
+                            </span>
+                          );
+                        }
+                      } catch {}
+                      return null;
+                    })()}
+                  </div>
 
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
                     <Calendar className="h-3.5 w-3.5 text-slate-400" />

@@ -36,6 +36,7 @@ export interface ClassMember {
   status: 'active' | 'pending' | 'blocked';
   joined_at?: string;
   profile?: Profile;
+  student?: Profile;
 }
 
 export interface Course {

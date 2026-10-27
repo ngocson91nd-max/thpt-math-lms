@@ -4,7 +4,8 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { MOCK_CLASSES, MOCK_CLASS_MEMBERS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import { useAuth } from '@/context/AuthContext';
-import { ClassMember, Exam } from '@/types/database';
+import { ClassMember, Exam, Profile } from '@/types/database';
+import { approveStudentJoinRequest, rejectStudentJoinRequest } from '@/lib/auth/enrollment';
 import {
   GraduationCap,
   Users,
@@ -23,6 +24,7 @@ import {
   Phone,
   School,
   AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -42,13 +44,27 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   if (!initialClass) initialClass = MOCK_CLASSES[0];
 
   const [currentClass] = useState(initialClass);
-  const [activeTab, setActiveTab] = useState<'members' | 'exams'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'exams' | 'pending'>('members');
   const [copied, setCopied] = useState(false);
 
   // Members state
   const [members, setMembers] = useState<ClassMember[]>(() => {
     return MOCK_CLASS_MEMBERS.filter((m) => m.class_id === currentClass.id);
   });
+
+  // Pending students state
+  const [pendingStudents, setPendingStudents] = useState<any[]>([]);
+
+  const loadPendingStudents = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`lms_class_pending_requests_${currentClass.id}`);
+        setPendingStudents(raw ? JSON.parse(raw) : []);
+      } catch {
+        setPendingStudents([]);
+      }
+    }
+  };
 
   // Exams state
   const [classExams, setClassExams] = useState<Exam[]>(() => {
@@ -87,6 +103,9 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         }
       }
     }
+    loadPendingStudents();
+    window.addEventListener('lms_enrollment_changed', loadPendingStudents);
+    return () => window.removeEventListener('lms_enrollment_changed', loadPendingStudents);
   }, [currentClass.id]);
 
   const saveMembersToStorage = (updated: ClassMember[]) => {
@@ -94,6 +113,37 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     if (typeof window !== 'undefined') {
       localStorage.setItem(`lms_class_members_${currentClass.id}`, JSON.stringify(updated));
     }
+  };
+
+  const handleApproveStudent = (req: any) => {
+    const studentProfile: Profile = req.user || {
+      id: req.user_id,
+      email: req.email || 'student@thpt-math-lms.vn',
+      full_name: req.full_name || 'Học sinh',
+      role: 'student',
+      grade: currentClass.grade,
+      school_name: req.school_name || 'THPT Chuyên',
+    };
+    approveStudentJoinRequest(currentClass.id, studentProfile);
+    const updated = [
+      ...members,
+      {
+        id: `cm-${Date.now()}`,
+        class_id: currentClass.id,
+        user_id: studentProfile.id,
+        role: 'student' as const,
+        status: 'active' as const,
+        joined_at: new Date().toISOString(),
+        profile: studentProfile,
+      },
+    ];
+    saveMembersToStorage(updated);
+    loadPendingStudents();
+  };
+
+  const handleRejectStudent = (userId: string) => {
+    rejectStudentJoinRequest(currentClass.id, userId);
+    loadPendingStudents();
   };
 
   const copyCode = () => {
@@ -244,8 +294,30 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               }`}
             >
               <Users className="h-4 w-4" />
-              Danh Sách Học Sinh ({members.length})
+              <span>Danh Sách Học Sinh</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                {members.length}
+              </span>
             </button>
+
+            {isTeacher && (
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
+                  activeTab === 'pending'
+                    ? 'border-amber-600 text-amber-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                <span>Chờ Duyệt Vào Lớp</span>
+                {pendingStudents.length > 0 && (
+                  <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-black animate-pulse">
+                    {pendingStudents.length}
+                  </span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab('exams')}
@@ -256,7 +328,10 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               }`}
             >
               <ClipboardList className="h-4 w-4" />
-              Bài Kiểm Tra Lớp ({classExams.length})
+              <span>Bài Kiểm Tra Lớp</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                {classExams.length}
+              </span>
             </button>
           </div>
 
@@ -271,6 +346,91 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
       </div>
+
+      {/* Tab: Pending Students List */}
+      {activeTab === 'pending' && (
+        <div className="overflow-hidden rounded-3xl border border-amber-200/80 bg-white shadow-xs">
+          <div className="bg-amber-50/70 px-6 py-3 border-b border-amber-200 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <span>Danh Sách Học Sinh Vừa Đăng Ký Chờ Thầy Duyệt Vào Lớp ({pendingStudents.length})</span>
+            </div>
+            <span className="text-[11px] text-amber-700">Mã lớp để học sinh tự vào: <strong className="font-mono">{currentClass.code}</strong></span>
+          </div>
+
+          {pendingStudents.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-xs space-y-2">
+              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+              <div className="font-bold text-slate-700">Hiện tại không có học sinh nào đang chờ duyệt.</div>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                Khi học sinh tạo tài khoản và bấm &quot;Xin vào lớp&quot;, yêu cầu sẽ lập tức xuất hiện tại đây để Thầy phê duyệt chỉ với 1 click.
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase font-semibold">
+                <tr>
+                  <th className="py-3.5 px-6">Học Sinh</th>
+                  <th className="py-3.5 px-6">Email & SĐT</th>
+                  <th className="py-3.5 px-6">Trường THPT</th>
+                  <th className="py-3.5 px-6">Thời Gian Gửi</th>
+                  <th className="py-3.5 px-6 text-right">Hành Động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pendingStudents.map((p) => {
+                  const student = p.user || {};
+                  return (
+                    <tr key={p.id} className="hover:bg-amber-50/30 transition">
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700">
+                            {student.full_name?.charAt(0) || 'H'}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{student.full_name || 'Học sinh'}</div>
+                            <div className="text-[11px] text-slate-400">Khối Lớp {student.grade || currentClass.grade}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-slate-600">
+                        <div className="font-medium text-slate-800">{student.email || 'Chưa có email'}</div>
+                        <div className="text-[11px] text-slate-400">{student.phone || 'Chưa cập nhật SĐT'}</div>
+                      </td>
+                      <td className="py-4 px-6 text-slate-600">
+                        {student.school_name || 'THPT Chuyên Lê Hồng Phong'}
+                      </td>
+                      <td className="py-4 px-6 text-slate-500 text-[11px]">
+                        {p.requested_at ? new Date(p.requested_at).toLocaleDateString('vi-VN') : 'Vừa gửi'}
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveStudent(p)}
+                            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 font-bold text-white shadow-xs hover:bg-emerald-500 transition cursor-pointer"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Duyệt vào lớp</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectStudent(p.user_id)}
+                            className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            title="Xóa yêu cầu"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Tab: Members List */}
       {activeTab === 'members' && (
