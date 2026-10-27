@@ -9,6 +9,18 @@ interface MathRendererProps {
   inline?: boolean;
 }
 
+// Bộ nhớ đệm RAM cho đồ thị TikZ đã render SVG (hiển thị 0ms)
+const inMemoryTikzCache = new Map<string, string>();
+
+function hashTikz(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'tikz_v2_' + Math.abs(hash).toString(36);
+}
+
 export const MathRenderer: React.FC<MathRendererProps> = ({
   content,
   className = '',
@@ -58,33 +70,78 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       };
     }
 
-    // 2. Chèn script tag TikZ thật sự vào từng target để kích hoạt MutationObserver của TikzJax
+    // 2. Chèn script tag TikZ hoặc nạp ngay từ Cache 0ms
     tikzTargets.forEach((target) => {
-      // Nếu đã có SVG được TikZJax render rồi thì không chèn lại
+      // Nếu đã có SVG được hiển thị rồi thì không nạp lại
       if (target.querySelector('svg.tikz, svg.tikzjax, svg')) return;
 
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      // Xóa các thẻ cũ nếu có và tạo element script thật để MutationObserver bắt được
-      target.innerHTML = '';
+      const cacheKey = hashTikz(rawTikz);
+
+      // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
+      if (inMemoryTikzCache.has(cacheKey)) {
+        target.innerHTML = inMemoryTikzCache.get(cacheKey)!;
+        return;
+      }
+
+      // B. KIỂM TRA LOCALSTORAGE -> HIỂN THỊ TỨC THÌ 0ms!
+      try {
+        const cachedSvg = localStorage.getItem(cacheKey);
+        if (cachedSvg && cachedSvg.includes('<svg')) {
+          inMemoryTikzCache.set(cacheKey, cachedSvg);
+          target.innerHTML = cachedSvg;
+          return;
+        }
+      } catch {}
+
+      // C. NẾU CHƯA CÓ CACHE: HIỂN THỊ KHUNG NẠP HÌNH ĐẸP MẮT (CHỐNG TRỐNG TRƠN)
+      target.innerHTML = `
+        <div class="tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2">
+          <svg class="animate-spin h-3.5 w-3.5 text-blue-600 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Đang vẽ đồ thị hình vẽ Toán (TikZ)...</span>
+        </div>
+      `;
+
+      // Tạo thẻ script TikZ thật sự cho TikZJax
       const scriptTag = document.createElement('script');
       scriptTag.type = 'text/tikz';
       scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
       scriptTag.textContent = rawTikz;
       target.appendChild(scriptTag);
+
+      // D. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
+      const observer = new MutationObserver((_mutations, obs) => {
+        const svg = target.querySelector('svg.tikz, svg.tikzjax, svg');
+        if (svg) {
+          const loader = target.querySelector('.tikz-loading');
+          if (loader) loader.remove();
+
+          const svgOuter = svg.outerHTML;
+          inMemoryTikzCache.set(cacheKey, svgOuter);
+          try {
+            localStorage.setItem(cacheKey, svgOuter);
+          } catch {}
+          obs.disconnect();
+        }
+      });
+      observer.observe(target, { childList: true, subtree: true });
     });
 
-    // 3. Đảm bảo nạp script TikZJax và Font CSS
+    // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á
     const existingScript = document.querySelector('script[src*="tikzjax"]');
     if (!existingScript) {
       const fontLink = document.createElement('link');
       fontLink.rel = 'stylesheet';
-      fontLink.href = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
+      fontLink.href = 'https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
       document.head.appendChild(fontLink);
 
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
       script.async = true;
       document.head.appendChild(script);
     }

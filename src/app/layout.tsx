@@ -18,8 +18,8 @@ export default function RootLayout({
   return (
     <html lang="vi" className="h-full antialiased scroll-smooth">
       <head>
-        <link rel="stylesheet" type="text/css" href="https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/fonts.css" />
-        <script src="https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js" async defer></script>
+        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/fonts.css" />
+        <script src="https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js" async defer></script>
       </head>
       <body className="min-h-full bg-slate-50 text-slate-900 font-sans">
         <AuthProvider>
