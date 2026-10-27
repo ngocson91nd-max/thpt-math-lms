@@ -82,6 +82,11 @@ export default function ExamResultPage({
             <p className="mt-1 text-xs text-slate-500">
               Học sinh: {submission.student?.full_name || 'Học sinh'} • Lớp {exam.grade} • Thời gian nộp: {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('vi-VN') : '26/10/2026 08:35'}
             </p>
+            {(submission as any).tab_switch_count > 0 && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-800">
+                <span>⚠️ Giám sát: Rời màn hình thi {(submission as any).tab_switch_count} lần</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4 self-center md:self-auto">
@@ -244,6 +249,31 @@ export default function ExamResultPage({
                   </div>
                 </div>
               </div>
+
+              {/* Ảnh bài giải tự luận học sinh nộp */}
+              {(ans as any)?.essay_images && (ans as any).essay_images.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <div className="text-xs font-bold text-indigo-900 mb-2">
+                    📸 Ảnh Chụp Bài Giải Viết Tay Của Học Sinh ({(ans as any).essay_images.length} trang):
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {(ans as any).essay_images.map((img: string, i: number) => (
+                      <a
+                        key={i}
+                        href={img}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group relative block rounded-xl border border-indigo-200 overflow-hidden bg-white shadow-2xs hover:shadow-md transition"
+                      >
+                        <img src={img} alt={`Bài giải trang ${i + 1}`} className="h-32 w-full object-cover" />
+                        <span className="block text-[10px] text-center font-bold text-indigo-700 py-1 bg-indigo-50">
+                          Trang {i + 1} (Xem lớn ↗)
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Detailed Explanation (KaTeX) */}
               {q.explanation && (
