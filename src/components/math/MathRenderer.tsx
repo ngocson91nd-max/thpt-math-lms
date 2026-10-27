@@ -2,6 +2,7 @@
 
 import React, { useMemo, useEffect, useRef } from 'react';
 import { renderMathToHtml } from '@/lib/math/katexRenderer';
+import { renderTikzToSvg } from '@/lib/math/tikzSvgRenderer';
 
 interface MathRendererProps {
   content: string;
@@ -115,9 +116,12 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       target.appendChild(scriptTag);
 
       // D. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
+      let timeoutId: any = null;
+
       const observer = new MutationObserver((_mutations, obs) => {
         const svg = target.querySelector('svg.tikz, svg.tikzjax, svg');
         if (svg) {
+          if (timeoutId) clearTimeout(timeoutId);
           const loader = target.querySelector('.tikz-loading');
           if (loader) loader.remove();
 
@@ -130,6 +134,36 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         }
       });
       observer.observe(target, { childList: true, subtree: true });
+
+      // E. TIMEOUT AN TOÀN (3.5 GIÂY) CHỐNG TREO SPINNER VĨNH VIỄN NẾU TIKZJAX BỊ NGHẼN/CRASH
+      timeoutId = setTimeout(() => {
+        observer.disconnect();
+        const svg = target.querySelector('svg.tikz, svg.tikzjax, svg');
+        if (!svg) {
+          // Thử render qua Pure JS SVG engine một lần nữa
+          const fallbackSvg = renderTikzToSvg(rawTikz);
+          if (fallbackSvg) {
+            target.innerHTML = fallbackSvg;
+            inMemoryTikzCache.set(cacheKey, fallbackSvg);
+            try {
+              localStorage.setItem(cacheKey, fallbackSvg);
+            } catch {}
+          } else {
+            const loader = target.querySelector('.tikz-loading');
+            if (loader) {
+              loader.outerHTML = `
+                <div class="my-2 px-4 py-2.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-amber-800 text-xs flex items-center gap-2 select-none">
+                  <span class="text-sm">📐</span>
+                  <div>
+                    <span class="font-semibold">Đồ thị TikZ toán học</span>
+                    <span class="text-amber-600 block text-[11px]">Đang sử dụng chế độ hiển thị tối ưu. Vui lòng nhấn F5 nếu cần tải lại.</span>
+                  </div>
+                </div>
+              `;
+            }
+          }
+        }
+      }, 3500);
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á

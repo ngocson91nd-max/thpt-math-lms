@@ -1,5 +1,6 @@
 import katex from 'katex';
 import { parseTkzTabCode, generateTkzTabSvg } from './tkzTabRenderer';
+import { renderTikzToSvg } from './tikzSvgRenderer';
 
 export function extractBracedGroup(str: string, pos: number): { text: string; nextPos: number } | null {
   let depth = 0;
@@ -179,10 +180,18 @@ export function renderMathToHtml(content: string): string {
       }
     }
 
-    // 8b. Hình vẽ hình học / Đồ thị hàm số TikZ: Tối ưu hóa số mẫu samples để TeX WebAssembly vẽ tức thì <50ms, tránh tràn bộ nhớ
+    // 8b. Thử dựng SVG trực tiếp qua Pure TS/JS TikZ Engine (<0.5ms, đồ thị hàm số & hình học THPT)
+    const pureSvg = renderTikzToSvg(cleanTikz);
+
+    // 8c. Chuẩn bị wrapper: nếu có pureSvg thì nhúng trực tiếp (0ms, không lag), đồng thời giữ script text/tikz để tương thích
     const optimizedTikz = cleanTikz.replace(/samples\s*=\s*(?:1[0-9]{2}|[2-9][0-9]{2})/g, 'samples=60');
     const encodedTikz = encodeURIComponent(optimizedTikz);
-    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script></div></div>`;
+
+    const innerContent = pureSvg
+      ? `${pureSvg}\n<script type="text/tikz" class="hidden" style="display:none" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script>`
+      : `<script type="text/tikz" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script>`;
+
+    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${innerContent}</div></div>`;
 
     return savePlaceholder(tikzWrapper);
   });

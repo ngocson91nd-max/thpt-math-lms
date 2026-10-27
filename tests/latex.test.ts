@@ -272,4 +272,28 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
     expect(rendered).toContain('samples=60');
     expect(rendered).toContain('arrows.meta,arrows');
   });
+
+  it('renderTikzToSvg biên dịch đồ thị hàm số và hình học không gian THPT thành SVG thuần túy (0ms)', () => {
+    // Đồ thị hàm số phân thức hữu tỉ có tiệm cận đứng (giống câu 7 trong đề thi)
+    const rationalGraphTikz = `\\begin{tikzpicture}[scale=0.65, >=stealth]
+      \\def\\xmin{-4.2} \\def\\xmax{3.8}
+      \\def\\ymin{-0.8} \\def\\ymax{5.8}
+      \\clip (\\xmin,\\ymin) rectangle (\\xmax,\\ymax);
+      \\draw[thick] (-1,\\ymin) -- (-1,\\ymax);
+      \\draw[thick, samples=60, domain=\\xmin:-1.7] plot (\\x, {3/((\\x)+1)^2});
+      \\draw[thick, samples=60, domain=-0.3:\\xmax] plot (\\x, {3/((\\x)+1)^2});
+      \\draw[->] (\\xmin,0) -- (\\xmax,0) node[below] {$x$};
+      \\draw[->] (0,\\ymin) -- (0,\\ymax) node[left] {$y$};
+      \\node at (0,3) {$3$};
+      \\fill (0,3) circle (1.5pt);
+    \\end{tikzpicture}`;
+
+    const rendered = renderMathToHtml(rationalGraphTikz);
+    expect(rendered).toContain('tikz-svg-pure');
+    expect(rendered).toContain('<svg');
+    expect(rendered).toContain('viewBox="0 0');
+    expect(rendered).toContain('marker id="tikz-arrow-pure"');
+    // Đảm bảo không bị kẹt spinner, có sẵn SVG nhúng trực tiếp
+    expect(rendered).toContain('<path d="');
+  });
 });
