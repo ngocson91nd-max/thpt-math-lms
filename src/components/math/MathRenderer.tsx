@@ -74,7 +74,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
     // 2. Chèn script tag TikZ hoặc nạp ngay từ Cache 0ms
     tikzTargets.forEach((target) => {
       // Nếu đã có SVG được hiển thị rồi thì không nạp lại
-      if (target.querySelector('svg.tikz, svg.tikzjax, svg')) return;
+      if (target.querySelector('svg.tikz, svg.tikzjax, svg.tikz-svg-pure, svg')) return;
 
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
@@ -97,14 +97,25 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         }
       } catch {}
 
-      // C. NẾU CHƯA CÓ CACHE: HIỂN THỊ KHUNG NẠP HÌNH ĐẸP MẮT (CHỐNG TRỐNG TRƠN)
+      // C. THỬ RENDER BẰNG PURE TS TIKZ-TO-SVG ENGINE TRỰC TIẾP (0.1ms, KHÔNG CẦN CHỜ CDN)
+      const pureSvg = renderTikzToSvg(rawTikz);
+      if (pureSvg) {
+        target.innerHTML = pureSvg;
+        inMemoryTikzCache.set(cacheKey, pureSvg);
+        try {
+          localStorage.setItem(cacheKey, pureSvg);
+        } catch {}
+        return;
+      }
+
+      // D. NẾU CHƯA CÓ SVG THUẦN: HIỂN THỊ KHUNG NẠP HÌNH ĐẸP MẮT CHO TIKZJAX WEBASSEMBLY
       target.innerHTML = `
         <div class="tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2">
           <svg class="animate-spin h-3.5 w-3.5 text-blue-600 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span>Đang vẽ đồ thị hình vẽ Toán (TikZ)...</span>
+          <span>Đang dựng hình vẽ TikZ...</span>
         </div>
       `;
 
@@ -115,13 +126,10 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       scriptTag.textContent = rawTikz;
       target.appendChild(scriptTag);
 
-      // D. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
-      let timeoutId: any = null;
-
+      // E. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
       const observer = new MutationObserver((_mutations, obs) => {
         const svg = target.querySelector('svg.tikz, svg.tikzjax, svg');
         if (svg) {
-          if (timeoutId) clearTimeout(timeoutId);
           const loader = target.querySelector('.tikz-loading');
           if (loader) loader.remove();
 
@@ -134,36 +142,6 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         }
       });
       observer.observe(target, { childList: true, subtree: true });
-
-      // E. TIMEOUT AN TOÀN (3.5 GIÂY) CHỐNG TREO SPINNER VĨNH VIỄN NẾU TIKZJAX BỊ NGHẼN/CRASH
-      timeoutId = setTimeout(() => {
-        observer.disconnect();
-        const svg = target.querySelector('svg.tikz, svg.tikzjax, svg');
-        if (!svg) {
-          // Thử render qua Pure JS SVG engine một lần nữa
-          const fallbackSvg = renderTikzToSvg(rawTikz);
-          if (fallbackSvg) {
-            target.innerHTML = fallbackSvg;
-            inMemoryTikzCache.set(cacheKey, fallbackSvg);
-            try {
-              localStorage.setItem(cacheKey, fallbackSvg);
-            } catch {}
-          } else {
-            const loader = target.querySelector('.tikz-loading');
-            if (loader) {
-              loader.outerHTML = `
-                <div class="my-2 px-4 py-2.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-amber-800 text-xs flex items-center gap-2 select-none">
-                  <span class="text-sm">📐</span>
-                  <div>
-                    <span class="font-semibold">Đồ thị TikZ toán học</span>
-                    <span class="text-amber-600 block text-[11px]">Đang sử dụng chế độ hiển thị tối ưu. Vui lòng nhấn F5 nếu cần tải lại.</span>
-                  </div>
-                </div>
-              `;
-            }
-          }
-        }
-      }, 3500);
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á
