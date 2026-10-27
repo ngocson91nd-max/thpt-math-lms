@@ -135,25 +135,40 @@ export function parseExamLatex(rawTex: string): {
           const textPart = g1.text.substring(0, cutInG1).trim();
           const figurePart = g2.text.trim();
           const prefix = block.substring(0, imminiIdx).trim();
-          content = `${prefix ? prefix + '\n' : ''}\\immini{\n${textPart}\n}{\n${figurePart}\n}`;
+
+          // Lấy thêm phần văn bản sau \immini trước các khối lựa chọn / lời giải nếu có
+          const afterImmini = block.substring(g2.nextPos);
+          let cutAfter = afterImmini.length;
+          ['\\choiceTF', '\\choice', '\\shortans', '\\loigiai', '\\sodong'].forEach((cmd) => {
+            const i = afterImmini.indexOf(cmd);
+            if (i !== -1 && i < cutAfter) cutAfter = i;
+          });
+          const suffix = afterImmini.substring(0, cutAfter).trim();
+
+          content = `${prefix ? prefix + '\n' : ''}\\immini{\n${textPart}\n}{\n${figurePart}\n}${suffix ? '\n' + suffix : ''}`;
         }
       }
     }
 
     if (!content) {
       let cutIdx = block.length;
-      ['\\choiceTF', '\\choice', '\\shortans', '\\loigiai'].forEach((cmd) => {
+      ['\\choiceTF', '\\choice', '\\shortans', '\\loigiai', '\\sodong'].forEach((cmd) => {
         const i = block.indexOf(cmd);
         if (i !== -1 && i < cutIdx) cutIdx = i;
       });
       content = block.substring(0, cutIdx).trim();
     }
 
-    // Bỏ chú thích % ...
+    // Bỏ chú thích % ... và lệnh \sodong{...}
     content = content
       .split('\n')
       .filter((line) => !line.trim().startsWith('%'))
       .join('\n')
+      .replace(/\\sodong\s*\{[^}]*\}/g, '')
+      .trim();
+
+    explanation = explanation
+      .replace(/\\sodong\s*\{[^}]*\}/g, '')
       .trim();
 
     // Bỏ thẻ mã câu hỏi [ID] ở đầu đề bài nếu có (ví dụ: [2D1-1.1] hoặc [TH])

@@ -12,6 +12,34 @@ try {
 }
 
 /**
+ * Chuẩn hóa buffer byte WMF:
+ * 1. Cắt bỏ 22 byte tiêu đề Aldus APM (Placeable Metafile 0x9AC6CDD7) nếu có.
+ * 2. Thay thế record META_ESCAPE 1574 (chứa comment MathType) thành dummy record
+ *    để thư viện WMF giải mã trơn tru mà không bị văng Exception Escape Comment.
+ */
+export function sanitizeWmfBytes(bytes: Uint8Array): Uint8Array {
+  let u = bytes;
+  // Bóc tách 22 bytes Aldus APM header (0x9AC6CDD7) nếu có
+  if (u.length >= 22 && u[0] === 0xd7 && u[1] === 0xcd && u[2] === 0xc6 && u[3] === 0x9a) {
+    u = u.slice(22);
+  }
+  const copy = new Uint8Array(u);
+  let offset = 18;
+  while (offset + 6 <= copy.length) {
+    const rdSize = (copy[offset] | (copy[offset + 1] << 8) | (copy[offset + 2] << 16) | (copy[offset + 3] << 24)) >>> 0;
+    const rdFunc = copy[offset + 4] | (copy[offset + 5] << 8);
+    if (rdSize === 0 || rdFunc === 0) break;
+    // META_ESCAPE (0x0626 = 1574) -> chuyển sang no-op 0x001e (META_SAVEDC)
+    if (rdFunc === 0x0626) {
+      copy[offset + 4] = 0x1e;
+      copy[offset + 5] = 0x00;
+    }
+    offset += rdSize * 2;
+  }
+  return copy;
+}
+
+/**
  * Trích xuất toàn bộ hình ảnh và ánh xạ quan hệ rId trong file .docx
  * Tự động chuyển đổi công thức MathType (WMF) sang PNG Base64 trong môi trường client (Canvas)
  */
@@ -30,20 +58,22 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
 
     // Xử lý chuyển đổi WMF của MathType sang PNG thông qua Canvas
     if ((lower.endsWith('.wmf') || lower.endsWith('.emf')) && WMF) {
-      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-        try {
-          const uint8 = await file.async('uint8array');
-          const size = WMF.image_size(uint8);
+      try {
+        const rawBytes = await file.async('uint8array');
+        const cleanBytes = sanitizeWmfBytes(rawBytes);
+
+        if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+          const size = WMF.image_size(cleanBytes);
           const w = Math.max(size ? size[0] : 180, 40);
           const h = Math.max(size ? size[1] : 60, 20);
           const canvas = document.createElement('canvas');
           canvas.width = w;
           canvas.height = h;
-          WMF.draw_canvas(uint8, canvas);
+          WMF.draw_canvas(cleanBytes, canvas);
           dataUrl = canvas.toDataURL('image/png');
-        } catch (e) {
-          console.warn('WMF canvas conversion fallback:', e);
         }
+      } catch (e) {
+        console.warn('WMF canvas conversion fallback:', e);
       }
     }
 
@@ -114,7 +144,20 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     }
   });
 
-  // 2. Thay thế MathType (<w:object> / <v:imagedata>) thành hình ảnh công thức toán inline
+  // 2. Thay thế toàn bộ khối MathType (<w:object>) và <v:imagedata> thành hình ảnh công thức toán inline
+  xml = xml.replace(/<w:object\b[\s\S]*?<\/w:object>/gi, (objXml) => {
+    const idMatch =
+      objXml.match(/<v:imagedata[^>]+r:id="([^"]+)"/i) ||
+      objXml.match(/<v:imagedata[^>]+(?:o:relid|id)="([^"]+)"/i) ||
+      objXml.match(/r:id="([^"]+)"/i);
+    if (!idMatch) return '';
+    const rId = idMatch[1];
+    const dataUrl = rIdToDataUrl.get(rId);
+    return dataUrl
+      ? ` <img src="${dataUrl}" class="inline-math-img inline align-middle mx-1 my-0.5 max-h-8 object-contain" alt="công thức MathType" /> `
+      : '';
+  });
+
   xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
     const dataUrl = rIdToDataUrl.get(rId);
     return dataUrl
@@ -194,6 +237,8 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<string> {
     .replace(/<\/m:[^>]+>/gi, '')
     .replace(/<v:[^>]+>/gi, '')
     .replace(/<\/v:[^>]+>/gi, '')
+    .replace(/<o:[^>]+>/gi, '')
+    .replace(/<\/o:[^>]+>/gi, '')
     .replace(/<a:[^>]+>/gi, '')
     .replace(/<\/a:[^>]+>/gi, '')
     .replace(/<wp:[^>]+>/gi, '')
@@ -267,9 +312,24 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
   const p3Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
   const p4Pos = textWithMathAndImages.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
 
+  // 0. BẢO VỆ TOÀN BỘ THẺ <img ...> VÀ DỮ LIỆU BASE64 TRƯỚC KHI TÁCH CÂU VÀ ĐÁP ÁN!
+  // Đảm bảo tuyệt đối không để chuỗi base64 bị dính từ khóa như "HDG", "A.", "B.", v.v.
+  const imgPlaceholders = new Map<string, string>();
+  let imgCounter = 0;
+  const safeText = textWithMathAndImages.replace(/<img\b[^>]*>/gi, (imgTag) => {
+    const token = `@@DOCX_IMG_${imgCounter++}@@`;
+    imgPlaceholders.set(token, imgTag);
+    return token;
+  });
+
+  const restoreDocxImages = (str: string): string => {
+    if (!str) return str;
+    return str.replace(/@@DOCX_IMG_\d+@@/g, (token) => imgPlaceholders.get(token) || token);
+  };
+
   // Tách câu hỏi theo biểu thức đa dạng: "Câu 1:", "Câu 1.", "Câu 1 ", "Bài 1:", "[Câu 1]", "CÂU 1"
   const questionSplitter = /(?=(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)*\s*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI) *\d+ *(?:\]|\)|\.|\:|\-|\s))/i;
-  const rawBlocks = textWithMathAndImages.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
+  const rawBlocks = safeText.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
   const questions: Question[] = [];
   let qIndex = 0;
@@ -282,17 +342,17 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     const questionNumber = parseInt(matchHead[1], 10) || qIndex;
     const body = matchHead[2].trim();
 
-    // 1. Tách Lời giải / Hướng dẫn giải
+    // 1. Tách Lời giải / Hướng dẫn giải (yêu cầu đầu dòng hoặc thẻ mở, và ranh giới từ \bHDG\b)
     let contentAndChoices = body;
     let explanation = '';
-    const lgMatch = body.match(/(?:Lời giải|Hướng dẫn giải|HDG)[\.:\s]*([\s\S]*)$/i);
+    const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b)[\.:\s]*([\s\S]*)$/i);
     if (lgMatch) {
       explanation = lgMatch[1].trim();
       contentAndChoices = body.substring(0, lgMatch.index).trim();
     }
 
     // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. (trên 1 dòng, nhiều dòng, hoặc ô bảng)
-    const choiceRegex = /(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([A-D])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s*/gi;
+    const choiceRegex = /(?:^|[\n\t]|(?:\s{2,})|(?:\s+(?=<b>|<strong>|<u>|<span[^>]*>))|(?<=\n)\s*)(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([A-D])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s+/gi;
     const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
 
     let type: QuestionType = 'single_choice';
@@ -361,7 +421,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       if (!correctAnswer) correctAnswer = 'A';
     } else {
       // Kiểm tra xem có phải là dạng Đúng / Sai (a, b, c, d)
-      const tfMatches = Array.from(contentAndChoices.matchAll(/(?:^|\n|\t|\s{2,})(?:<b>|<strong>|<u>)?\s*(?:\[|\()?([a-d])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u)>)?\s*/gi));
+      const tfMatches = Array.from(contentAndChoices.matchAll(/(?:^|[\n\t]|(?:\s{2,})|(?:\s+(?=<b>|<strong>|<u>|<span[^>]*>))|(?<=\n)\s*)(?:<b>|<strong>|<u>|<span[^>]*>)?\s*(?:\[|\()?([a-d])(?:\]|\)|\.|\:)(?:\s*<\/(?:b|strong|u|span)>)?\s+/gi));
       if (tfMatches.length >= 3) {
         type = 'true_false';
         part = 2;
@@ -418,6 +478,14 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     // Làm sạch câu hỏi nhưng giữ lại các thẻ <img> và <table>
     questionContent = questionContent.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
 
+    // 3. Phục hồi toàn bộ thẻ ảnh <img> từ placeholders sau khi đã hoàn tất bóc tách câu hỏi và đáp án
+    questionContent = restoreDocxImages(questionContent);
+    explanation = restoreDocxImages(explanation);
+    const restoredOptions = options.map((opt: any) => ({
+      ...opt,
+      text: restoreDocxImages(opt.text),
+    }));
+
     const topic = detectMathTopic(questionContent + ' ' + explanation);
     let difficulty: QuestionDifficulty = 'thong_hieu';
     if (part === 1) difficulty = questionNumber <= 4 ? 'nhan_biet' : 'thong_hieu';
@@ -433,7 +501,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       difficulty,
       type,
       content: questionContent,
-      options,
+      options: restoredOptions,
       correct_answer: correctAnswer,
       explanation,
       points,
@@ -442,4 +510,61 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
   }
 
   return { questions, rawText: textWithMathAndImages };
+}
+
+/**
+ * Chuyển đổi một chuỗi Base64 Data URL định dạng WMF/EMF sang PNG Base64 thông qua Canvas trình duyệt
+ */
+export function convertWmfDataUrlToPng(dataUrl: string): string {
+  if (typeof window === 'undefined' || typeof document === 'undefined' || !WMF) return dataUrl;
+  if (!dataUrl.startsWith('data:image/wmf;base64,') && !dataUrl.startsWith('data:image/emf;base64,')) {
+    return dataUrl;
+  }
+  try {
+    const base64 = dataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const cleanBytes = sanitizeWmfBytes(bytes);
+    const size = WMF.image_size(cleanBytes);
+    const w = Math.max(size ? size[0] : 180, 40);
+    const h = Math.max(size ? size[1] : 60, 20);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    WMF.draw_canvas(cleanBytes, canvas);
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.warn('convertWmfDataUrlToPng fallback error:', e);
+    return dataUrl;
+  }
+}
+
+/**
+ * Quét toàn bộ nội dung câu hỏi, đáp án, lời giải và chuyển đổi các ảnh WMF còn sót sang PNG
+ */
+export function convertWmfQuestionsToPng(questions: Question[]): Question[] {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return questions;
+  return questions.map((q) => {
+    let content = q.content;
+    let explanation = q.explanation || '';
+    const replacer = (_m: string, dataUrl: string) => {
+      const pngUrl = convertWmfDataUrlToPng(dataUrl);
+      return `src="${pngUrl}"`;
+    };
+    content = content.replace(/src="(data:image\/(?:wmf|emf);base64,[^"]+)"/gi, replacer);
+    explanation = explanation.replace(/src="(data:image\/(?:wmf|emf);base64,[^"]+)"/gi, replacer);
+    const options = (q.options || []).map((opt: any) => ({
+      ...opt,
+      text: (opt.text || '').replace(/src="(data:image\/(?:wmf|emf);base64,[^"]+)"/gi, replacer),
+    }));
+    return {
+      ...q,
+      content,
+      explanation,
+      options,
+    };
+  });
 }

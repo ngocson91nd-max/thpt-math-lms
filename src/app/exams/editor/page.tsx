@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Exam, Question, QuestionType, QuestionDifficulty } from '@/types/database';
 import { MOCK_EXAMS, MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
 import { parseExamLatex } from '@/lib/latex/examParser';
-import { parseWordDocx } from '@/lib/word/wordExamParser';
+import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import {
@@ -309,25 +309,36 @@ function ExamEditorContent() {
     try {
       let extractedQuestions: Question[] = [];
 
-      // 1. Thử qua API backend
+      // 1. Phân tích trực tiếp phía client (chuyển đổi WMF MathType sang PNG siêu nét trên Canvas)
       try {
-        const fd = new FormData();
-        fd.append('file', file);
-        const res = await fetch('/api/upload-docx', { method: 'POST', body: fd });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
-            extractedQuestions = data.questions;
-          }
+        const res = await parseWordDocx(file);
+        if (res.questions && res.questions.length > 0) {
+          extractedQuestions = res.questions;
         }
-      } catch (err) {
-        console.warn('API fallback to client parser:', err);
+      } catch (clientErr) {
+        console.warn('Client parser failed, falling back to API:', clientErr);
       }
 
-      // 2. Dự phòng phân tích trực tiếp phía client (có bộ chuyển đổi WMF sang PNG Canvas)
+      // 2. Dự phòng qua API backend nếu client gặp sự cố
       if (extractedQuestions.length === 0) {
-        const res = await parseWordDocx(file);
-        extractedQuestions = res.questions;
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch('/api/upload-docx', { method: 'POST', body: fd });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+              extractedQuestions = data.questions;
+            }
+          }
+        } catch (err) {
+          console.warn('API upload-docx failed:', err);
+        }
+      }
+
+      // Chuyển đổi mọi ảnh WMF sang PNG hiển thị được trên mọi trình duyệt
+      if (extractedQuestions.length > 0) {
+        extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
       }
 
       if (extractedQuestions.length === 0) {

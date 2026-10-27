@@ -214,4 +214,26 @@ describe('5. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)'
     expect(renderedSqrt).not.toContain('<br />M1001');
     expect(renderedSqrt).not.toContain('z<br />');
   });
+
+  it('renderMathToHtml render toàn bộ công thức toán và vector bên trong khối \\immini', () => {
+    const rawImmini = `\\immini{
+Một chiếc đèn chùm treo có khối lượng $m = 5\\text{ kg}$ tại điểm $O$ bởi các dây $OA$, $OB$, $OC$.
+Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000\\,\\text{N}$.
+}{
+\\begin{tikzpicture}
+\\draw (0,0) -- (1,1);
+\\end{tikzpicture}
+}`;
+
+    const rendered = renderMathToHtml(rawImmini);
+    expect(rendered).toContain('immini-block');
+    expect(rendered).toContain('katex');
+    // Các công thức toán trong mainText phải được render thành KaTeX, không còn sót $...$ thô
+    expect(rendered).not.toContain('$m = 5');
+    expect(rendered).not.toContain('$OA$');
+    expect(rendered).not.toContain('$\\vv{F_1}');
+    expect(rendered).not.toContain('5000\\,\\text{N}$');
+    // Hình TikZ vẫn được bao gói chính xác
+    expect(rendered).toContain('text/tikz');
+  });
 });
