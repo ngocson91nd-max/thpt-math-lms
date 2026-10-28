@@ -122,6 +122,58 @@ export const MOCK_CLASSES: ClassItem[] = [
   },
 ];
 
+// Hàm sinh danh sách học sinh thực tế cho từng lớp học
+function generateClassStudents(classId: string, prefix: string, grade: 10 | 11 | 12, count: number): ClassMember[] {
+  const firstNames = [
+    'Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Vũ', 'Phan', 'Đỗ', 'Bùi', 'Đặng',
+    'Đoàn', 'Trịnh', 'Lý', 'Võ', 'Đinh', 'Dương', 'Mai', 'Lương', 'Cao', 'Hà',
+    'Hồ', 'Ngô', 'Chu', 'Tạ', 'Trương'
+  ];
+  const middleNames = [
+    'Văn', 'Thị', 'Minh', 'Đức', 'Hải', 'Thành', 'Thu', 'Ngọc', 'Phương', 'Bảo',
+    'Thanh', 'Quang', 'Hồng', 'Tuấn', 'Như', 'Gia', 'Bích', 'Hữu', 'Kim', 'Trọng'
+  ];
+  const lastNames = [
+    'An', 'Anh', 'Bảo', 'Bình', 'Chi', 'Dũng', 'Đạt', 'Giang', 'Hà', 'Hải',
+    'Hiếu', 'Hoàng', 'Huy', 'Huyền', 'Khang', 'Khoa', 'Kiên', 'Kiệt', 'Lam', 'Linh',
+    'Long', 'Mai', 'Nam', 'Nga', 'Ngân', 'Nhi', 'Phong', 'Phúc', 'Quân', 'Quang',
+    'Quỳnh', 'Sơn', 'Tâm', 'Thảo', 'Thắng', 'Thịnh', 'Thư', 'Trang', 'Trí', 'Trọng',
+    'Trung', 'Tú', 'Tuấn', 'Tùng', 'Uyên', 'Việt', 'Vy', 'Yến'
+  ];
+
+  const members: ClassMember[] = [];
+  for (let i = 1; i <= count; i++) {
+    const fn = firstNames[(i * 7 + 3) % firstNames.length];
+    const mn = middleNames[(i * 11 + 5) % middleNames.length];
+    const ln = lastNames[(i * 13 + 7) % lastNames.length];
+    const fullName = `${fn} ${mn} ${ln}`;
+    const cleanFn = fn.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    const cleanLn = ln.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    const email = `${cleanLn}.${cleanFn}${i}@thpt-math-lms.vn`;
+    const phone = `09${Math.floor(10000000 + (i * 1234567) % 90000000)}`;
+
+    members.push({
+      id: `${prefix}-cm-${i}`,
+      class_id: classId,
+      user_id: `${prefix}-u-${i}`,
+      role: 'student',
+      status: 'active',
+      joined_at: new Date(Date.now() - (count - i + 1) * 86400000).toISOString(),
+      profile: {
+        id: `${prefix}-u-${i}`,
+        email,
+        full_name: fullName,
+        role: 'student',
+        avatar_url: `https://images.unsplash.com/photo-${1534528741775 + (i * 98765) % 1000000}?w=150`,
+        school_name: 'THPT Chuyên Lê Hồng Phong',
+        grade,
+        phone,
+      },
+    });
+  }
+  return members;
+}
+
 export const MOCK_CLASS_MEMBERS: ClassMember[] = [
   {
     id: 'cm1',
@@ -147,6 +199,27 @@ export const MOCK_CLASS_MEMBERS: ClassMember[] = [
     status: 'active',
     profile: MOCK_USERS[4],
   },
+  {
+    id: 'toan12-cm-mai',
+    class_id: 'c-12-toan-1',
+    user_id: '33333333-3333-3333-3333-333333333333',
+    role: 'student',
+    status: 'active',
+    profile: MOCK_USERS[2],
+  },
+  {
+    id: 'toan12-cm-nam',
+    class_id: 'c-12-toan-1',
+    user_id: '44444444-4444-4444-4444-444444444444',
+    role: 'student',
+    status: 'active',
+    profile: MOCK_USERS[3],
+  },
+  ...generateClassStudents('c-12-toan-1', 'toan12', 12, 36),
+  ...generateClassStudents('c-11-anh-1', 'anh11', 11, 40),
+  ...generateClassStudents('c-11-su', 'su11', 11, 35),
+  ...generateClassStudents('c1111111-1111-1111-1111-111111111111', '12a1', 12, 33),
+  ...generateClassStudents('c2222222-2222-2222-2222-222222222222', '11b1', 11, 42),
 ];
 
 export const MOCK_COURSES: Course[] = [

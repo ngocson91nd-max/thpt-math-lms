@@ -39,16 +39,21 @@ export const StudentPendingApprovalView: React.FC = () => {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
+      const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
+
       const saved = localStorage.getItem('lms_classes');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setAvailableClasses(parsed);
+            setAvailableClasses(parsed.filter((c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)));
           }
         } catch (e) {
           console.error(e);
         }
+      } else {
+        setAvailableClasses(MOCK_CLASSES.filter((c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)));
       }
 
       if (user) {

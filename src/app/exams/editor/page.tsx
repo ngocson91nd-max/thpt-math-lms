@@ -172,17 +172,26 @@ function ExamEditorContent() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Tải danh sách lớp học thực tế
+    // Tải danh sách lớp học thực tế & loại bỏ các lớp đã xóa vĩnh viễn
+    const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
+    const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
+
     const savedClasses = localStorage.getItem('lms_classes');
     if (savedClasses) {
       try {
         const parsedCls = JSON.parse(savedClasses);
-        if (Array.isArray(parsedCls) && parsedCls.length > 0) {
-          const existingIds = new Set(parsedCls.map((c: any) => c.id || c.name));
-          const missing = MOCK_CLASSES.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.name));
-          setClasses([...parsedCls, ...missing]);
+        if (Array.isArray(parsedCls)) {
+          const filteredCls = parsedCls.filter(
+            (c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+          );
+          setClasses(filteredCls);
         }
       } catch {}
+    } else {
+      const initialCls = MOCK_CLASSES.filter(
+        (c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+      );
+      setClasses(initialCls);
     }
 
     // Đọc class param từ URL nếu có (ví dụ khi tạo đề từ trang chi tiết lớp)

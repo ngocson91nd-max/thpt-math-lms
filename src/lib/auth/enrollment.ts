@@ -29,8 +29,13 @@ export const getEnrolledClassIdsForUser = (userId: string): string[] => {
 
   // 2. Kiểm tra danh sách thành viên trong từng lớp
   try {
+    const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
+    const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
     const classesRaw = localStorage.getItem('lms_classes');
-    const classes: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : MOCK_CLASSES;
+    const allClasses: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : MOCK_CLASSES;
+    const classes: ClassItem[] = allClasses.filter(
+      (c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+    );
 
     classes.forEach((c) => {
       const memRaw = localStorage.getItem(`lms_class_members_${c.id}`);
@@ -132,8 +137,13 @@ export const joinClassWithCode = (
   if (!cleanCode) return { success: false, message: 'Vui lòng nhập mã lớp học!' };
 
   try {
+    const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
+    const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
     const classesRaw = localStorage.getItem('lms_classes');
-    const classes: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : MOCK_CLASSES;
+    const allClasses: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : MOCK_CLASSES;
+    const classes: ClassItem[] = allClasses.filter(
+      (c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+    );
 
     const foundClass = classes.find((c) => c.code.trim().toUpperCase() === cleanCode);
     if (!foundClass) {

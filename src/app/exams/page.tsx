@@ -130,21 +130,30 @@ export default function ExamsPage() {
         setSelectedClass(classQuery);
       }
 
-      // 1. Tải Danh sách Lớp học thực tế
+      // 1. Tải Danh sách Lớp học thực tế & lọc bỏ các lớp đã xóa vĩnh viễn
+      const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
+      const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
+
       const savedClasses = localStorage.getItem('lms_classes');
       if (savedClasses) {
         try {
           const parsedCls = JSON.parse(savedClasses);
-          if (Array.isArray(parsedCls) && parsedCls.length > 0) {
-            const existingIds = new Set(parsedCls.map((c: any) => c.id || c.name));
-            const missing = MOCK_CLASSES.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.name));
-            const mergedClasses = [...parsedCls, ...missing];
-            setClasses(mergedClasses);
-            localStorage.setItem('lms_classes', JSON.stringify(mergedClasses));
+          if (Array.isArray(parsedCls)) {
+            const filteredCls = parsedCls.filter(
+              (c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+            );
+            setClasses(filteredCls);
+            localStorage.setItem('lms_classes', JSON.stringify(filteredCls));
           }
         } catch (e) {
           console.error('Lỗi tải danh sách lớp học:', e);
         }
+      } else {
+        const initialCls = MOCK_CLASSES.filter(
+          (c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
+        );
+        setClasses(initialCls);
+        localStorage.setItem('lms_classes', JSON.stringify(initialCls));
       }
 
       // 2. Tải Ngân hàng câu hỏi

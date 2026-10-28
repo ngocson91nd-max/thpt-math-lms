@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MOCK_CLASSES, MOCK_CLASS_MEMBERS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import { useAuth } from '@/context/AuthContext';
-import { ClassMember, Exam, Profile } from '@/types/database';
+import { ClassMember, Exam, Profile, ClassItem } from '@/types/database';
 import { approveStudentJoinRequest, rejectStudentJoinRequest } from '@/lib/auth/enrollment';
 import {
   GraduationCap,
@@ -31,8 +32,21 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const resolvedParams = use(params);
   const { isTeacher } = useAuth();
 
-  let initialClass = MOCK_CLASSES.find((c) => c.id === resolvedParams.id);
-  if (!initialClass && typeof window !== 'undefined') {
+  const router = useRouter();
+
+  // Kiểm tra xem lớp này đã bị xóa vĩnh viễn chưa
+  let isClassDeleted = false;
+  if (typeof window !== 'undefined') {
+    const savedDeleted = localStorage.getItem('lms_deleted_class_ids');
+    const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+    if (deletedIds.has(resolvedParams.id)) {
+      isClassDeleted = true;
+    }
+  }
+
+  // Ưu tiên nạp lớp từ lms_classes của trình duyệt
+  let initialClass: ClassItem | undefined;
+  if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('lms_classes');
     if (saved) {
       try {
@@ -41,15 +55,27 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       } catch {}
     }
   }
+  if (!initialClass) {
+    initialClass = MOCK_CLASSES.find((c) => c.id === resolvedParams.id);
+  }
   if (!initialClass) initialClass = MOCK_CLASSES[0];
 
   const [currentClass] = useState(initialClass);
   const [activeTab, setActiveTab] = useState<'members' | 'exams' | 'pending'>('members');
   const [copied, setCopied] = useState(false);
 
-  // Members state
+  // Members state: nạp từ cache riêng của lớp, nếu chưa có thì lấy từ MOCK_CLASS_MEMBERS
   const [members, setMembers] = useState<ClassMember[]>(() => {
-    return MOCK_CLASS_MEMBERS.filter((m) => m.class_id === currentClass.id);
+    if (typeof window !== 'undefined') {
+      const savedMembers = localStorage.getItem(`lms_class_members_${initialClass.id}`);
+      if (savedMembers) {
+        try {
+          const parsed = JSON.parse(savedMembers);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+    }
+    return MOCK_CLASS_MEMBERS.filter((m) => m.class_id === initialClass.id);
   });
 
   // Pending students state
@@ -90,6 +116,12 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
   // Load from localStorage on mount
   useEffect(() => {
+    if (isClassDeleted) {
+      alert('Lớp học này đã bị xóa khỏi hệ thống!');
+      router.push('/classes');
+      return;
+    }
+
     if (typeof window !== 'undefined') {
       const savedMembers = localStorage.getItem(`lms_class_members_${currentClass.id}`);
       if (savedMembers) {
@@ -100,6 +132,13 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           }
         } catch (e) {
           console.error(e);
+        }
+      } else {
+        // Khởi tạo danh sách học sinh mặc định nếu chưa lưu trước đó
+        const defaultMems = MOCK_CLASS_MEMBERS.filter((m) => m.class_id === currentClass.id);
+        if (defaultMems.length > 0) {
+          setMembers(defaultMems);
+          localStorage.setItem(`lms_class_members_${currentClass.id}`, JSON.stringify(defaultMems));
         }
       }
 
@@ -133,12 +172,28 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     loadPendingStudents();
     window.addEventListener('lms_enrollment_changed', loadPendingStudents);
     return () => window.removeEventListener('lms_enrollment_changed', loadPendingStudents);
-  }, [currentClass.id, currentClass.name, currentClass.code]);
+  }, [currentClass.id, currentClass.name, currentClass.code, isClassDeleted, router]);
 
   const saveMembersToStorage = (updated: ClassMember[]) => {
     setMembers(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`lms_class_members_${currentClass.id}`, JSON.stringify(updated));
+
+      // Tự động đồng bộ số lượng học sinh thực tế vào danh sách lớp lms_classes
+      try {
+        const savedClasses = localStorage.getItem('lms_classes');
+        if (savedClasses) {
+          const parsed = JSON.parse(savedClasses);
+          const idx = parsed.findIndex((c: any) => c.id === currentClass.id);
+          if (idx >= 0) {
+            parsed[idx].member_count = updated.length;
+            localStorage.setItem('lms_classes', JSON.stringify(parsed));
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      window.dispatchEvent(new Event('lms_classes_updated'));
     }
   };
 
