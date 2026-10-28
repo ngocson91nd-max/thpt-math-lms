@@ -309,8 +309,8 @@ export async function maskPdfAnswerKey(
     const lastPage = pdfDoc.getPage(totalPages - 1);
     const { width, height } = lastPage.getSize();
 
-    // Tỷ lệ che đáy trang (bảng đáp án \dapan thường chiếm 25% - 35% chiều cao trang A4)
-    const ratio = options?.bottomRatio ?? 0.32;
+    // Tỷ lệ che đáy trang (bảng đáp án \dapan thường chiếm từ 60% đến 85% chiều cao trang cuối)
+    const ratio = options?.bottomRatio ?? 0.80;
     const maskHeight = options?.customHeightPoints ?? (height * ratio);
 
     // 1. Phủ khối chữ nhật màu trắng xóa hoàn toàn bảng đáp án ở đáy trang (từ y=0 đến y=maskHeight)

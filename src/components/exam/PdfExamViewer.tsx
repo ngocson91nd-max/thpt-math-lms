@@ -5,8 +5,6 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  ExternalLink,
-  Download,
   FileText,
   RotateCcw,
   Scissors,
@@ -75,13 +73,6 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
 
   const handleResetZoom = () => {
     setZoomLevel(100);
-  };
-
-  const handleOpenNewTab = () => {
-    const targetUrl = blobUrl || pdfUrl;
-    if (targetUrl) {
-      window.open(targetUrl, '_blank');
-    }
   };
 
   if (!pdfUrl) {
@@ -153,16 +144,6 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
             title="Kích thước gốc (100%)"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenNewTab}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
-            title="Mở toàn màn hình trong tab mới"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Mở Tab Mới</span>
           </button>
         </div>
       </div>

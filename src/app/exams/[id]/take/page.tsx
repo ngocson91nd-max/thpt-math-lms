@@ -250,6 +250,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   // 4. GIÁM SÁT THI & CHỐNG GIAN LẬN: PHÁT HIỆN RỜI TAB / MỞ GOOGLE / CHATGPT
   useEffect(() => {
     const handleVisibilityChange = () => {
+      // Chỉ cảnh báo khi học sinh thực sự chuyển sang tab khác hoặc thu nhỏ trình duyệt
       if (document.hidden) {
         setTabSwitchCount((prev) => {
           const next = prev + 1;
@@ -259,21 +260,34 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       }
     };
 
-    const handleBlur = () => {
-      // Khi học sinh chuyển sang cửa sổ khác (VD chụp màn hình hay mở tab song song)
-      setTabSwitchCount((prev) => {
-        const next = prev + 1;
-        setShowTabWarning(true);
-        return next;
-      });
+    const handleWindowBlur = () => {
+      // Trì hoãn 200ms để trình duyệt cập nhật focus target
+      setTimeout(() => {
+        // NẾU HỌC SINH NHẤP CHUỘT VÀO KHUNG PDF (IFRAME/EMBED/OBJECT) -> TUYỆT ĐỐI KHÔNG BÁO CÁO
+        const activeTag = document.activeElement?.tagName?.toUpperCase();
+        if (activeTag === 'IFRAME' || activeTag === 'EMBED' || activeTag === 'OBJECT') {
+          return;
+        }
+
+        // Nếu trang vẫn đang hiển thị (document.hidden === false) -> KHÔNG cảnh báo
+        if (!document.hidden) {
+          return;
+        }
+
+        setTabSwitchCount((prev) => {
+          const next = prev + 1;
+          setShowTabWarning(true);
+          return next;
+        });
+      }, 200);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
+    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
 
