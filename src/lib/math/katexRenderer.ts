@@ -129,40 +129,133 @@ export function renderMathToHtml(content: string): string {
   text = text.replace(/\\lq\\lq/g, '“').replace(/\\rq\\rq/g, '”');
   text = text.replace(/\\lq/g, '‘').replace(/\\rq/g, '’');
 
-  // 2. Chuyển đổi môi trường display math \[ ... \] thành $$ ... $$
-  text = text.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$1$$$');
-
-  // 3. Xử lý vector esvect: \vv{AB}, \vv{u}, \vv a sang \overrightarrow
+  // 2. Xử lý vector esvect: \vv{AB}, \vv{u}, \vv a sang \overrightarrow
   text = text.replace(/\\vv\s*\{([^}]+)\}/g, '\\overrightarrow{$1}');
   text = text.replace(/\\vv\s*([a-zA-Z0-9])/g, '\\overrightarrow{$1}');
 
-  // 4. Xử lý \mathscr thành \mathcal
+  // 3. Xử lý \mathscr thành \mathcal
   text = text.replace(/\\mathscr\{([A-Za-z]+)\}/g, '\\mathcal{$1}');
 
-  // 5. Bỏ các lệnh trang trí không ảnh hưởng công thức
+  // 4. Bỏ các lệnh trang trí không ảnh hưởng công thức
   text = text.replace(/\\lim\\limits/g, '\\lim');
   text = text.replace(/\\max\\limits/g, '\\max');
   text = text.replace(/\\min\\limits/g, '\\min');
   text = text.replace(/\\sodong\s*\{[^}]*\}/g, '');
   text = text.replace(/\\Opensolutionfile\s*\{[^}]*\}\s*(?:\[[^\]]*\])?/g, '');
+  text = text.replace(/\\Closesolutionfile\s*\{[^}]*\}/g, '');
   text = text.replace(/\\hethet/g, '');
   text = text.replace(/\\dapan/g, '');
 
-  // 6. Chuẩn hóa macro \heva và \hoac có ngoặc lồng nhau
+  // 5. Chuẩn hóa macro \heva và \hoac có ngoặc lồng nhau
   text = replaceBracedMacro(text, '\\heva', (inner) => `\\left\\{\\begin{aligned} ${inner} \\end{aligned}\\right.`);
   text = replaceBracedMacro(text, '\\hoac', (inner) => `\\left[\\begin{aligned} ${inner} \\end{aligned}\\right.`);
 
-  // 7. Xử lý môi trường \begin{itemchoice} và \begin{enumerate}
+  // 7. Xử lý các môi trường danh sách: \begin{itemchoice}, \begin{itemize}, \begin{enumerate}, \begin{description}
   text = text.replace(/\\begin\{itemchoice\}([\s\S]*?)\\end\{itemchoice\}/g, (_m, body) => {
-    return body.replace(/\\itemch\s*/g, '\n• ');
+    const rawItems = body.split(/\\itemch\b/).map((s: string) => s.trim()).filter(Boolean);
+    if (rawItems.length === 0) return '';
+
+    const itemsHtml = rawItems.map((rawItem: string) => {
+      let trimmed = rawItem.trim();
+      let badge = '';
+
+      // Khớp tiền tố (a, b, c, d) nếu có và nhận diện Đúng / Sai
+      const match = trimmed.match(/^(?:([a-d]\))\s*)?(?:\\textbf\{\s*(Đúng|Sai)\.?\s*\}|(Đúng|Sai)\.?|\[(Đúng|Sai)\])\s*/i);
+      if (match) {
+        const subPrefix = match[1] ? `<span class="font-bold text-slate-700 dark:text-slate-300 mr-1 select-none">${match[1]}</span>` : '';
+        const answerVal = (match[2] || match[3] || match[4] || '').toLowerCase();
+        const isDung = answerVal.startsWith('đúng');
+        const badgeClass = isDung
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300'
+          : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300';
+        badge = `${subPrefix}<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${badgeClass} mr-2 shrink-0 select-none">${isDung ? 'Đúng' : 'Sai'}</span>`;
+        trimmed = trimmed.substring(match[0].length);
+      } else {
+        badge = '<span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 mr-2 shrink-0 select-none"></span>';
+      }
+
+      const renderedInner = renderMathToHtml(trimmed);
+      return `<li class="flex items-start gap-1 leading-relaxed text-slate-800 dark:text-slate-200 my-1.5">${badge}<div class="flex-1 min-w-0">${renderedInner}</div></li>`;
+    }).join('\n');
+
+    const listHtml = `<ul class="itemchoice-list my-3 space-y-2 pl-0.5">${itemsHtml}</ul>`;
+    return savePlaceholder(listHtml);
   });
-  text = text.replace(/\\begin\{enumerate\}(?:\[.*?\])?([\s\S]*?)\\end\{enumerate\}/g, (_m, body) => {
-    let count = 0;
-    return body.replace(/\\item\s*/g, () => {
-      const label = String.fromCharCode(97 + count);
-      count++;
-      return `\n${label}) `;
-    });
+
+  text = text.replace(/\\begin\{itemize\}([\s\S]*?)\\end\{itemize\}/g, (_m, body) => {
+    const rawItems = body.split(/\\item\b/).map((s: string) => s.trim()).filter(Boolean);
+    if (rawItems.length === 0) return '';
+
+    const itemsHtml = rawItems.map((rawItem: string) => {
+      let itemContent = rawItem;
+      let customBullet = '';
+      const bracketMatch = itemContent.match(/^\[([^\]]+)\]\s*/);
+      if (bracketMatch) {
+        customBullet = bracketMatch[1];
+        itemContent = itemContent.substring(bracketMatch[0].length);
+      }
+
+      const renderedInner = renderMathToHtml(itemContent.trim());
+      if (customBullet) {
+        return `<li class="list-none flex items-start gap-2 leading-relaxed"><span class="font-semibold text-slate-700 dark:text-slate-300 shrink-0 select-none">${customBullet}</span><div class="flex-1 min-w-0">${renderedInner}</div></li>`;
+      }
+      return `<li class="leading-relaxed pl-1">${renderedInner}</li>`;
+    }).join('\n');
+
+    const listHtml = `<ul class="list-disc pl-6 my-2.5 space-y-1.5 text-slate-800 dark:text-slate-200">${itemsHtml}</ul>`;
+    return savePlaceholder(listHtml);
+  });
+
+  text = text.replace(/\\begin\{enumerate\}(?:\[([^\]]*)\])?([\s\S]*?)\\end\{enumerate\}/g, (_m, opt, body) => {
+    const rawItems = body.split(/\\item\b/).map((s: string) => s.trim()).filter(Boolean);
+    if (rawItems.length === 0) return '';
+
+    const optStr = (opt || '').trim();
+    const isAlpha = optStr.includes('a') || optStr.includes('A');
+    const isRoman = optStr.includes('i') || optStr.includes('I');
+    let listClass = 'list-decimal';
+    if (isAlpha) listClass = optStr.includes('A') ? 'list-[upper-alpha]' : 'list-[lower-alpha]';
+    else if (isRoman) listClass = optStr.includes('I') ? 'list-[upper-roman]' : 'list-[lower-roman]';
+
+    const itemsHtml = rawItems.map((rawItem: string) => {
+      let itemContent = rawItem;
+      let customLabel = '';
+      const bracketMatch = itemContent.match(/^\[([^\]]+)\]\s*/);
+      if (bracketMatch) {
+        customLabel = bracketMatch[1];
+        itemContent = itemContent.substring(bracketMatch[0].length);
+      }
+
+      const renderedInner = renderMathToHtml(itemContent.trim());
+      if (customLabel) {
+        return `<li class="list-none flex items-start gap-2 leading-relaxed"><span class="font-semibold text-slate-700 dark:text-slate-300 shrink-0 select-none">${customLabel}</span><div class="flex-1 min-w-0">${renderedInner}</div></li>`;
+      }
+      return `<li class="leading-relaxed pl-1">${renderedInner}</li>`;
+    }).join('\n');
+
+    const listHtml = `<ol class="${listClass} pl-6 my-2.5 space-y-1.5 text-slate-800 dark:text-slate-200">${itemsHtml}</ol>`;
+    return savePlaceholder(listHtml);
+  });
+
+  text = text.replace(/\\begin\{description\}([\s\S]*?)\\end\{description\}/g, (_m, body) => {
+    const rawItems = body.split(/\\item\b/).map((s: string) => s.trim()).filter(Boolean);
+    if (rawItems.length === 0) return '';
+
+    const itemsHtml = rawItems.map((rawItem: string) => {
+      let itemContent = rawItem;
+      let term = '';
+      const bracketMatch = itemContent.match(/^\[([^\]]+)\]\s*/);
+      if (bracketMatch) {
+        term = bracketMatch[1];
+        itemContent = itemContent.substring(bracketMatch[0].length);
+      }
+
+      const renderedInner = renderMathToHtml(itemContent.trim());
+      return `<li class="leading-relaxed"><strong class="font-bold text-slate-900 dark:text-slate-100 mr-2 select-none">${term}</strong>${renderedInner}</li>`;
+    }).join('\n');
+
+    const listHtml = `<ul class="description-list space-y-2 my-2.5 pl-2 text-slate-800 dark:text-slate-200">${itemsHtml}</ul>`;
+    return savePlaceholder(listHtml);
   });
 
   // 8. XỬ LÝ KHỐI TIKZ \begin{tikzpicture} ... \end{tikzpicture}
@@ -242,8 +335,8 @@ export function renderMathToHtml(content: string): string {
     return savePlaceholder(centerHtml);
   });
 
-  // 12. XỬ LÝ DISPLAY MATH $$...$$ -> RENDER KATEX TRƯỚC VÀ CẤT VÀO PLACEHOLDER!
-  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+  // 12. XỬ LÝ DISPLAY MATH: cả \[...\] và $$...$$ -> RENDER KATEX TRƯỚC VÀ CẤT VÀO PLACEHOLDER!
+  const renderDisplayMath = (math: string) => {
     try {
       const rendered = katex.renderToString(math.trim(), {
         displayMode: true,
@@ -253,7 +346,10 @@ export function renderMathToHtml(content: string): string {
     } catch {
       return savePlaceholder(`<div class="text-rose-600 font-mono text-sm">[Lỗi LaTeX: ${math}]</div>`);
     }
-  });
+  };
+
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => renderDisplayMath(math));
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => renderDisplayMath(math));
 
   // 13. XỬ LÝ INLINE MATH $...$ -> RENDER KATEX TRƯỚC VÀ CẤT VÀO PLACEHOLDER!
   text = text.replace(/(?<!\\)\$([^\$\n]+?)\$/g, (_, math) => {
@@ -268,8 +364,14 @@ export function renderMathToHtml(content: string): string {
     }
   });
 
-  // 14. BÂY GIỜ TOÀN BỘ CÔNG THỨC TOÁN ($...$ và $$...$$) ĐÃ ĐƯỢC KATEX XỬ LÝ VÀ BẢO VỆ!
+  // 14. BÂY GIỜ TOÀN BỘ CÔNG THỨC TOÁN ($...$, $$...$$, \[...\]) ĐÃ ĐƯỢC KATEX XỬ LÝ VÀ BẢO VỆ!
   // Chỉ còn lại VĂN BẢN THUẦN TÚY TIẾNG VIỆT NGOÀI CÔNG THỨC!
+  // Fallback dọn dẹp các lệnh \itemch, \item nếu nằm ngoài môi trường danh sách
+  text = text.replace(/\\itemch\s*(?:\\textbf\{\s*Đúng\.?\s*\}|Đúng\.?)/gi, '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 mr-2 shrink-0 select-none">Đúng</span>');
+  text = text.replace(/\\itemch\s*(?:\\textbf\{\s*Sai\.?\s*\}|Sai\.?)/gi, '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 mr-2 shrink-0 select-none">Sai</span>');
+  text = text.replace(/\\itemch\s*/g, '• ');
+  text = text.replace(/\\item\s*/g, '• ');
+
   // Bây giờ mới xử lý các lệnh định dạng chữ in đậm, in nghiêng, gạch chân trong văn bản đề thi:
   text = replaceBracedMacro(text, '\\textbf', (inner) => `<strong>${inner}</strong>`);
   text = replaceBracedMacro(text, '\\textit', (inner) => `<em>${inner}</em>`);

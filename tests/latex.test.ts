@@ -323,3 +323,74 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
     expect(svg).toContain('stroke-dasharray="4,4"');
   });
 });
+
+describe('6. Kiểm thử Display Math \\[...\\] và Môi trường Danh sách (itemize, enumerate, itemchoice)', () => {
+  it('Công thức display math \\[...\\] được render bằng KaTeX và KHÔNG bị biến thành số 1', () => {
+    const raw = `Số sản phẩm xuất khẩu là
+\\[ E(x)=R(x)-Q(x)=(x-500)-(5500-x)=2x-6000\\text{ (sản phẩm)}. \\]
+Do đó doanh nghiệp có lãi.`;
+
+    const html = renderMathToHtml(raw);
+    expect(html).toContain('katex-display');
+    expect(html).toContain('2x-6000');
+    expect(html).toContain('sản phẩm');
+    // Tuyệt đối không bị lỗi chuỗi replace $$$$1$$$ biến công thức thành số 1 trơ trọi
+    expect(html).not.toMatch(/<span class="katex-display">[^<]*1[^<]*<\/span>/);
+  });
+
+  it('Môi trường \\begin{itemize} ... \\end{itemize} hiển thị danh sách dạng dấu chấm không bị rò rỉ mã TeX', () => {
+    const raw = `Một con rô bốt hút bụi di chuyển:
+\\begin{itemize}
+  \\item Nếu đang ở vị trí $A$, xác suất là $0{,}5$.
+  \\item Nếu đang ở vị trí $B$, xác suất là $0{,}6$.
+\\end{itemize}
+Ban đầu rô bốt ở vị trí $A$.`;
+
+    const html = renderMathToHtml(raw);
+    expect(html).toContain('<ul class="list-disc');
+    expect(html).toContain('<li class="leading-relaxed pl-1">');
+    expect(html).not.toContain('\\begin{itemize}');
+    expect(html).not.toContain('\\end{itemize}');
+    expect(html).not.toContain('\\item');
+    expect(html).toContain('katex');
+  });
+
+  it('Môi trường \\begin{itemchoice} hiển thị huy hiệu Đúng / Sai và bảo vệ công thức display math bên trong', () => {
+    const raw = `\\begin{itemchoice}
+  \\itemch Đúng. Số sản phẩm là
+  \\[ E(x)=2x-6000. \\]
+  \\itemch Sai. Tiền lãi là $4y$.
+\\end{itemchoice}`;
+
+    const html = renderMathToHtml(raw);
+    expect(html).toContain('itemchoice-list');
+    expect(html).toContain('bg-emerald-100');
+    expect(html).toContain('Đúng');
+    expect(html).toContain('bg-rose-100');
+    expect(html).toContain('Sai');
+    expect(html).toContain('katex-display');
+    expect(html).toContain('2x-6000');
+    expect(html).not.toContain('\\begin{itemchoice}');
+    expect(html).not.toContain('\\itemch');
+  });
+
+  it('Môi trường \\begin{enumerate} hỗ trợ đánh số a), b) hoặc 1., 2.', () => {
+    const rawAlpha = `\\begin{enumerate}[a)]
+  \\item Tìm tập xác định của $y=f(x)$.
+  \\item Khảo sát sự biến thiên.
+\\end{enumerate}`;
+
+    const htmlAlpha = renderMathToHtml(rawAlpha);
+    expect(htmlAlpha).toContain('<ol class="list-[lower-alpha]');
+    expect(htmlAlpha).not.toContain('\\begin{enumerate}');
+
+    const rawNum = `\\begin{enumerate}
+  \\item Ý thứ nhất.
+  \\item Ý thứ hai.
+\\end{enumerate}`;
+
+    const htmlNum = renderMathToHtml(rawNum);
+    expect(htmlNum).toContain('<ol class="list-decimal');
+  });
+});
+
