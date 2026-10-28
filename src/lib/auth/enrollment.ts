@@ -1,4 +1,4 @@
-import { Profile, ClassItem, ClassMember } from '../../types/database';
+import { Profile, ClassItem, ClassMember, Exam } from '../../types/database';
 import { MOCK_CLASSES, MOCK_CLASS_MEMBERS } from '../supabase/mockStore';
 
 /**
@@ -50,12 +50,16 @@ export const getEnrolledClassIdsForUser = (userId: string): string[] => {
     console.error(e);
   }
 
-  // 3. Fallback mock store cho các tài khoản mẫu
-  MOCK_CLASS_MEMBERS.forEach((m) => {
-    if (m.user_id === userId && m.status === 'active') {
-      enrolledSet.add(m.class_id);
-    }
-  });
+  // 3. Fallback mock store cho các tài khoản mẫu (chỉ nạp nếu lớp chưa bị xóa vĩnh viễn)
+  try {
+    const savedDeletedCls = typeof window !== 'undefined' ? localStorage.getItem('lms_deleted_class_ids') : null;
+    const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
+    MOCK_CLASS_MEMBERS.forEach((m) => {
+      if (m.user_id === userId && m.status === 'active' && !deletedClassIds.has(m.class_id)) {
+        enrolledSet.add(m.class_id);
+      }
+    });
+  } catch {}
 
   return Array.from(enrolledSet);
 };
@@ -276,4 +280,34 @@ export const rejectStudentJoinRequest = (classId: string, studentId: string): { 
   } catch {
     return { success: false };
   }
+};
+
+/**
+ * Kiểm tra xem học sinh có quyền xem và làm đề thi này không:
+ * - Đề 'public': Mọi học sinh đều xem và làm bài được.
+ * - Đề 'restricted': Học sinh BẮT BUỘC phải là thành viên chính thức của ít nhất một lớp được phân công.
+ */
+export const isExamPermittedForStudent = (
+  exam: Exam,
+  studentId?: string,
+  allClasses: ClassItem[] = []
+): boolean => {
+  if (exam.access_type === 'public') return true;
+  if (!studentId) return false;
+
+  const enrolledIds = getEnrolledClassIdsForUser(studentId);
+  if (enrolledIds.length === 0) return false;
+
+  const enrolledNames = allClasses
+    .filter((c) => enrolledIds.includes(c.id))
+    .map((c) => c.name.trim().toLowerCase());
+
+  if (exam.class_id && enrolledIds.includes(exam.class_id)) return true;
+  if (exam.class_name && enrolledNames.includes(exam.class_name.trim().toLowerCase())) return true;
+
+  if (Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0) {
+    return exam.assigned_classes.some((cls) => enrolledNames.includes(cls.trim().toLowerCase()));
+  }
+
+  return false;
 };

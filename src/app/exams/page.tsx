@@ -12,6 +12,7 @@ import MathRenderer from '@/components/math/MathRenderer';
 import { createClient } from '@/lib/supabase/client';
 import { savePdfToIndexedDb } from '@/lib/pdf/pdfStorage';
 import { maskPdfAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
+import { isExamPermittedForStudent } from '@/lib/auth/enrollment';
 import {
   ClipboardList,
   Clock,
@@ -913,10 +914,25 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     setTimeout(() => setCopyToast(null), 3000);
   };
 
+  // Lấy bài nộp của học sinh đối với đề thi cụ thể
+  const getStudentSubmission = (examId: string, studentId?: string) => {
+    if (!studentId || typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(`my_submissions_${studentId}`);
+      if (!raw) return null;
+      const subs = JSON.parse(raw);
+      if (Array.isArray(subs)) {
+        return subs.find((s: any) => s.exam_id === examId);
+      }
+    } catch {}
+    return null;
+  };
+
   // Tính số lượng đề thi gán cho từng lớp học thực tế (khớp chính xác tên lớp)
   const getExamCountForClass = (clsName: string, clsGrade?: number) => {
     const target = clsName.trim().toLowerCase();
     return exams.filter((e) => {
+      if (!isTeacher && !isExamPermittedForStudent(e, user?.id, classes)) return false;
       const inAssigned = e.assigned_classes?.some(
         (c) => c.trim().toLowerCase() === target
       );
@@ -926,6 +942,12 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   };
 
   const filteredExams = exams.filter((e) => {
+    // Phân quyền Học sinh: Học sinh chỉ xem được đề công khai hoặc đề của lớp mà mình đã được duyệt tham gia!
+    if (!isTeacher) {
+      const isPermitted = isExamPermittedForStudent(e, user?.id, classes);
+      if (!isPermitted) return false;
+    }
+
     if (selectedGrade !== 'all' && e.grade !== selectedGrade) return false;
     if (selectedClass !== 'all') {
       const target = selectedClass.trim().toLowerCase();
@@ -1017,24 +1039,29 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             </button>
           </div>
 
-          {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
-          <button
-            type="button"
-            onClick={() => setShowPdfCreateModal(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 transition cursor-pointer"
-          >
-            <FileText className="h-4 w-4" />
-            <span>Tạo từ PDF</span>
-          </button>
+          {/* CÁC NÚT TẠO ĐỀ (CHỈ DÀNH RIÊNG CHO GIÁO VIÊN / ADMIN) */}
+          {isTeacher && (
+            <>
+              {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
+              <button
+                type="button"
+                onClick={() => setShowPdfCreateModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 transition cursor-pointer"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Tạo từ PDF</span>
+              </button>
 
-          {/* NÚT TẠO ĐỀ MỚI */}
-          <Link
-            href="/exams/editor?new=1"
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Tạo đề mới</span>
-          </Link>
+              {/* NÚT TẠO ĐỀ MỚI */}
+              <Link
+                href="/exams/editor?new=1"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Tạo đề mới</span>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -1115,7 +1142,9 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                   selectedClass === 'all' ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
                 }`}
               >
-                {exams.length}
+                {isTeacher
+                  ? exams.length
+                  : exams.filter((e) => isExamPermittedForStudent(e, user?.id, classes)).length}
               </span>
             </button>
 
@@ -1187,6 +1216,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                 const examCode = exam.code || exam.id.slice(0, 6).toUpperCase();
                 const qCount = (exam.questions || []).length;
                 const isLocked = exam.is_locked || exam.status === 'closed';
+                const studentSub = !isTeacher ? getStudentSubmission(exam.id, user?.id) : null;
 
                 return (
                   <div
@@ -1223,14 +1253,16 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                             <Clock className="h-3 w-3" />
                             {exam.created_at ? new Date(exam.created_at).toLocaleDateString('vi-VN') : '26/10/2026'}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteExam(exam.id, exam.title)}
-                            className="p-1 text-rose-400 hover:text-rose-600 transition cursor-pointer"
-                            title="Xóa đề thi"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {isTeacher && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExam(exam.id, exam.title)}
+                              className="p-1 text-rose-400 hover:text-rose-600 transition cursor-pointer"
+                              title="Xóa đề thi"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1270,13 +1302,15 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                           <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block">
                             LỚP ĐƯỢC PHÉP THI
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAssignModal(exam)}
-                            className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
-                          >
-                            + Đổi lớp
-                          </button>
+                          {isTeacher && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignModal(exam)}
+                              className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
+                            >
+                              + Đổi lớp
+                            </button>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {exam.access_type === 'public' ? (
@@ -1337,71 +1371,100 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                       </div>
                     </div>
 
-                    {/* Hàng nút tác vụ (matching Screenshot 7 iExam) */}
-                    <div className="pt-3 border-t border-slate-100 space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLockExam(exam.id)}
-                          className={`inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                            isLocked
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-rose-50/50 border-rose-200 text-rose-700 hover:bg-rose-100'
-                          }`}
-                        >
-                          {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                          <span>{isLocked ? 'Mở đề' : 'Khoá đề'}</span>
-                        </button>
+                    {/* Hàng nút tác vụ (Phân quyền: Giáo viên quản lý đề vs Học sinh làm bài) */}
+                    {isTeacher ? (
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleLockExam(exam.id)}
+                            className={`inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                              isLocked
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-rose-50/50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                            }`}
+                          >
+                            {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                            <span>{isLocked ? 'Mở đề' : 'Khoá đề'}</span>
+                          </button>
 
-                        <Link
-                          href={`/exams/${exam.id}/take`}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
-                          title="Giám sát phòng thi thời gian thực"
-                        >
-                          <Radio className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
-                          <span>Live</span>
-                        </Link>
+                          <Link
+                            href={`/exams/${exam.id}/take`}
+                            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
+                            title="Giám sát phòng thi thời gian thực"
+                          >
+                            <Radio className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                            <span>Live</span>
+                          </Link>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <Link
+                            href={`/exams/editor?id=${exam.id}`}
+                            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>Sửa</span>
+                          </Link>
+
+                          <Link
+                            href="/gradebook"
+                            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 transition"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            <span>Kết quả</span>
+                          </Link>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssignModal(exam)}
+                            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
+                            title="Giao đề thi cho các lớp học"
+                          >
+                            <GraduationCap className="h-3.5 w-3.5" />
+                            <span>Giao lớp</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateExam(exam)}
+                            className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-slate-400" />
+                            <span>Nhân bản</span>
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <Link
-                          href={`/exams/editor?id=${exam.id}`}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          <span>Sửa</span>
-                        </Link>
-
-                        <Link
-                          href="/gradebook"
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 transition"
-                        >
-                          <BarChart3 className="h-3.5 w-3.5" />
-                          <span>Kết quả</span>
-                        </Link>
+                    ) : (
+                      <div className="pt-3 border-t border-slate-100">
+                        {isLocked ? (
+                          <div className="w-full py-2.5 px-4 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold text-center flex items-center justify-center gap-1.5 cursor-not-allowed">
+                            <Lock className="h-3.5 w-3.5" />
+                            <span>Phòng thi đang đóng</span>
+                          </div>
+                        ) : studentSub ? (
+                          <Link
+                            href={`/exams/${exam.id}/result/${studentSub.id}`}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition shadow-2xs"
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span>
+                              Đã nộp ({studentSub.score !== undefined ? `${studentSub.score.toFixed(2)}đ` : 'Xem bài làm'})
+                            </span>
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/exams/${exam.id}/take`}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-500/20 active:scale-[0.99]"
+                          >
+                            <Play className="h-4 w-4 fill-white" />
+                            <span>Vào làm bài ngay</span>
+                          </Link>
+                        )}
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAssignModal(exam)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
-                          title="Giao đề thi cho các lớp học"
-                        >
-                          <GraduationCap className="h-3.5 w-3.5" />
-                          <span>Giao lớp</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateExam(exam)}
-                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
-                        >
-                          <Copy className="h-3.5 w-3.5 text-slate-400" />
-                          <span>Nhân bản</span>
-                        </button>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}

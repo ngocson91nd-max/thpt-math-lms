@@ -73,7 +73,37 @@ function ExamEditorContent() {
   const examIdParam = searchParams.get('id');
   const isNewParam = searchParams.get('new');
 
-  const { user } = useAuth();
+  const { user, isTeacher, isStudent } = useAuth();
+
+  // BẢO VỆ ROUTE: Học sinh tuyệt đối không được phép vào trang soạn thảo / sửa đề thi!
+  useEffect(() => {
+    if (user && isStudent) {
+      alert('Tài khoản học sinh không có quyền chỉnh sửa đề thi!');
+      router.replace('/exams');
+    }
+  }, [user, isStudent, router]);
+
+  if (user && isStudent) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="text-center max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-4">
+          <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+            <Lock className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-900">Không có quyền truy cập</h2>
+          <p className="text-xs text-slate-500">
+            Trang soạn thảo đề thi chỉ dành riêng cho Giáo viên và Quản trị viên.
+          </p>
+          <Link
+            href="/exams"
+            className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition"
+          >
+            Quay lại danh sách đề thi
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // 1. Thông tin tổng quát của đề thi
   const [examId, setExamId] = useState<string>(() => examIdParam || `exam-${Date.now()}`);

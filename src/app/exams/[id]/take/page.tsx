@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_EXAMS, MOCK_SUBMISSIONS } from '@/lib/supabase/mockStore';
-import { Exam, Question } from '@/types/database';
+import { MOCK_EXAMS, MOCK_SUBMISSIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
+import { Exam, Question, ClassItem } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import { gradeExamSubmission } from '@/lib/grading/grader';
 import { createClient } from '@/lib/supabase/client';
@@ -13,6 +14,7 @@ import { ExamFormulaSheetModal } from '@/components/exam/ExamFormulaSheetModal';
 import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
 import { maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
+import { isExamPermittedForStudent } from '@/lib/auth/enrollment';
 import {
   Clock,
   Flag,
@@ -40,12 +42,15 @@ import {
   Save,
   CheckCircle,
   X,
+  Lock,
 } from 'lucide-react';
 
 export default function TakeExamPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isTeacher, isStudent } = useAuth();
+
+  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
 
   const [exam, setExam] = useState<Exam | undefined>(() => {
     return MOCK_EXAMS.find((e) => e.id === resolvedParams.id) || MOCK_EXAMS[0];
@@ -542,6 +547,64 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
     router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
+
+  // 1. Kiểm tra phòng thi bị khóa đối với học sinh
+  if (user && isStudent && exam && (exam.is_locked || exam.status === 'closed')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
+          <div className="h-14 w-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-900">Phòng thi đang đóng</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Đề thi <span className="font-bold text-slate-700">"{exam.title}"</span> hiện đang tạm khóa hoặc đã kết thúc thời gian làm bài. Thầy Sơn chưa mở phòng thi.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/exams"
+              className="inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
+            >
+              Quay lại danh sách đề thi
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Kiểm tra quyền vào lớp đối với đề thi giới hạn lớp
+  if (user && isStudent && exam && !isExamPermittedForStudent(exam, user.id, classes)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
+          <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-900">Đề thi giới hạn lớp học</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Đề thi <span className="font-bold text-slate-700">"{exam.title}"</span> chỉ dành riêng cho học sinh thuộc các lớp được phân công ({exam.assigned_classes?.join(', ') || 'lớp chuyên'}).
+            <br />
+            Tài khoản của em hiện chưa được duyệt vào lớp để tham gia đề thi này.
+          </p>
+          <div className="pt-2 flex flex-col gap-2">
+            <Link
+              href="/classes"
+              className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
+            >
+              Vào mục Lớp học để tham gia lớp
+            </Link>
+            <Link
+              href="/exams"
+              className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition"
+            >
+              Quay lại danh sách đề thi
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!exam || questions.length === 0 || !currentQ) {
     return <div className="p-8 text-center text-slate-500">Đang chuẩn bị đề thi...</div>;
