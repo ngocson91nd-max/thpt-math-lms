@@ -27,7 +27,30 @@ import {
 export default function ClassesPage() {
   const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  // Khởi tạo ngay lập tức từ bộ nhớ trình duyệt (0ms) để không bị trễ khi chuyển trang
+  const [classes, setClasses] = useState<ClassItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedDeleted = localStorage.getItem('lms_deleted_class_ids');
+      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+      const saved = localStorage.getItem('lms_classes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((c: any) => !deletedIds.has(c.id) && !deletedIds.has(c.code));
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const saved = localStorage.getItem('lms_classes');
+      if (saved && JSON.parse(saved).length > 0) return false;
+    } catch {}
+    return true;
+  });
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Phân quyền: Học sinh không cần xem danh mục quản lý lớp, chuyển hướng sang danh sách đề thi
@@ -76,6 +99,8 @@ export default function ClassesPage() {
       }
     } catch (e) {
       console.error('Fetch classes error:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -309,7 +334,25 @@ export default function ClassesPage() {
       </div>
 
       {/* Class Cards Grid */}
-      {classes.length === 0 ? (
+      {isLoading && classes.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="h-6 w-24 bg-slate-200 rounded-lg"></div>
+                <div className="h-4 w-28 bg-slate-100 rounded-md"></div>
+              </div>
+              <div className="h-7 w-48 bg-slate-200 rounded-lg"></div>
+              <div className="h-4 w-full bg-slate-100 rounded-md"></div>
+              <div className="h-16 bg-slate-50 rounded-2xl border border-slate-100"></div>
+              <div className="flex justify-between pt-2">
+                <div className="h-9 w-28 bg-slate-100 rounded-xl"></div>
+                <div className="h-9 w-24 bg-blue-100 rounded-xl"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : classes.length === 0 ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
             <GraduationCap className="h-7 w-7" />
@@ -425,6 +468,7 @@ export default function ClassesPage() {
 
                   <Link
                     href={`/exams?class=${encodeURIComponent(c.name)}`}
+                    prefetch={true}
                     className="inline-flex items-center gap-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
                     title={`Xem các đề thi gán cho lớp ${c.name}`}
                   >
@@ -434,6 +478,7 @@ export default function ClassesPage() {
 
                   <Link
                     href={`/classes/${c.id}`}
+                    prefetch={true}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
                   >
                     <span>Vào lớp</span>

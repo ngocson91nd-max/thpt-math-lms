@@ -26,6 +26,7 @@ import {
   School,
   AlertCircle,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -77,7 +78,47 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  if (!initialClass || isClassDeleted) {
+  const [currentClass, setCurrentClass] = useState<ClassItem | undefined>(initialClass);
+  const [isFetchingClass, setIsFetchingClass] = useState<boolean>(!initialClass && !isClassDeleted);
+  const [activeTab, setActiveTab] = useState<'members' | 'exams' | 'pending'>('members');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!currentClass && !isClassDeleted) {
+      fetch('/api/classes')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.classes)) {
+            const found = data.classes.find(
+              (c: any) =>
+                c.id === rawId ||
+                c.id === decodedId ||
+                c.id === normalizedId ||
+                (c.code && c.code.toLowerCase() === rawId.toLowerCase()) ||
+                (c.code && c.code.toLowerCase() === decodedId.toLowerCase())
+            );
+            if (found) {
+              setCurrentClass(found);
+              localStorage.setItem('lms_classes', JSON.stringify(data.classes));
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsFetchingClass(false));
+    }
+  }, [currentClass, isClassDeleted, rawId, decodedId, normalizedId]);
+
+  // Loading skeleton khi đang nạp lớp từ máy chủ
+  if (isFetchingClass) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+        <p className="text-sm font-medium text-slate-500">Đang tải thông tin lớp học...</p>
+      </div>
+    );
+  }
+
+  if (!currentClass || isClassDeleted) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center space-y-4">
         <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
@@ -98,14 +139,10 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const [currentClass] = useState<ClassItem>(initialClass);
-  const [activeTab, setActiveTab] = useState<'members' | 'exams' | 'pending'>('members');
-  const [copied, setCopied] = useState(false);
-
   // Members state: nạp từ cache riêng của lớp, nếu chưa có thì lấy từ MOCK_CLASS_MEMBERS
   const [members, setMembers] = useState<ClassMember[]>(() => {
     if (typeof window !== 'undefined') {
-      const savedMembers = localStorage.getItem(`lms_class_members_${initialClass.id}`);
+      const savedMembers = localStorage.getItem(`lms_class_members_${currentClass.id}`);
       if (savedMembers) {
         try {
           const parsed = JSON.parse(savedMembers);
@@ -113,7 +150,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         } catch {}
       }
     }
-    return MOCK_CLASS_MEMBERS.filter((m) => m.class_id === initialClass.id);
+    return MOCK_CLASS_MEMBERS.filter((m) => m.class_id === currentClass.id);
   });
 
   // Pending students state
@@ -135,6 +172,13 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               localStorage.setItem(
                 `lms_class_pending_requests_${currentClass.id}`,
                 JSON.stringify(res.pending)
+              );
+            }
+            if (res.success && Array.isArray(res.members) && res.members.length > 0) {
+              setMembers(res.members);
+              localStorage.setItem(
+                `lms_class_members_${currentClass.id}`,
+                JSON.stringify(res.members)
               );
             }
           })
