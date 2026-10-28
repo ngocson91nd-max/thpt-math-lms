@@ -4,8 +4,8 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { Exam, Question, QuestionType, QuestionDifficulty } from '@/types/database';
-import { MOCK_EXAMS, MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
+import { Exam, Question, QuestionType, QuestionDifficulty, ClassItem } from '@/types/database';
+import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import { parseExamLatex } from '@/lib/latex/examParser';
 import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
@@ -33,6 +33,7 @@ import {
   X,
   Search,
   Check,
+  ArrowUpRight,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -89,6 +90,7 @@ function ExamEditorContent() {
   const [noTimeLimit, setNoTimeLimit] = useState(false);
   const [accessType, setAccessType] = useState<'public' | 'restricted'>('restricted');
   const [assignedClasses, setAssignedClasses] = useState<string[]>(['12 Toán 1']);
+  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
   const [partPoints, setPartPoints] = useState({ part1: 3, part2: 4, part3: 3, part4: 0 });
   const [trueFalseScoring, setTrueFalseScoring] = useState<'standard_thpt' | 'equal'>('standard_thpt');
   const [maxAttempts, setMaxAttempts] = useState<number>(0);
@@ -166,9 +168,28 @@ function ExamEditorContent() {
   // Lưu thông báo lưu thành công
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Tải dữ liệu đề thi khi vào trang
+  // Tải dữ liệu đề thi và lớp học khi vào trang
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Tải danh sách lớp học thực tế
+    const savedClasses = localStorage.getItem('lms_classes');
+    if (savedClasses) {
+      try {
+        const parsedCls = JSON.parse(savedClasses);
+        if (Array.isArray(parsedCls) && parsedCls.length > 0) {
+          const existingIds = new Set(parsedCls.map((c: any) => c.id || c.name));
+          const missing = MOCK_CLASSES.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.name));
+          setClasses([...parsedCls, ...missing]);
+        }
+      } catch {}
+    }
+
+    // Đọc class param từ URL nếu có (ví dụ khi tạo đề từ trang chi tiết lớp)
+    const classFromUrl = searchParams.get('class');
+    if (classFromUrl && !examIdParam) {
+      setAssignedClasses([classFromUrl]);
+    }
 
     // Tải ngân hàng câu hỏi
     const savedBank = localStorage.getItem('lms_questions');
@@ -181,6 +202,15 @@ function ExamEditorContent() {
 
     // Nếu sửa đề thi đã có
     if (examIdParam) {
+      // Kiểm tra xem đề này đã bị xóa vĩnh viễn chưa
+      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+      if (deletedIds.has(examIdParam)) {
+        alert('Đề thi này đã bị xóa vĩnh viễn khỏi hệ thống!');
+        router.push('/exams');
+        return;
+      }
+
       const savedExams = localStorage.getItem('lms_exams');
       let found: Exam | undefined;
       if (savedExams) {
@@ -189,7 +219,7 @@ function ExamEditorContent() {
           found = parsed.find((e: Exam) => e.id === examIdParam);
         } catch {}
       }
-      if (!found) {
+      if (!found && !deletedIds.has(examIdParam)) {
         found = MOCK_EXAMS.find((e) => e.id === examIdParam);
       }
 
@@ -780,8 +810,11 @@ function ExamEditorContent() {
 
     if (typeof window !== 'undefined') {
       try {
+        const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+        const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
         const savedExams = localStorage.getItem('lms_exams');
         let examsList: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
+        examsList = examsList.filter((e) => !deletedIds.has(e.id) && !deletedIds.has(e.code || ''));
         const existIdx = examsList.findIndex((e) => e.id === examId);
         if (existIdx >= 0) {
           examsList[existIdx] = updatedExam;
@@ -1738,19 +1771,29 @@ function ExamEditorContent() {
             {/* Lớp được phép thi */}
             {accessType === 'restricted' && (
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-slate-600">Lớp được phép thi</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-600">Lớp được phép thi</label>
+                  <Link
+                    href="/classes"
+                    className="text-[10px] font-bold text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                    title="Mở trang Quản lý Lớp học"
+                  >
+                    <span>Quản lý lớp</span>
+                    <ArrowUpRight className="h-2.5 w-2.5" />
+                  </Link>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {['11 Anh 1', '11 Sử', '12 Toán 1'].map((cls) => {
-                    const isSelected = assignedClasses.includes(cls);
+                  {classes.map((cls) => {
+                    const isSelected = assignedClasses.includes(cls.name);
                     return (
                       <button
-                        key={cls}
+                        key={cls.id}
                         type="button"
                         onClick={() => {
                           if (isSelected) {
-                            setAssignedClasses(assignedClasses.filter((c) => c !== cls));
+                            setAssignedClasses(assignedClasses.filter((c) => c !== cls.name));
                           } else {
-                            setAssignedClasses([...assignedClasses, cls]);
+                            setAssignedClasses([...assignedClasses, cls.name]);
                           }
                         }}
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
@@ -1759,7 +1802,7 @@ function ExamEditorContent() {
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        <span>{cls}</span>
+                        <span>{cls.name}</span>
                         {isSelected && <Check className="h-3 w-3" />}
                       </button>
                     );

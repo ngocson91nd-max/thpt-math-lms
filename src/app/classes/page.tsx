@@ -20,6 +20,7 @@ import {
   Sparkles,
   Pencil,
   Clock,
+  ClipboardList,
 } from 'lucide-react';
 
 export default function ClassesPage() {
@@ -58,7 +59,11 @@ export default function ClassesPage() {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            setClasses(parsed);
+            const existingIds = new Set(parsed.map((c: any) => c.id || c.name));
+            const missing = MOCK_CLASSES.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.name));
+            const merged = [...parsed, ...missing];
+            setClasses(merged);
+            localStorage.setItem('lms_classes', JSON.stringify(merged));
             return;
           }
         } catch (e) {
@@ -403,6 +408,15 @@ export default function ClassesPage() {
                       </button>
                     </>
                   )}
+
+                  <Link
+                    href={`/exams?class=${encodeURIComponent(c.name)}`}
+                    className="inline-flex items-center gap-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                    title={`Xem các đề thi gán cho lớp ${c.name}`}
+                  >
+                    <ClipboardList className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Đề thi</span>
+                  </Link>
 
                   <Link
                     href={`/classes/${c.id}`}

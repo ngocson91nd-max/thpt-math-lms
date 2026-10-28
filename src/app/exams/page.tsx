@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_EXAMS, MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
-import { Exam, Question } from '@/types/database';
+import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
+import { Exam, Question, ClassItem } from '@/types/database';
 import { parseExamLatex } from '@/lib/latex/examParser';
 import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
@@ -44,12 +44,17 @@ import {
   Grid,
   List,
   Eye,
+  ArrowUpRight,
+  ExternalLink,
+  GraduationCap,
+  Users,
 } from 'lucide-react';
 
 export default function ExamsPage() {
   const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
   const [exams, setExams] = useState<Exam[]>(MOCK_EXAMS);
+  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
   const [questionsPool, setQuestionsPool] = useState<Question[]>(MOCK_QUESTIONS);
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
@@ -115,10 +120,34 @@ export default function ExamsPage() {
   const [editDescription, setEditDescription] = useState('');
   const [editShuffle, setEditShuffle] = useState(true);
 
-  // Tải danh sách đề thi & ngân hàng câu hỏi
+  // Tải danh sách đề thi, lớp học & ngân hàng câu hỏi
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // 1. Tải Ngân hàng câu hỏi
+      // 0. Đọc URL query param nếu có ?class=...
+      const params = new URLSearchParams(window.location.search);
+      const classQuery = params.get('class');
+      if (classQuery) {
+        setSelectedClass(classQuery);
+      }
+
+      // 1. Tải Danh sách Lớp học thực tế
+      const savedClasses = localStorage.getItem('lms_classes');
+      if (savedClasses) {
+        try {
+          const parsedCls = JSON.parse(savedClasses);
+          if (Array.isArray(parsedCls) && parsedCls.length > 0) {
+            const existingIds = new Set(parsedCls.map((c: any) => c.id || c.name));
+            const missing = MOCK_CLASSES.filter((c) => !existingIds.has(c.id) && !existingIds.has(c.name));
+            const mergedClasses = [...parsedCls, ...missing];
+            setClasses(mergedClasses);
+            localStorage.setItem('lms_classes', JSON.stringify(mergedClasses));
+          }
+        } catch (e) {
+          console.error('Lỗi tải danh sách lớp học:', e);
+        }
+      }
+
+      // 2. Tải Ngân hàng câu hỏi
       const savedQuestions = localStorage.getItem('lms_questions');
       if (savedQuestions) {
         try {
@@ -133,18 +162,35 @@ export default function ExamsPage() {
         }
       }
 
-      // 2. Tải Danh sách đề thi
+      // 3. Tải Danh sách đề thi & Xử lý đề thi đã xóa vĩnh viễn (blacklist)
+      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+
       const savedExams = localStorage.getItem('lms_exams');
       if (savedExams) {
         try {
           const parsed = JSON.parse(savedExams);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất để không rò rỉ đáp án/lời giải từ cache cũ
+          if (Array.isArray(parsed)) {
+            // Lọc bỏ triệt để các đề đã bị xóa vĩnh viễn
+            const filteredParsed = parsed.filter(
+              (e: any) => !deletedIds.has(e.id) && !deletedIds.has(e.code)
+            );
+
+            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất nếu chưa bị xóa
             const mockMap = new Map(MOCK_EXAMS.map((m) => [m.id, m]));
-            const merged = parsed.map((e: any) => mockMap.get(e.id) || e);
+            const merged = filteredParsed.map((e: any) => mockMap.get(e.id) || e);
+
+            // Chỉ thêm mock exam nếu nó CHƯA BAO GIỜ bị xóa và chưa có trong danh sách
             MOCK_EXAMS.forEach((m) => {
-              if (!merged.some((e: any) => e.id === m.id)) merged.push(m);
+              if (
+                !deletedIds.has(m.id) &&
+                !deletedIds.has(m.code || '') &&
+                !merged.some((e: any) => e.id === m.id)
+              ) {
+                merged.push(m);
+              }
             });
+
             setExams(merged);
             localStorage.setItem('lms_exams', JSON.stringify(merged));
             return;
@@ -152,6 +198,14 @@ export default function ExamsPage() {
         } catch (e) {
           console.error(e);
         }
+      } else {
+        // Lần đầu chạy chưa có savedExams: nạp MOCK_EXAMS nhưng vẫn lọc bỏ nếu có trong deletedIds
+        const initial = MOCK_EXAMS.filter(
+          (m) => !deletedIds.has(m.id) && !deletedIds.has(m.code || '')
+        );
+        setExams(initial);
+        localStorage.setItem('lms_exams', JSON.stringify(initial));
+        return;
       }
     }
 
@@ -771,16 +825,36 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     setEditingExam(null);
   };
 
-  // Xóa đề thi
+  // Xóa vĩnh viễn đề thi (dành cho Giáo viên & Quản trị viên)
   const handleDeleteExam = async (examId: string, examTitle: string) => {
     const isConfirmed = confirm(
-      `Thầy có chắc chắn muốn xóa đề thi "${examTitle}" không?\nHọc sinh sẽ không còn thấy đề này trong danh sách.`
+      `Thầy có chắc chắn muốn xóa vĩnh viễn đề thi "${examTitle}" không?\nHọc sinh và hệ thống sẽ không còn thấy đề này nữa.`
     );
     if (!isConfirmed) return;
 
+    // 1. Lưu ID và code của đề thi vào danh sách đen lms_deleted_exam_ids để ngăn chặn tự động nạp lại
+    try {
+      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+      const deletedIds: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
+      const targetExam = exams.find((e) => e.id === examId);
+      if (!deletedIds.includes(examId)) {
+        deletedIds.push(examId);
+      }
+      if (targetExam?.code && !deletedIds.includes(targetExam.code)) {
+        deletedIds.push(targetExam.code);
+      }
+      localStorage.setItem('lms_deleted_exam_ids', JSON.stringify(deletedIds));
+    } catch (e) {
+      console.error('Lỗi lưu danh sách đề đã xóa:', e);
+    }
+
+    // 2. Cập nhật state & lms_exams
     const updated = exams.filter((e) => e.id !== examId);
     saveExamsToStorage(updated);
+    setCopyToast(`Đã xóa vĩnh viễn đề thi: "${examTitle}"!`);
+    setTimeout(() => setCopyToast(null), 3000);
 
+    // 3. Xóa trên Supabase nếu có kết nối
     try {
       const supabase = createClient();
       if (supabase) {
@@ -789,6 +863,17 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     } catch (err) {
       console.warn('Lỗi xóa đề thi trên Supabase:', err);
     }
+  };
+
+  // Tính số lượng đề thi gán cho từng lớp học thực tế
+  const getExamCountForClass = (clsName: string, clsGrade?: number) => {
+    return exams.filter((e) => {
+      const inAssigned = e.assigned_classes?.some(
+        (c) => c.toLowerCase() === clsName.toLowerCase() || c.toLowerCase().includes(clsName.toLowerCase())
+      );
+      const inClassName = e.class_name?.toLowerCase() === clsName.toLowerCase();
+      return inAssigned || inClassName;
+    }).length;
   };
 
   const filteredExams = exams.filter((e) => {
@@ -943,53 +1028,99 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
       {/* BỐ CỤC CHÍNH: CỘT LỌC LỚP BÊN TRÁI + LƯỚI ĐỀ THI BÊN PHẢI (Ảnh 7 iExam) */}
       <div className="flex flex-col lg:flex-row gap-5 items-start">
-        {/* Cột trái: Danh mục lớp học */}
-        <aside className="w-full lg:w-56 shrink-0 space-y-1.5 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">
-            Danh mục lớp
+        {/* Cột trái: Danh mục lớp học liên kết trực tiếp với /classes */}
+        <aside className="w-full lg:w-64 shrink-0 space-y-2 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100 pb-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <GraduationCap className="h-4 w-4 text-blue-600" />
+              Danh mục lớp
+            </span>
+            <Link
+              href="/classes"
+              className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 hover:underline"
+              title="Đi tới trang Quản lý Lớp học"
+            >
+              <span>Quản lý</span>
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
           </div>
-          {[
-            { id: 'all', label: 'Tất cả', count: exams.length },
-            {
-              id: '11 Anh 1',
-              label: '11 Anh 1',
-              count: exams.filter((e) => e.assigned_classes?.includes('11 Anh 1') || e.grade === 11).length,
-            },
-            {
-              id: '11 Sử',
-              label: '11 Sử',
-              count: exams.filter((e) => e.assigned_classes?.includes('11 Sử') || e.grade === 11).length,
-            },
-            {
-              id: '12 Toán 1',
-              label: '12 Toán 1',
-              count: exams.filter((e) => e.assigned_classes?.includes('12 Toán 1') || e.grade === 12).length,
-            },
-          ].map((tab) => {
-            const isActive = selectedClass === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSelectedClass(tab.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+
+          <div className="space-y-1">
+            {/* Mục: Tất cả lớp */}
+            <button
+              type="button"
+              onClick={() => setSelectedClass('all')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                selectedClass === 'all'
+                  ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className={`h-3.5 w-3.5 ${selectedClass === 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
+                <span>Tất cả các lớp</span>
+              </div>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                  selectedClass === 'all' ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <FileText className={`h-3.5 w-3.5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                </div>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                    isActive ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
+                {exams.length}
+              </span>
+            </button>
+
+            {/* Danh sách lớp động tải từ classes */}
+            {classes.map((cls) => {
+              const isActive = selectedClass.toLowerCase() === cls.name.toLowerCase();
+              const count = getExamCountForClass(cls.name, cls.grade);
+              return (
+                <div
+                  key={cls.id}
+                  className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClass(cls.name)}
+                    className="flex-1 flex items-center gap-2 text-left cursor-pointer overflow-hidden py-0.5"
+                    title={`Lọc đề thi lớp ${cls.name}`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                    <span className="truncate">{cls.name}</span>
+                    <span className="text-[10px] text-slate-400 font-normal shrink-0">K{cls.grade}</span>
+                  </button>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span
+                      className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold ${
+                        isActive ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                    <Link
+                      href={`/classes/${cls.id}`}
+                      className="p-1 text-slate-400 hover:text-blue-600 rounded-md hover:bg-white transition"
+                      title={`Xem chi tiết và học sinh lớp ${cls.name}`}
+                    >
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <Link
+              href="/classes"
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition border border-dashed border-slate-200 hover:border-blue-300"
+            >
+              <Plus className="h-3.5 w-3.5 text-blue-600" />
+              <span>Tạo hoặc quản lý lớp</span>
+            </Link>
+          </div>
         </aside>
 
         {/* Cột phải: Lưới đề thi chuẩn iExam */}
@@ -1083,24 +1214,47 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                         {exam.title}
                       </h3>
 
-                      {/* LỚP ĐƯỢC PHÉP THI */}
+                      {/* LỚP ĐƯỢC PHÉP THI - Liên kết trực tiếp lớp học */}
                       <div className="text-[11px] text-slate-500 mt-2 mb-1">
                         <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block mb-1">
                           LỚP ĐƯỢC PHÉP THI
                         </span>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
-                            exam.assigned_classes.map((cls) => (
-                              <span
-                                key={cls}
-                                className="rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold"
-                              >
-                                {cls}
-                              </span>
-                            ))
+                            exam.assigned_classes.map((clsName) => {
+                              const matchedClass = classes.find(
+                                (c) =>
+                                  c.name.toLowerCase() === clsName.toLowerCase() ||
+                                  c.code.toLowerCase() === clsName.toLowerCase()
+                              );
+                              return (
+                                <div
+                                  key={clsName}
+                                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold hover:bg-blue-100 transition"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedClass(clsName)}
+                                    title={`Lọc theo lớp ${clsName}`}
+                                    className="cursor-pointer hover:underline"
+                                  >
+                                    {clsName}
+                                  </button>
+                                  {matchedClass && (
+                                    <Link
+                                      href={`/classes/${matchedClass.id}`}
+                                      title={`Mở trang chi tiết lớp ${clsName}`}
+                                      className="text-blue-500 hover:text-blue-900 ml-0.5 p-0.5 rounded hover:bg-blue-200/50"
+                                    >
+                                      <ArrowUpRight className="h-2.5 w-2.5" />
+                                    </Link>
+                                  )}
+                                </div>
+                              );
+                            })
                           ) : (
-                            <span className="rounded-md bg-slate-100 text-slate-700 px-2 py-0.5 text-[11px] font-semibold">
-                              Lớp {exam.grade || 12}
+                            <span className="rounded-md bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px] font-medium italic">
+                              Toán Khối {exam.grade || 12} (Chưa gán lớp riêng)
                             </span>
                           )}
                         </div>
@@ -1251,10 +1405,12 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     onChange={(e) => setPdfAssignedClass(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 p-2 text-xs bg-white focus:outline-none"
                   >
-                    <option value="12 Toán 1">12 Toán 1</option>
-                    <option value="11 Anh 1">11 Anh 1</option>
-                    <option value="11 Sử">11 Sử</option>
-                    <option value="Khác">Tất cả lớp</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name} (Khối {c.grade})
+                      </option>
+                    ))}
+                    <option value="Tất cả các lớp">Tất cả các lớp</option>
                   </select>
                 </div>
 
