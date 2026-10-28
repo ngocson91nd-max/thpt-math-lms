@@ -124,98 +124,18 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       try {
         const raw = localStorage.getItem(`lms_class_pending_requests_${currentClass.id}`);
         let list: any[] = raw ? JSON.parse(raw) : [];
-
-        // Đồng bộ yêu cầu duyệt của học sinh Nguyễn Văn An cho lớp TOAN12-2150 (hoặc f3750ff9-ca79-4fcd-a5d1-d73b84b84f36, hoặc tên 1)
-        const isClass2150 =
-          currentClass.code === 'TOAN12-2150' ||
-          currentClass.id === 'f3750ff9-ca79-4fcd-a5d1-d73b84b84f36' ||
-          currentClass.name === '1';
-
-        if (isClass2150) {
-          const isAnAlreadyMember = members.some(
-            (m) => m.user_id === 'user-an-toan-12' || m.profile?.email === 'an.toan12@gmail.com'
-          );
-          const isAnAlreadyPending = list.some(
-            (p) => p.user_id === 'user-an-toan-12' || p.user?.email === 'an.toan12@gmail.com'
-          );
-          if (!isAnAlreadyMember && !isAnAlreadyPending) {
-            list.push({
-              id: 'req-student-an-2150',
-              class_id: currentClass.id,
-              user_id: 'user-an-toan-12',
-              user: {
-                id: 'user-an-toan-12',
-                full_name: 'Nguyễn Văn An (12 Toán)',
-                email: 'an.toan12@gmail.com',
-                phone: '0987654321',
-                role: 'student',
-                grade: 12,
-                school_name: 'THPT Chuyên Lê Hồng Phong',
-              },
-              created_at: new Date().toISOString(),
-              status: 'pending',
-            });
-            localStorage.setItem(`lms_class_pending_requests_${currentClass.id}`, JSON.stringify(list));
-          }
-        }
-
-        // Tương tự cho lớp TOAN12-1665 (Nguyễn Thị Mai)
-        const isClass1665 =
-          currentClass.code === 'TOAN12-1665' ||
-          currentClass.id === '50fac48d-0674-4269-b84e-a653ec3c8c6a';
-
-        if (isClass1665) {
-          const isMaiAlreadyMember = members.some(
-            (m) =>
-              m.user_id === '33333333-3333-3333-3333-333333333333' ||
-              m.profile?.email === 'student.mai@thpt-math-lms.vn'
-          );
-          const isMaiAlreadyPending = list.some(
-            (p) =>
-              p.user_id === '33333333-3333-3333-3333-333333333333' ||
-              p.user?.email === 'student.mai@thpt-math-lms.vn'
-          );
-          if (!isMaiAlreadyMember && !isMaiAlreadyPending) {
-            list.push({
-              id: 'req-student-mai-1665',
-              class_id: currentClass.id,
-              user_id: '33333333-3333-3333-3333-333333333333',
-              user: {
-                id: '33333333-3333-3333-3333-333333333333',
-                full_name: 'Nguyễn Thị Mai',
-                email: 'student.mai@thpt-math-lms.vn',
-                phone: '0923456789',
-                role: 'student',
-                grade: 12,
-                school_name: 'THPT Chuyên Lê Hồng Phong',
-              },
-              created_at: new Date().toISOString(),
-              status: 'pending',
-            });
-            localStorage.setItem(`lms_class_pending_requests_${currentClass.id}`, JSON.stringify(list));
-          }
-        }
-
         setPendingStudents(list);
 
         // Đồng bộ thời gian thực từ Cloud API
-        fetch(`/api/cloud-sync?classId=${currentClass.id}`)
+        fetch(`/api/cloud-sync?classId=${currentClass.id}&t=${Date.now()}`, { cache: 'no-store' })
           .then((r) => r.json())
           .then((res) => {
             if (res.success && Array.isArray(res.pending)) {
-              setPendingStudents((prev) => {
-                const map = new Map(prev.map((item) => [item.user_id || item.id, item]));
-                res.pending.forEach((item: any) => {
-                  const key = item.user_id || item.id;
-                  const alreadyMem = members.some(
-                    (m) => m.user_id === key || m.profile?.email === item.user?.email
-                  );
-                  if (!alreadyMem && !map.has(key)) {
-                    map.set(key, item);
-                  }
-                });
-                return Array.from(map.values());
-              });
+              setPendingStudents(res.pending);
+              localStorage.setItem(
+                `lms_class_pending_requests_${currentClass.id}`,
+                JSON.stringify(res.pending)
+              );
             }
           })
           .catch(() => {});

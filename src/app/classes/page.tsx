@@ -48,22 +48,24 @@ export default function ClassesPage() {
   const [classCode, setClassCode] = useState('');
   const [grade, setGrade] = useState<10 | 11 | 12>(12);
   const [desc, setDesc] = useState('');
+  const [createYear, setCreateYear] = useState('2026-2027');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit Form State
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
   const [editGrade, setEditGrade] = useState<10 | 11 | 12>(12);
   const [editDesc, setEditDesc] = useState('');
-  const [editYear, setEditYear] = useState('2025-2026');
+  const [editYear, setEditYear] = useState('2026-2027');
 
   // Join state
   const [joinInput, setJoinInput] = useState('');
   const [joinSuccess, setJoinSuccess] = useState(false);
 
-  // Tải danh sách lớp học thời gian thực trực tiếp từ Supabase Cloud
+  // Tải danh sách lớp học thời gian thực trực tiếp từ Supabase Cloud (chống cache)
   const fetchClasses = async () => {
     try {
-      const res = await fetch('/api/classes');
+      const res = await fetch(`/api/classes?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success && Array.isArray(data.classes)) {
         setClasses(data.classes);
@@ -93,8 +95,9 @@ export default function ClassesPage() {
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!className.trim()) return;
+    if (!className.trim() || isSubmitting) return;
 
+    setIsSubmitting(true);
     const finalCode =
       classCode.trim().toUpperCase() || `TOAN${grade}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -106,23 +109,26 @@ export default function ClassesPage() {
           name: className.trim(),
           code: finalCode,
           grade,
-          academic_year: '2025-2026',
+          academic_year: createYear || '2026-2027',
           teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
           description: desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.',
         }),
       });
       const data = await res.json();
       if (data.success) {
+        setShowCreateModal(false);
+        setClassName('');
+        setClassCode('');
+        setDesc('');
         await fetchClasses();
+      } else {
+        alert('Lỗi tạo lớp: ' + (data.error || 'Vui lòng thử lại'));
       }
     } catch (err) {
       console.error('Lỗi khi thêm lớp vào Supabase:', err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setShowCreateModal(false);
-    setClassName('');
-    setClassCode('');
-    setDesc('');
   };
 
   const openEditModal = (c: ClassItem) => {
@@ -168,22 +174,32 @@ export default function ClassesPage() {
     );
     if (!isConfirmed) return;
 
-    // 1. Cập nhật giao diện ngay lập tức
+    // 1. Cập nhật giao diện và local cache ngay lập tức
     setClasses((prev) => prev.filter((c) => c.id !== classId));
-
-    // 2. Xóa vĩnh viễn trên Supabase Cloud Database qua API Server
-    try {
-      await fetch(`/api/classes?id=${classId}`, { method: 'DELETE' });
-    } catch (err) {
-      console.error('Lỗi khi xóa lớp trên Cloud:', err);
-    }
-
-    // 3. Dọn dẹp cache
     if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem('lms_classes');
+      if (raw) {
+        try {
+          const parsed: ClassItem[] = JSON.parse(raw);
+          localStorage.setItem('lms_classes', JSON.stringify(parsed.filter((c) => c.id !== classId)));
+        } catch {}
+      }
       localStorage.removeItem(`lms_class_members_${classId}`);
       localStorage.removeItem(`lms_class_pending_requests_${classId}`);
     }
 
+    // 2. Xóa vĩnh viễn trên Supabase Cloud Database qua API Server
+    try {
+      const res = await fetch(`/api/classes?id=${classId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        alert('Lỗi xóa trên Cloud: ' + (data.error || 'Vui lòng thử lại'));
+      }
+    } catch (err) {
+      console.error('Lỗi khi xóa lớp trên Cloud:', err);
+    }
+
+    // 3. Tải lại danh sách mới nhất từ Cloud
     await fetchClasses();
   };
 
@@ -280,22 +296,12 @@ export default function ClassesPage() {
                     <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
                       Toán Lớp {c.grade}
                     </span>
-                    {(() => {
-                      if (typeof window === 'undefined') return null;
-                      try {
-                        const raw = localStorage.getItem(`lms_class_pending_requests_${c.id}`);
-                        const count = raw ? JSON.parse(raw).length : 0;
-                        if (count > 0) {
-                          return (
-                            <span className="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-800 animate-pulse flex items-center gap-1">
-                              <Clock className="h-3 w-3 text-amber-600" />
-                              <span>{count} chờ duyệt</span>
-                            </span>
-                          );
-                        }
-                      } catch {}
-                      return null;
-                    })()}
+                    {c.pending_count !== undefined && c.pending_count > 0 && (
+                      <span className="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-800 animate-pulse flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-amber-600" />
+                        <span>{c.pending_count} chờ duyệt</span>
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -417,7 +423,7 @@ export default function ClassesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
                   <select
@@ -432,14 +438,27 @@ export default function ClassesPage() {
                 </div>
 
                 <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Năm học</label>
+                  <select
+                    value={createYear}
+                    onChange={(e) => setCreateYear(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="2026-2027">2026-2027</option>
+                    <option value="2025-2026">2025-2026</option>
+                    <option value="2024-2025">2024-2025</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Mã vào lớp (Tùy chọn)
+                    Mã vào lớp
                   </label>
                   <input
                     type="text"
                     value={classCode}
                     onChange={(e) => setClassCode(e.target.value)}
-                    placeholder="Tự động nếu bỏ trống"
+                    placeholder="Tự động"
                     className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-mono uppercase"
                   />
                 </div>
@@ -468,9 +487,10 @@ export default function ClassesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition shadow-sm cursor-pointer"
                 >
-                  Lưu & Tạo Lớp
+                  {isSubmitting ? 'Đang tạo...' : 'Lưu & Tạo Lớp'}
                 </button>
               </div>
             </form>

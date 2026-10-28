@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/adminClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET: Lấy danh sách toàn bộ lớp học thời gian thực từ Supabase Cloud
 export async function GET(req: NextRequest) {
   try {
@@ -37,7 +40,16 @@ export async function GET(req: NextRequest) {
       pending_count: pendingCountMap[c.id] || 0,
     }));
 
-    return NextResponse.json({ success: true, classes: classesWithCounts });
+    return NextResponse.json(
+      { success: true, classes: classesWithCounts },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      }
+    );
   } catch (err: any) {
     console.error('API /api/classes GET error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
