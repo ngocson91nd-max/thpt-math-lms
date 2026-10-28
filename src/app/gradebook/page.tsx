@@ -25,7 +25,7 @@ import {
 
 export default function GradebookPage() {
   const { user, isTeacher, isStudent } = useAuth();
-  const [submissions, setSubmissions] = useState<Submission[]>(MOCK_SUBMISSIONS);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [search, setSearch] = useState('');
 
   // Modals
@@ -45,7 +45,7 @@ export default function GradebookPage() {
 
   // Tải thêm bài thi từ localStorage và Supabase
   useEffect(() => {
-    let combined = [...MOCK_SUBMISSIONS];
+    let combined: Submission[] = [];
 
     if (typeof window !== 'undefined') {
       const globalSaved = localStorage.getItem('lms_all_submissions');

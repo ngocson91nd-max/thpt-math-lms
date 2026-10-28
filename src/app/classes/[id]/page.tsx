@@ -146,9 +146,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   // Exams state
-  const [classExams, setClassExams] = useState<Exam[]>(() => {
-    return MOCK_EXAMS.filter((e) => e.class_id === currentClass.id || !e.class_id);
-  });
+  const [classExams, setClassExams] = useState<Exam[]>([]);
 
   // Modal States
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -212,7 +210,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         } catch {}
       }
       if (!allExams.length) {
-        allExams = MOCK_EXAMS;
+        allExams = [];
       }
       allExams = allExams.filter((e) => !deletedIds.has(e.id) && !deletedIds.has(e.code || ''));
 

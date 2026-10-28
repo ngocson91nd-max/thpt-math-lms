@@ -53,7 +53,16 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
 
   const [exam, setExam] = useState<Exam | undefined>(() => {
-    return MOCK_EXAMS.find((e) => e.id === resolvedParams.id) || MOCK_EXAMS[0];
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('lms_exams');
+        if (saved) {
+          const list = JSON.parse(saved);
+          return list.find((e: any) => e.id === resolvedParams.id);
+        }
+      } catch {}
+    }
+    return undefined;
   });
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -145,13 +154,6 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           const parsed: Exam[] = JSON.parse(savedExams);
           const found = parsed.find((e) => e.id === resolvedParams.id);
           if (found) {
-            // Nếu là đề hệ thống chuẩn, ưu tiên bản cập nhật câu hỏi mới nhất từ MOCK_EXAMS để tránh cache cũ làm rò rỉ lời giải
-            if (mockExam) {
-              setExam(mockExam);
-              setTimeLeft(mockExam.duration_minutes * 60);
-              checkAndLoadPdf(mockExam);
-              return;
-            }
             setExam(found);
             setTimeLeft(found.duration_minutes * 60);
             checkAndLoadPdf(found);

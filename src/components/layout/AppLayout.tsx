@@ -49,12 +49,36 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
-  // Khôi phục tùy chọn ẩn/hiện thanh bên từ localStorage
+  // Khôi phục tùy chọn ẩn/hiện thanh bên từ localStorage & Dọn dẹp dữ liệu rác/đề thi cũ
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('lms_sidebar_collapsed');
       if (saved === 'true') {
         setIsSidebarCollapsed(true);
+      }
+
+      // Xóa sạch toàn bộ dữ liệu bài thi/đề thi cũ theo yêu cầu của Thầy Sơn (reset sạch sẽ)
+      const DATA_CLEAN_VERSION = 'lms_v3_clean_all_exams_data';
+      if (localStorage.getItem(DATA_CLEAN_VERSION) !== 'true') {
+        localStorage.removeItem('lms_exams');
+        localStorage.removeItem('lms_deleted_exam_ids');
+        localStorage.removeItem('lms_submissions');
+        
+        // Dọn sạch tất cả bài nộp của học sinh và câu trả lời tạm
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            (key.startsWith('my_submissions_') ||
+             key.startsWith('submission_') ||
+             key.startsWith('exam_answers_') ||
+             key.startsWith('exam_draft_'))
+          ) {
+            localStorage.removeItem(key);
+          }
+        }
+        localStorage.setItem(DATA_CLEAN_VERSION, 'true');
+        window.dispatchEvent(new Event('lms_exams_updated'));
       }
     }
   }, []);

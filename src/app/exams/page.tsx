@@ -179,72 +179,50 @@ export default function ExamsPage() {
         }
       }
 
-      // 3. Tải Danh sách đề thi & Xử lý đề thi đã xóa vĩnh viễn (blacklist)
-      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
-      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+      // 3. Tải Danh sách đề thi thời gian thực từ Supabase Cloud API
+      fetchExams();
+    }
+  }, []);
 
-      const savedExams = localStorage.getItem('lms_exams');
-      if (savedExams) {
-        try {
-          const parsed = JSON.parse(savedExams);
-          if (Array.isArray(parsed)) {
-            // Lọc bỏ triệt để các đề đã bị xóa vĩnh viễn (đề giáo viên tự lưu với updated_at không bị lọc nhầm bởi code cũ)
-            const filteredParsed = parsed.filter((e: any) => {
-              if (deletedIds.has(e.id)) return false;
-              if (e.updated_at) return true;
-              return !deletedIds.has(e.code);
-            });
-
-            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất nếu chưa bị xóa và chưa bị người dùng sửa
-            const mockMap = new Map(MOCK_EXAMS.map((m) => [m.id, m]));
-            const merged = filteredParsed.map((e: any) => {
-              if (e.updated_at) return e; // Đề đã được giáo viên lưu hoặc sửa đổi
-              return mockMap.get(e.id) || e;
-            });
-
-            // Chỉ thêm mock exam nếu nó CHƯA BAO GIỜ bị xóa và chưa có trong danh sách
-            MOCK_EXAMS.forEach((m) => {
-              if (
-                !deletedIds.has(m.id) &&
-                !deletedIds.has(m.code || '') &&
-                !merged.some((e: any) => e.id === m.id)
-              ) {
-                merged.push(m);
-              }
-            });
-
-            setExams(merged);
-            localStorage.setItem('lms_exams', JSON.stringify(merged));
-            return;
-          }
-        } catch (e) {
-          console.error(e);
+  const fetchExams = async () => {
+    try {
+      const res = await fetch(`/api/exams?t=${Date.now()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.exams)) {
+        setExams(data.exams);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_exams', JSON.stringify(data.exams));
+          localStorage.removeItem('lms_deleted_exam_ids');
         }
-      } else {
-        // Lần đầu chạy chưa có savedExams: nạp MOCK_EXAMS nhưng vẫn lọc bỏ nếu có trong deletedIds
-        const initial = MOCK_EXAMS.filter(
-          (m) => !deletedIds.has(m.id) && !deletedIds.has(m.code || '')
-        );
-        setExams(initial);
-        localStorage.setItem('lms_exams', JSON.stringify(initial));
         return;
       }
+    } catch (e) {
+      console.error('Fetch exams error:', e);
     }
 
-    const supabase = createClient();
-    if (supabase) {
-      supabase
-        .from('exams')
-        .select('*')
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setExams(data as any);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_exams', JSON.stringify(data));
-            }
+    // Fallback nếu mất kết nối mạng
+    if (typeof window !== 'undefined') {
+      try {
+        const savedExams = localStorage.getItem('lms_exams');
+        if (savedExams) {
+          const parsed = JSON.parse(savedExams);
+          if (Array.isArray(parsed)) {
+            setExams(parsed);
           }
-        });
+        } else {
+          setExams([]);
+        }
+      } catch {
+        setExams([]);
+      }
     }
+  };
+
+  useEffect(() => {
+    window.addEventListener('lms_exams_updated', fetchExams);
+    return () => {
+      window.removeEventListener('lms_exams_updated', fetchExams);
+    };
   }, []);
 
   const saveExamsToStorage = (updated: Exam[]) => {
@@ -861,36 +839,35 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     );
     if (!isConfirmed) return;
 
-    // 1. Lưu ID và code của đề thi vào danh sách đen lms_deleted_exam_ids để ngăn chặn tự động nạp lại
-    try {
-      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
-      const deletedIds: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
-      const targetExam = exams.find((e) => e.id === examId);
-      if (!deletedIds.includes(examId)) {
-        deletedIds.push(examId);
-      }
-      if (targetExam?.code && !deletedIds.includes(targetExam.code)) {
-        deletedIds.push(targetExam.code);
-      }
-      localStorage.setItem('lms_deleted_exam_ids', JSON.stringify(deletedIds));
-    } catch (e) {
-      console.error('Lỗi lưu danh sách đề đã xóa:', e);
-    }
-
-    // 2. Cập nhật state & lms_exams
+    // 1. Phản hồi tức thì 0ms trên giao diện & localStorage
     const updated = exams.filter((e) => e.id !== examId);
     saveExamsToStorage(updated);
     setCopyToast(`Đã xóa vĩnh viễn đề thi: "${examTitle}"!`);
     setTimeout(() => setCopyToast(null), 3000);
 
-    // 3. Xóa trên Supabase nếu có kết nối
+    // 2. Gửi lệnh xóa ngầm lên Supabase Cloud API
     try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('exams').delete().eq('id', examId);
-      }
+      await fetch(`/api/exams?id=${examId}`, { method: 'DELETE' });
     } catch (err) {
-      console.warn('Lỗi xóa đề thi trên Supabase:', err);
+      console.warn('Lỗi xóa đề thi trên Cloud API:', err);
+    }
+  };
+
+  // Xóa toàn bộ đề thi trên hệ thống (dành cho Thầy Sơn / Admin)
+  const handleDeleteAllExams = async () => {
+    const isConfirmed = confirm(
+      'Thầy có chắc chắn muốn xóa TOÀN BỘ tất cả các đề thi trên hệ thống không?\nHọc sinh và mọi lớp học sẽ không còn thấy bất kỳ đề thi nào nữa.'
+    );
+    if (!isConfirmed) return;
+
+    saveExamsToStorage([]);
+    setCopyToast('Đã xóa sạch toàn bộ đề thi trên hệ thống!');
+    setTimeout(() => setCopyToast(null), 3000);
+
+    try {
+      await fetch('/api/exams?all=true', { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Lỗi xóa tất cả đề thi trên Cloud API:', err);
     }
   };
 
@@ -1011,7 +988,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
         </div>
       )}
 
-      {/* Header Bar chuẩn iExam */}
+      {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
@@ -1022,7 +999,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             </span>
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Quản lý ngân hàng đề thi, tạo đề từ file PDF hoặc bộ soạn thảo iExam Editor trực tuyến.
+            Quản lý ngân hàng đề thi, tạo đề từ file PDF, Word hoặc bộ soạn thảo trực tuyến Toán Thầy Sơn.
           </p>
         </div>
 
@@ -1055,7 +1032,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
           {/* CÁC NÚT TẠO ĐỀ (CHỈ DÀNH RIÊNG CHO GIÁO VIÊN / ADMIN) */}
           {isTeacher && (
             <>
-              {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
+              {/* NÚT TẠO TỪ PDF RIÊNG BIỆT */}
               <button
                 type="button"
                 onClick={() => setShowPdfCreateModal(true)}
@@ -1074,6 +1051,19 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                 <Plus className="h-4 w-4" />
                 <span>Tạo đề mới</span>
               </Link>
+
+              {/* NÚT XÓA SẠCH TẤT CẢ ĐỀ THI */}
+              {exams.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllExams}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs sm:text-sm font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer"
+                  title="Xóa tất cả các đề thi hiện có trên hệ thống"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Xóa tất cả</span>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1117,7 +1107,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
         </div>
       </div>
 
-      {/* BỐ CỤC CHÍNH: CỘT LỌC LỚP BÊN TRÁI + LƯỚI ĐỀ THI BÊN PHẢI (Ảnh 7 iExam) */}
+      {/* BỐ CỤC CHÍNH: CỘT LỌC LỚP BÊN TRÁI + LƯỚI ĐỀ THI BÊN PHẢI */}
       <div className="flex flex-col lg:flex-row gap-5 items-start">
         {/* Cột trái: Danh mục lớp học (Chỉ hiển thị cho Giáo viên/Admin để quản lý) */}
         {isTeacher && (
@@ -1218,7 +1208,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
           </aside>
         )}
 
-        {/* Cột phải: Lưới đề thi chuẩn iExam */}
+        {/* Cột phải: Lưới đề thi */}
         <main className="flex-1 w-full">
           {filteredExams.length === 0 ? (
             <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
@@ -1494,7 +1484,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
         </main>
       </div>
 
-      {/* MODAL TẠO ĐỀ TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
+      {/* MODAL TẠO ĐỀ TỪ PDF RIÊNG BIỆT */}
       {showPdfCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in">
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">

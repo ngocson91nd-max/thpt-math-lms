@@ -268,9 +268,6 @@ function ExamEditorContent() {
           found = parsed.find((e: Exam) => e.id === examIdParam);
         } catch {}
       }
-      if (!found && !deletedIds.has(examIdParam)) {
-        found = MOCK_EXAMS.find((e) => e.id === examIdParam);
-      }
 
       if (found) {
         setExamId(found.id);
@@ -995,6 +992,12 @@ function ExamEditorContent() {
           const newItems = questions.filter((q) => !qIds.has(q.id));
           localStorage.setItem('lms_questions', JSON.stringify([...newItems, ...qList]));
         }
+        // Đồng bộ ngầm lên Supabase Cloud API
+        fetch('/api/exams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedExam),
+        }).catch((err) => console.warn('Lỗi đồng bộ đề thi lên Cloud:', err));
       } catch (err) {
         console.warn('Lỗi khi lưu localStorage:', err);
       }
@@ -1326,7 +1329,7 @@ function ExamEditorContent() {
             </Link>
             <div className="flex items-center gap-2 min-w-0">
               <span className="rounded-md bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">
-                iExam Editor
+                Toán Thầy Sơn
               </span>
               <input
                 type="text"
@@ -3293,7 +3296,7 @@ function ExamEditorContent() {
 
 export default function ExamEditorPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-xs font-bold text-slate-500">Đang tải iExam Editor...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-xs font-bold text-slate-500">Đang tải trình soạn thảo đề thi...</div>}>
       <ExamEditorContent />
     </Suspense>
   );

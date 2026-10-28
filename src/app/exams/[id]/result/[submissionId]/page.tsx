@@ -35,11 +35,6 @@ export default function ExamResultPage({
     }
   }
 
-  // Fallback nếu không thấy
-  if (!submission) {
-    submission = MOCK_SUBMISSIONS[0];
-  }
-
   let exam = submission?.exam || MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
   if (!exam && typeof window !== 'undefined') {
     const savedExams = localStorage.getItem('lms_exams');
@@ -51,10 +46,9 @@ export default function ExamResultPage({
       } catch {}
     }
   }
-  if (!exam) exam = MOCK_EXAMS[0];
 
-  const maxScore = submission.max_score || (exam.format === 'periodic_4_parts' ? 20.0 : 10.0);
-  const score = submission.score ?? 0;
+  const maxScore = submission?.max_score || (exam?.format === 'periodic_4_parts' ? 20.0 : 10.0);
+  const score = submission?.score ?? 0;
   const isHighScorer = score >= (maxScore * 0.8);
 
   useEffect(() => {
@@ -66,6 +60,18 @@ export default function ExamResultPage({
       });
     }
   }, [isHighScorer]);
+
+  if (!submission || !exam) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <h2 className="text-base font-bold text-slate-800">Không tìm thấy kết quả bài làm</h2>
+        <p className="text-xs text-slate-500 mt-1 mb-4">Bài thi hoặc lượt làm này không tồn tại hoặc đã được xóa.</p>
+        <Link href="/exams" className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">
+          Quay lại trang Đề thi
+        </Link>
+      </div>
+    );
+  }
 
   const questions = exam.questions || [];
 

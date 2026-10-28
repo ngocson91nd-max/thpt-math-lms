@@ -4,6 +4,7 @@ import React, { useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MOCK_SUBMISSIONS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
+import { Submission, Exam, Question } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import {
   ArrowLeft,
@@ -22,15 +23,49 @@ export default function GradeEssayPage({
   const resolvedParams = use(params);
   const router = useRouter();
 
-  const submission =
-    MOCK_SUBMISSIONS.find((s) => s.id === resolvedParams.submissionId) ||
-    MOCK_SUBMISSIONS[1];
+  let submission: Submission | undefined = undefined;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(`submission_${resolvedParams.submissionId}`);
+      if (saved) submission = JSON.parse(saved);
+      if (!submission) {
+        const all = localStorage.getItem('lms_all_submissions');
+        if (all) {
+          const list = JSON.parse(all);
+          submission = list.find((s: any) => s.id === resolvedParams.submissionId);
+        }
+      }
+    } catch {}
+  }
 
-  const exam =
-    MOCK_EXAMS.find((e) => e.id === submission.exam_id) || MOCK_EXAMS[0];
+  let exam: Exam | undefined = submission?.exam;
+  if (!exam && submission?.exam_id && typeof window !== 'undefined') {
+    try {
+      const savedExams = localStorage.getItem('lms_exams');
+      if (savedExams) {
+        const list = JSON.parse(savedExams);
+        exam = list.find((e: any) => e.id === submission!.exam_id);
+      }
+    } catch {}
+  }
 
-  const essayQuestions =
-    exam.questions?.filter((q) => q.type === 'essay') || [];
+  if (!submission || !exam) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <h2 className="text-base font-bold text-slate-800">Không tìm thấy bài làm cần chấm</h2>
+        <p className="text-xs text-slate-500 mt-1 mb-4">Bài thi hoặc bài làm của học sinh không tồn tại.</p>
+        <button
+          onClick={() => router.push('/gradebook')}
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+        >
+          Quay lại Sổ điểm
+        </button>
+      </div>
+    );
+  }
+
+  const essayQuestions: any[] =
+    (exam?.questions?.filter((q: any) => q.type === 'essay') as any[]) || [];
 
   const [essayScores, setEssayScores] = useState<Record<string, number>>({
     'a7777777-7777-7777-7777-777777777777': 0.85,
@@ -45,8 +80,8 @@ export default function GradeEssayPage({
 
   const handleAiGradeSuggestion = async (qId: string) => {
     setIsAiLoading(true);
-    const q = essayQuestions.find((item) => item.id === qId);
-    const ans = submission.answers?.find((a) => a.question_id === qId);
+    const q = essayQuestions.find((item: any) => item.id === qId);
+    const ans = submission?.answers?.find((a: any) => a.question_id === qId);
 
     try {
       const res = await fetch('/api/ai', {
@@ -122,8 +157,8 @@ export default function GradeEssayPage({
 
       {/* Essay Questions List */}
       <div className="space-y-6">
-        {essayQuestions.map((q, idx) => {
-          const ans = submission.answers?.find((a) => a.question_id === q.id);
+        {essayQuestions.map((q: any, idx: number) => {
+          const ans = submission?.answers?.find((a: any) => a.question_id === q.id);
 
           return (
             <div
