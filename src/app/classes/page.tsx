@@ -97,32 +97,73 @@ export default function ClassesPage() {
     e.preventDefault();
     if (!className.trim() || isSubmitting) return;
 
-    setIsSubmitting(true);
+    const trimmedName = className.trim();
     const finalCode =
       classCode.trim().toUpperCase() || `TOAN${grade}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const tempId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `cls-${Date.now()}`;
+    const selectedYear = createYear || '2026-2027';
+    const finalDesc = desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.';
 
+    const optimisticClass: ClassItem = {
+      id: tempId,
+      name: trimmedName,
+      code: finalCode,
+      grade,
+      academic_year: selectedYear,
+      teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
+      description: finalDesc,
+      is_active: true,
+      member_count: 0,
+      pending_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. Phản hồi tức thì 0ms (Optimistic UI):
+    // Đóng modal và hiển thị ngay lớp mới trên màn hình
+    setShowCreateModal(false);
+    setClassName('');
+    setClassCode('');
+    setDesc('');
+    setClasses((prev) => [optimisticClass, ...prev]);
+
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('lms_classes');
+        const list: ClassItem[] = raw ? JSON.parse(raw) : [];
+        localStorage.setItem('lms_classes', JSON.stringify([optimisticClass, ...list]));
+      } catch {}
+    }
+
+    // 2. Đồng bộ ngầm lên Supabase Cloud (Background Sync không làm đơ giao diện)
     try {
+      setIsSubmitting(true);
       const res = await fetch('/api/classes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: className.trim(),
+          id: tempId,
+          name: trimmedName,
           code: finalCode,
           grade,
-          academic_year: createYear || '2026-2027',
+          academic_year: selectedYear,
           teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
-          description: desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.',
+          description: finalDesc,
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        setShowCreateModal(false);
-        setClassName('');
-        setClassCode('');
-        setDesc('');
-        await fetchClasses();
-      } else {
-        alert('Lỗi tạo lớp: ' + (data.error || 'Vui lòng thử lại'));
+      if (data.success && data.class) {
+        setClasses((prev) =>
+          prev.map((c) =>
+            c.id === tempId ? { ...c, ...data.class, pending_count: 0, member_count: 0 } : c
+          )
+        );
+      } else if (!data.success) {
+        setClasses((prev) => prev.filter((c) => c.id !== tempId));
+        alert('Lỗi tạo lớp trên Cloud: ' + (data.error || 'Vui lòng thử lại'));
       }
     } catch (err) {
       console.error('Lỗi khi thêm lớp vào Supabase:', err);
@@ -145,26 +186,35 @@ export default function ClassesPage() {
     e.preventDefault();
     if (!editingClass || !editName.trim()) return;
 
+    const targetId = editingClass.id;
+    const updatedData = {
+      name: editName.trim(),
+      code: editCode.trim().toUpperCase() || editingClass.code,
+      grade: editGrade,
+      description: editDesc.trim(),
+      academic_year: editYear.trim(),
+    };
+
+    // 1. Phản hồi tức thì 0ms trên giao diện
+    setClasses((prev) =>
+      prev.map((c) => (c.id === targetId ? { ...c, ...updatedData } : c))
+    );
+    setShowEditModal(false);
+    setEditingClass(null);
+
+    // 2. Gửi ngầm lên Cloud
     try {
       await fetch('/api/classes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editingClass.id,
-          name: editName.trim(),
-          code: editCode.trim().toUpperCase() || editingClass.code,
-          grade: editGrade,
-          description: editDesc.trim(),
-          academic_year: editYear.trim(),
+          id: targetId,
+          ...updatedData,
         }),
       });
-      await fetchClasses();
     } catch (err) {
       console.error('Lỗi khi cập nhật lớp trên Supabase:', err);
     }
-
-    setShowEditModal(false);
-    setEditingClass(null);
   };
 
   // Xóa vĩnh viễn lớp học khỏi hệ thống
@@ -174,7 +224,7 @@ export default function ClassesPage() {
     );
     if (!isConfirmed) return;
 
-    // 1. Cập nhật giao diện và local cache ngay lập tức
+    // 1. Cập nhật giao diện và local cache ngay lập tức 0ms
     setClasses((prev) => prev.filter((c) => c.id !== classId));
     if (typeof window !== 'undefined') {
       const raw = localStorage.getItem('lms_classes');
@@ -188,7 +238,7 @@ export default function ClassesPage() {
       localStorage.removeItem(`lms_class_pending_requests_${classId}`);
     }
 
-    // 2. Xóa vĩnh viễn trên Supabase Cloud Database qua API Server
+    // 2. Xóa vĩnh viễn trên Supabase Cloud Database ngầm
     try {
       const res = await fetch(`/api/classes?id=${classId}`, { method: 'DELETE' });
       const data = await res.json();
@@ -198,9 +248,6 @@ export default function ClassesPage() {
     } catch (err) {
       console.error('Lỗi khi xóa lớp trên Cloud:', err);
     }
-
-    // 3. Tải lại danh sách mới nhất từ Cloud
-    await fetchClasses();
   };
 
   const handleJoinClass = (e: React.FormEvent) => {

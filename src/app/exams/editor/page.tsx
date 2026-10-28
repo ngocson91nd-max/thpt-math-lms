@@ -1004,7 +1004,7 @@ function ExamEditorContent() {
     setTimeout(() => {
       setSaveToast(null);
       router.push('/exams');
-    }, 1200);
+    }, 200);
   };
 
   // Cuộn tới phần cụ thể

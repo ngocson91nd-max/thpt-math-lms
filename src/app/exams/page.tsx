@@ -766,32 +766,38 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     const updated = [created, ...exams];
     saveExamsToStorage(updated);
 
-    try {
-      const supabase = createClient();
-      if (supabase && user) {
-        await supabase.from('exams').insert([
-          {
-            id: newId,
-            title: created.title,
-            description: created.description,
-            grade: created.grade,
-            duration_minutes: created.duration_minutes,
-            teacher_id: user.id,
-            passing_score: 5.0,
-            status: 'published',
-            shuffle_questions: shuffleQuestions,
-          },
-        ]);
-      }
-    } catch (err) {
-      console.warn('Lỗi lưu đề thi vào Supabase:', err);
-    }
-
+    // 1. Phản hồi tức thì 0ms (Optimistic UI):
     setShowCreateModal(false);
     setSelectedQuestions([]);
     setLatexInput('');
     setLatexParseNotice(null);
     router.push(`/exams/editor?id=${newId}`);
+
+    // 2. Đồng bộ ngầm lên Supabase (không làm treo giao diện)
+    if (user) {
+      (async () => {
+        try {
+          const supabase = createClient();
+          if (supabase) {
+            await supabase.from('exams').insert([
+              {
+                id: newId,
+                title: created.title,
+                description: created.description,
+                grade: created.grade,
+                duration_minutes: created.duration_minutes,
+                teacher_id: user.id,
+                passing_score: 5.0,
+                status: 'published',
+                shuffle_questions: shuffleQuestions,
+              },
+            ]);
+          }
+        } catch (err) {
+          console.warn('Lỗi lưu đề thi vào Supabase:', err);
+        }
+      })();
+    }
   };
 
   // Mở modal sửa đề
@@ -1062,6 +1068,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
               {/* NÚT TẠO ĐỀ MỚI */}
               <Link
                 href="/exams/editor?new=1"
+                prefetch={true}
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
@@ -1414,6 +1421,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={`/exams/editor?id=${exam.id}`}
+                            prefetch={true}
                             className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
                           >
                             <Pencil className="h-3.5 w-3.5" />

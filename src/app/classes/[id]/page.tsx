@@ -809,6 +809,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 </Link>
                 <Link
                   href={`/exams/editor?new=1&class=${encodeURIComponent(currentClass.name)}`}
+                  prefetch={true}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-500 shadow-2xs transition"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -837,6 +838,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                   </button>
                   <Link
                     href={`/exams/editor?new=1&class=${encodeURIComponent(currentClass.name)}`}
+                    prefetch={true}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 transition shadow-2xs"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -920,6 +922,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                           <div className="flex items-center gap-1.5">
                             <Link
                               href={`/exams/editor?id=${e.id}`}
+                              prefetch={true}
                               className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
                             >
                               <Pencil className="h-3 w-3" />
