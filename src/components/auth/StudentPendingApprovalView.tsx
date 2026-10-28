@@ -44,12 +44,13 @@ export const StudentPendingApprovalView: React.FC = () => {
       fetch(`/api/cloud-sync?userId=${user.id}`)
         .then((r) => r.json())
         .then((res) => {
-          if (res.success && Array.isArray(res.approvedClasses) && res.approvedClasses.length > 0) {
+          if (res.success && Array.isArray(res.approvedClasses)) {
             const studentClassesKey = `lms_student_classes_${user.id}`;
-            const existing: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
-            const merged = Array.from(new Set([...existing, ...res.approvedClasses]));
-            localStorage.setItem(studentClassesKey, JSON.stringify(merged));
-            window.location.reload();
+            // Chỉ đồng bộ các lớp thực sự active trên Supabase Cloud
+            localStorage.setItem(studentClassesKey, JSON.stringify(res.approvedClasses));
+            if (res.approvedClasses.length > 0) {
+              window.location.reload();
+            }
           }
         })
         .catch(() => {});

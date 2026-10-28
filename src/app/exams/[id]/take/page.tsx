@@ -589,10 +589,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           </p>
           <div className="pt-2 flex flex-col gap-2">
             <Link
-              href="/classes"
+              href="/"
               className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
             >
-              Vào mục Lớp học để tham gia lớp
+              Nhập mã lớp để kích hoạt tài khoản
             </Link>
             <Link
               href="/exams"

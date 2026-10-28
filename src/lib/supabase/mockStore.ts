@@ -128,53 +128,7 @@ function generateClassStudents(classId: string, prefix: string, grade: 10 | 11 |
   return members;
 }
 
-export const MOCK_CLASS_MEMBERS: ClassMember[] = [
-  {
-    id: 'cm1',
-    class_id: 'c1111111-1111-1111-1111-111111111111',
-    user_id: '33333333-3333-3333-3333-333333333333',
-    role: 'student',
-    status: 'active',
-    profile: MOCK_USERS[2],
-  },
-  {
-    id: 'cm2',
-    class_id: 'c1111111-1111-1111-1111-111111111111',
-    user_id: '44444444-4444-4444-4444-444444444444',
-    role: 'student',
-    status: 'active',
-    profile: MOCK_USERS[3],
-  },
-  {
-    id: 'cm3',
-    class_id: 'c1111111-1111-1111-1111-111111111111',
-    user_id: '55555555-5555-5555-5555-555555555555',
-    role: 'student',
-    status: 'active',
-    profile: MOCK_USERS[4],
-  },
-  {
-    id: 'toan12-cm-mai',
-    class_id: 'c-12-toan-1',
-    user_id: '33333333-3333-3333-3333-333333333333',
-    role: 'student',
-    status: 'active',
-    profile: MOCK_USERS[2],
-  },
-  {
-    id: 'toan12-cm-nam',
-    class_id: 'c-12-toan-1',
-    user_id: '44444444-4444-4444-4444-444444444444',
-    role: 'student',
-    status: 'active',
-    profile: MOCK_USERS[3],
-  },
-  ...generateClassStudents('c-12-toan-1', 'toan12', 12, 36),
-  ...generateClassStudents('c-11-anh-1', 'anh11', 11, 40),
-  ...generateClassStudents('c-11-su', 'su11', 11, 35),
-  ...generateClassStudents('c1111111-1111-1111-1111-111111111111', '12a1', 12, 33),
-  ...generateClassStudents('c2222222-2222-2222-2222-222222222222', '11b1', 11, 42),
-];
+export const MOCK_CLASS_MEMBERS: ClassMember[] = [];
 
 export const MOCK_COURSES: Course[] = [
   {

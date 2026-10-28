@@ -13,7 +13,8 @@ import { PanelLeftOpen } from 'lucide-react';
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [isEnrolled, setIsEnrolled] = useState<boolean>(true);
+  // Mặc định là false để chặn triệt để tình trạng lộ đề thi khi chưa vào lớp
+  const [isEnrolled, setIsEnrolled] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   // Khôi phục tùy chọn ẩn/hiện thanh bên từ localStorage
@@ -36,26 +37,70 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     });
   };
 
-  // Cập nhật trạng thái duyệt lớp của học sinh
+  // Cập nhật và xác thực trạng thái duyệt lớp của học sinh từ Cloud
   useEffect(() => {
-    const checkEnrollment = () => {
+    let isMounted = true;
+
+    const checkEnrollment = async () => {
       if (!user) {
-        setIsEnrolled(false);
-      } else if (user.role === 'teacher' || user.role === 'admin') {
-        setIsEnrolled(true);
-      } else {
-        setIsEnrolled(isUserEnrolledInAnyClass(user));
+        if (isMounted) setIsEnrolled(false);
+        return;
+      }
+
+      // Giáo viên hoặc Quản trị viên luôn có toàn quyền
+      if (user.role === 'teacher' || user.role === 'admin') {
+        if (isMounted) setIsEnrolled(true);
+        return;
+      }
+
+      // 1. Đối với học sinh: Tải danh sách lớp thực tế ĐANG HOẠT ĐỘNG trên Cloud
+      try {
+        const res = await fetch('/api/classes');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.classes)) {
+          localStorage.setItem('lms_classes', JSON.stringify(data.classes));
+
+          const activeIds = new Set(data.classes.map((c: any) => c.id));
+          const key = `lms_student_classes_${user.id}`;
+          const currentEnrolled: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+          // Loại bỏ ngay lập tức các lớp đã bị Thầy xóa trên Cloud
+          const cleaned = currentEnrolled.filter((id) => activeIds.has(id));
+          localStorage.setItem(key, JSON.stringify(cleaned));
+        }
+
+        // 2. Đồng bộ trạng thái duyệt lớp thực tế từ Supabase Cloud
+        const syncRes = await fetch(`/api/cloud-sync?userId=${user.id}`);
+        const syncData = await syncRes.json();
+        if (syncData.success) {
+          const key = `lms_student_classes_${user.id}`;
+          const activeClasses: any[] = JSON.parse(localStorage.getItem('lms_classes') || '[]');
+          const activeIds = new Set(activeClasses.map((c) => c.id));
+          const cloudApproved = Array.isArray(syncData.approvedClasses)
+            ? syncData.approvedClasses.filter((id: string) => activeIds.has(id))
+            : [];
+          localStorage.setItem(key, JSON.stringify(cloudApproved));
+        }
+      } catch (e) {
+        console.error('Check enrollment error:', e);
+      }
+
+      // 3. Đánh giá quyền chính thức: Học sinh phải thuộc ít nhất 1 lớp thực tế
+      if (isMounted) {
+        const enrolled = isUserEnrolledInAnyClass(user);
+        setIsEnrolled(enrolled);
       }
     };
 
     checkEnrollment();
     window.addEventListener('lms_enrollment_changed', checkEnrollment);
-    return () => window.removeEventListener('lms_enrollment_changed', checkEnrollment);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('lms_enrollment_changed', checkEnrollment);
+    };
   }, [user]);
 
   const isTakeExamPage = pathname.includes('/take');
   const isAuthPage = pathname === '/login' || pathname === '/register';
-  const isHomePage = pathname === '/';
 
   // Xác định nội dung cần hiển thị theo phân quyền
   const renderContent = () => {
@@ -64,26 +109,18 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       return children;
     }
 
-    // 2. Trang chủ: Cho phép khách vãng lai xem Landing Page giới thiệu
-    if (isHomePage) {
-      // Nếu là học sinh đã đăng nhập nhưng chưa vào lớp: hiện màn hình chờ duyệt vào lớp
-      if (user && user.role === 'student' && !isEnrolled) {
-        return <StudentPendingApprovalView />;
-      }
-      return children;
-    }
-
-    // 3. Khách chưa đăng nhập cố tình truy cập các trang nội bộ (/exams, /classes, /courses, /materials, /gradebook, /questions...):
+    // 2. Khách chưa đăng nhập: Yêu cầu đăng nhập khi truy cập nội dung
     if (!user) {
       return <GuestAuthWall />;
     }
 
-    // 4. Học sinh đã đăng nhập nhưng CHƯA ĐƯỢC ADD VÀO LỚP:
+    // 3. Học sinh CHƯA ĐƯỢC DUYỆT VÀO LỚP:
+    // TUYỆT ĐỐI CHẶN MỌI TRANG (kể cả Trang chủ, Đề thi, Làm bài...) VÀ HIỂN THỊ PHÒNG CHỜ NHẬP MÃ LỚP
     if (user.role === 'student' && !isEnrolled) {
       return <StudentPendingApprovalView />;
     }
 
-    // 5. Giáo viên hoặc Học sinh đã được duyệt vào lớp: Cho phép truy cập 100% nội dung
+    // 4. Giáo viên hoặc Học sinh đã được duyệt vào lớp: Cho phép truy cập 100% nội dung
     return children;
   };
 

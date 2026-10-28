@@ -37,10 +37,6 @@ export async function GET(req: NextRequest) {
           .ilike('code', `%${cid}%`)
           .single();
         if (found) targetClassId = found.id;
-      } else if (cid.includes('2150')) {
-        targetClassId = 'f3750ff9-ca79-4fcd-a5d1-d73b84b84f36';
-      } else if (cid.includes('1665')) {
-        targetClassId = '50fac48d-0674-4269-b84e-a653ec3c8c6a';
       }
 
       const { data: membersData, error: memErr } = await supabase
@@ -135,14 +131,9 @@ export async function POST(req: NextRequest) {
     const { action, classId, user, student, userId } = body;
     const supabase = getSupabaseAdmin();
 
-    let targetClassId = classId;
-    if (classId?.includes('2150')) {
-      targetClassId = 'f3750ff9-ca79-4fcd-a5d1-d73b84b84f36';
-    } else if (classId?.includes('1665')) {
-      targetClassId = '50fac48d-0674-4269-b84e-a653ec3c8c6a';
-    }
+    const targetClassId = classId;
 
-    // 1. Học sinh xin vào lớp
+    // 1. Học sinh xin vào lớp (chờ duyệt)
     if (action === 'request_join') {
       const studentProfile = user || student;
       const targetUserId =
@@ -176,7 +167,7 @@ export async function POST(req: NextRequest) {
       // Lưu trạng thái pending vào class_members
       const { error: reqErr } = await supabase.from('class_members').upsert([
         {
-          id: targetUserId,
+          id: `${targetClassId}_${targetUserId}`,
           class_id: targetClassId,
           user_id: targetUserId,
           role: 'student',
@@ -193,7 +184,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Đã gửi yêu cầu vào lớp trên Supabase Cloud!' });
     }
 
-    // 2. Thầy Sơn duyệt học sinh vào lớp
+    // 2. Học sinh kích hoạt mã vào lớp thành công (active ngay)
+    if (action === 'join_with_code') {
+      const studentProfile = user || student;
+      const targetUserId =
+        studentProfile?.id === 'user-an-toan-12' || studentProfile?.email === 'an.toan12@gmail.com'
+          ? '48dc643d-1b47-4c4e-a473-ca2f622b761c'
+          : studentProfile?.id || userId;
+
+      if (!targetClassId || !targetUserId) {
+        return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
+      }
+
+      if (studentProfile) {
+        try {
+          await supabase.from('profiles').upsert([
+            {
+              id: targetUserId,
+              email: studentProfile.email || 'student@thpt-math-lms.vn',
+              full_name: studentProfile.full_name || 'Học sinh',
+              role: 'student',
+              grade: studentProfile.grade || 12,
+              school_name: studentProfile.school_name || 'THPT Chuyên',
+              phone: studentProfile.phone || '',
+            },
+          ]);
+        } catch (e) {}
+      }
+
+      const { error: joinErr } = await supabase.from('class_members').upsert([
+        {
+          id: `${targetClassId}_${targetUserId}`,
+          class_id: targetClassId,
+          user_id: targetUserId,
+          role: 'student',
+          status: 'active',
+          joined_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (joinErr) {
+        console.error('Join with code cloud error:', joinErr);
+        return NextResponse.json({ success: false, error: joinErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, message: 'Đã vào lớp trên Cloud thành công!' });
+    }
+
+    // 3. Thầy Sơn duyệt học sinh vào lớp
     if (action === 'approve_student') {
       const studentProfile = student || user;
       const targetUserId =
@@ -215,7 +253,7 @@ export async function POST(req: NextRequest) {
         // Fallback upsert
         await supabase.from('class_members').upsert([
           {
-            id: targetUserId,
+            id: `${targetClassId}_${targetUserId}`,
             class_id: targetClassId,
             user_id: targetUserId,
             role: 'student',
@@ -228,8 +266,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Đã phê duyệt học sinh trên Supabase Cloud thành công!' });
     }
 
-    // 3. Từ chối yêu cầu
-    if (action === 'reject_student') {
+    // 4. Từ chối yêu cầu hoặc xóa học sinh khỏi lớp
+    if (action === 'reject_student' || action === 'remove_student') {
       const targetUserId =
         userId === 'user-an-toan-12' ? '48dc643d-1b47-4c4e-a473-ca2f622b761c' : userId;
 
@@ -239,10 +277,10 @@ export async function POST(req: NextRequest) {
         .eq('class_id', targetClassId)
         .eq('user_id', targetUserId);
 
-      return NextResponse.json({ success: true, message: 'Đã từ chối yêu cầu trên Supabase Cloud!' });
+      return NextResponse.json({ success: true, message: 'Đã xử lý học sinh trên Supabase Cloud!' });
     }
 
-    // 4. Tạo lớp học mới
+    // 5. Tạo lớp học mới
     if (action === 'create_class') {
       const { classData } = body;
       if (classData) {
@@ -254,9 +292,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Xóa lớp học
+    // 6. Xóa lớp học
     if (action === 'delete_class') {
       if (targetClassId) {
+        await supabase.from('class_members').delete().eq('class_id', targetClassId);
         await supabase.from('classes').delete().eq('id', targetClassId);
         return NextResponse.json({ success: true, message: 'Đã xóa lớp trên Supabase Cloud!' });
       }

@@ -12,7 +12,8 @@ import MathRenderer from '@/components/math/MathRenderer';
 import { createClient } from '@/lib/supabase/client';
 import { savePdfToIndexedDb } from '@/lib/pdf/pdfStorage';
 import { maskPdfAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
-import { isExamPermittedForStudent } from '@/lib/auth/enrollment';
+import { isExamPermittedForStudent, isUserEnrolledInAnyClass } from '@/lib/auth/enrollment';
+import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
 import {
   ClipboardList,
   Clock,
@@ -942,8 +943,9 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   };
 
   const filteredExams = exams.filter((e) => {
-    // Phân quyền Học sinh: Học sinh chỉ xem được đề công khai hoặc đề của lớp mà mình đã được duyệt tham gia!
+    // Phân quyền Học sinh: BẮT BUỘC phải vào lớp mới xem được đề
     if (!isTeacher) {
+      if (!isUserEnrolledInAnyClass(user)) return false;
       const isPermitted = isExamPermittedForStudent(e, user?.id, classes);
       if (!isPermitted) return false;
     }
@@ -987,6 +989,11 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   const selectedP2 = selectedQuestions.filter((q) => q.part === 2 || q.type === 'true_false');
   const selectedP3 = selectedQuestions.filter((q) => q.part === 3 || q.type === 'short_answer');
   const selectedP4 = selectedQuestions.filter((q) => q.part === 4 || q.type === 'essay');
+
+  // Phân quyền Học sinh: Nếu học sinh chưa vào bất kỳ lớp học nào, chặn hoàn toàn và hiện phòng chờ nhập mã
+  if (user && !isTeacher && !isUserEnrolledInAnyClass(user)) {
+    return <StudentPendingApprovalView />;
+  }
 
   return (
     <div className="space-y-6 pb-16 relative">

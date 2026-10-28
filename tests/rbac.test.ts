@@ -8,7 +8,7 @@ import {
   canTakeExam,
   UserContext,
 } from '../src/lib/auth/rbac';
-import { isUserEnrolledInAnyClass } from '../src/lib/auth/enrollment';
+import { isUserEnrolledInAnyClass, isExamPermittedForStudent } from '../src/lib/auth/enrollment';
 import { Profile } from '../src/types/database';
 
 describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
@@ -55,6 +55,20 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
   });
 
   it('6. Phân quyền duyệt lớp: Giáo viên/Admin luôn mở khóa, học sinh chưa vào lớp bị khóa', () => {
+    const mockStorage: Record<string, string> = {
+      lms_classes: JSON.stringify([{ id: 'c-test-1', name: '12 Toán', code: 'TOAN12-TEST', grade: 12 }]),
+      'lms_student_classes_33333333-3333-3333-3333-333333333333': JSON.stringify(['c-test-1']),
+    };
+    (globalThis as any).localStorage = {
+      getItem: (k: string) => mockStorage[k] || null,
+      setItem: (k: string, v: string) => {
+        mockStorage[k] = v;
+      },
+      removeItem: (k: string) => {
+        delete mockStorage[k];
+      },
+    };
+
     const teacherProfile: Profile = {
       id: 'teacher-1',
       email: 'teacher@thpt.vn',
@@ -71,7 +85,7 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
       grade: 12,
     };
     const enrolledStudent: Profile = {
-      id: '33333333-3333-3333-3333-333333333333', // Đã có trong MOCK_CLASS_MEMBERS
+      id: '33333333-3333-3333-3333-333333333333',
       email: 'student.mai@thpt-math-lms.vn',
       full_name: 'Nguyễn Thị Mai',
       role: 'student',
@@ -86,5 +100,35 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
     expect(isUserEnrolledInAnyClass(unenrolledStudent)).toBe(false);
     // Học sinh đã add vào lớp được mở khóa
     expect(isUserEnrolledInAnyClass(enrolledStudent)).toBe(true);
+  });
+
+  it('7. Bảo mật đề thi: Học sinh CHƯA vào lớp tuyệt đối KHÔNG xem được bất kỳ đề thi nào', () => {
+    const unenrolledStudentId = 'new-student-999';
+    const enrolledStudentId = '33333333-3333-3333-3333-333333333333';
+    const classes: any[] = [{ id: 'c-test-1', name: '12 Toán', code: 'TOAN12-TEST', grade: 12 as const }];
+
+    const publicExam: any = { id: 'exam-pub', title: 'Đề Công Khai', access_type: 'public' };
+    const myClassExam: any = {
+      id: 'exam-my-class',
+      title: 'Đề Lớp 12 Toán',
+      access_type: 'restricted',
+      assigned_classes: ['12 Toán'],
+    };
+    const otherClassExam: any = {
+      id: 'exam-other-class',
+      title: 'Đề Lớp 11 Văn',
+      access_type: 'restricted',
+      assigned_classes: ['11 Văn'],
+    };
+
+    // HỌC SINH CHƯA VÀO LỚP: Chặn 100%, kể cả đề công khai!
+    expect(isExamPermittedForStudent(publicExam, unenrolledStudentId, classes)).toBe(false);
+    expect(isExamPermittedForStudent(myClassExam, unenrolledStudentId, classes)).toBe(false);
+    expect(isExamPermittedForStudent(otherClassExam, unenrolledStudentId, classes)).toBe(false);
+
+    // HỌC SINH ĐÃ VÀO LỚP: Xem được đề công khai và đề đúng lớp, không xem được đề lớp khác
+    expect(isExamPermittedForStudent(publicExam, enrolledStudentId, classes)).toBe(true);
+    expect(isExamPermittedForStudent(myClassExam, enrolledStudentId, classes)).toBe(true);
+    expect(isExamPermittedForStudent(otherClassExam, enrolledStudentId, classes)).toBe(false);
   });
 });
