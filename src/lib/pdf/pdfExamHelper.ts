@@ -1,5 +1,5 @@
 import { Question } from '@/types/database';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 export interface ParsedPdfAnswers {
   part1: Record<number, string>; // { 1: 'A', 2: 'B', ... }
@@ -282,5 +282,84 @@ export async function trimPdfPages(
   } catch (err) {
     console.error('Lỗi khi cắt trang PDF:', err);
     return { trimmedDataUrl: dataUrl, totalOriginal: 1, totalNew: 1 };
+  }
+}
+
+/**
+ * TỰ ĐỘNG CẮT / CHE BẢNG ĐÁP ÁN Ở CUỐI TRANG PDF:
+ * - KHÔNG xóa cả trang để giữ nguyên 100% các câu hỏi cuối đề thi
+ * - Phủ khối màu trắng opaque che khuất bảng đáp án ở đáy trang cuối
+ * - In dòng chữ trang trọng "---------- HẾT ----------"
+ */
+export async function maskPdfAnswerKey(
+  dataUrl: string,
+  options?: {
+    bottomRatio?: number; // Tỷ lệ chiều cao cần che ở đáy trang cuối (mặc định 0.32 = 32% đáy trang)
+    customHeightPoints?: number;
+    noticeText?: string;
+  }
+): Promise<{ maskedDataUrl: string; totalPages: number }> {
+  try {
+    const bytes = dataUrlToUint8Array(dataUrl);
+    const pdfDoc = await PDFDocument.load(bytes);
+    const totalPages = pdfDoc.getPageCount();
+
+    if (totalPages === 0) return { maskedDataUrl: dataUrl, totalPages: 0 };
+
+    const lastPage = pdfDoc.getPage(totalPages - 1);
+    const { width, height } = lastPage.getSize();
+
+    // Tỷ lệ che đáy trang (bảng đáp án \dapan thường chiếm 25% - 35% chiều cao trang A4)
+    const ratio = options?.bottomRatio ?? 0.32;
+    const maskHeight = options?.customHeightPoints ?? (height * ratio);
+
+    // 1. Phủ khối chữ nhật màu trắng xóa hoàn toàn bảng đáp án ở đáy trang (từ y=0 đến y=maskHeight)
+    lastPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: width,
+      height: maskHeight,
+      color: rgb(1, 1, 1), // Màu trắng tinh tuyệt đối
+    });
+
+    // 2. Vẽ đường phân cách tinh tế trên đỉnh vùng che
+    lastPage.drawLine({
+      start: { x: 40, y: maskHeight },
+      end: { x: width - 40, y: maskHeight },
+      thickness: 1,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+
+    // 3. In thông báo chuẩn thi THPT ở vùng đã che
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const titleText = options?.noticeText || '---------- HET ----------';
+    const subText = 'Thi sinh chon dap an tren phieu tra loi dien tu ben canh';
+
+    const titleWidth = boldFont.widthOfTextAtSize(titleText, 12);
+    const subWidth = regularFont.widthOfTextAtSize(subText, 10);
+
+    lastPage.drawText(titleText, {
+      x: Math.max(10, (width - titleWidth) / 2),
+      y: maskHeight - 24,
+      size: 12,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+
+    lastPage.drawText(subText, {
+      x: Math.max(10, (width - subWidth) / 2),
+      y: maskHeight - 44,
+      size: 10,
+      font: regularFont,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+
+    const maskedBase64 = await pdfDoc.saveAsBase64({ dataUri: true });
+    return { maskedDataUrl: maskedBase64, totalPages };
+  } catch (err) {
+    console.error('Lỗi khi tự động che đáp án PDF:', err);
+    return { maskedDataUrl: dataUrl, totalPages: 1 };
   }
 }

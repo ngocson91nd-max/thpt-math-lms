@@ -11,7 +11,7 @@ import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamPars
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import PdfExamViewer from '@/components/exam/PdfExamViewer';
-import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount } from '@/lib/pdf/pdfExamHelper';
+import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount, maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import { savePdfToIndexedDb, getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
 import {
   Sparkles,
@@ -303,20 +303,40 @@ function ExamEditorContent() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const dataUrl = event.target?.result as string;
-      setPdfUrl(dataUrl);
       const pages = await getPdfPageCount(dataUrl);
       setPdfTotalPages(pages);
+
+      // Tự động che bảng đáp án ở đáy trang cuối ngay khi tải lên (không xóa cả trang, giữ trọn vẹn câu hỏi)
+      try {
+        const masked = await maskPdfAnswerKey(dataUrl, { bottomRatio: 0.32 });
+        setPdfUrl(masked.maskedDataUrl);
+      } catch (err) {
+        setPdfUrl(dataUrl);
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  // Cắt bỏ trang cuối chứa bảng đáp án / lời giải
+  // Tự động che bảng đáp án ở đáy trang cuối (không cắt cả trang)
+  const handleMaskPdfExam = async (ratio: number = 0.32) => {
+    if (!pdfUrl) return;
+    try {
+      const res = await maskPdfAnswerKey(pdfUrl, { bottomRatio: ratio });
+      setPdfUrl(res.maskedDataUrl);
+      setSaveToast('Đã tự động che bảng đáp án ở đáy trang cuối! (Giữ trọn vẹn câu hỏi)');
+      setTimeout(() => setSaveToast(null), 3000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Cắt bỏ trang cuối chứa bảng đáp án / lời giải (nếu là trang riêng biệt)
   const handleTrimPdfExam = async () => {
     if (!pdfUrl) return;
     const res = await trimPdfPages(pdfUrl, { removeLastPage: true });
     setPdfUrl(res.trimmedDataUrl);
     setPdfTotalPages(res.totalNew);
-    setSaveToast(`Đã cắt bỏ trang cuối chứa bảng đáp án! Đề thi hiện còn ${res.totalNew} trang.`);
+    setSaveToast(`Đã cắt bỏ trang cuối! Đề thi hiện còn ${res.totalNew} trang.`);
     setTimeout(() => setSaveToast(null), 3500);
   };
 
@@ -342,17 +362,18 @@ function ExamEditorContent() {
     }
 
     let targetPdf = pdfUrl;
-    let newPages = pdfTotalPages;
     let trimmedMsg = '';
 
-    // Tự động cắt bỏ trang cuối chứa bảng đáp án nếu người dùng bật và PDF có nhiều hơn 1 trang
-    if (cutLastPage && pdfTotalPages > 1) {
-      const res = await trimPdfPages(pdfUrl, { removeLastPage: true });
-      targetPdf = res.trimmedDataUrl;
-      newPages = res.totalNew;
-      setPdfUrl(targetPdf);
-      setPdfTotalPages(newPages);
-      trimmedMsg = ' (Đã cắt bỏ trang đáp án cuối)';
+    // Tự động che bảng đáp án ở đáy trang cuối nếu giáo viên bật (giữ trọn vẹn câu hỏi)
+    if (cutLastPage) {
+      try {
+        const res = await maskPdfAnswerKey(targetPdf, { bottomRatio: 0.32 });
+        targetPdf = res.maskedDataUrl;
+        setPdfUrl(targetPdf);
+        trimmedMsg = ' (Đã tự động che bảng đáp án)';
+      } catch (err) {
+        console.warn(err);
+      }
     }
 
     const parsed = parseQuickAnswerKey(quickAnswerText);
@@ -1266,17 +1287,15 @@ function ExamEditorContent() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {pdfTotalPages > 1 && (
-                  <button
-                    type="button"
-                    onClick={handleTrimPdfExam}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-bold text-xs hover:bg-amber-100 transition cursor-pointer"
-                    title="Cắt bỏ trang cuối chứa bảng đáp án để học sinh không nhìn thấy"
-                  >
-                    <Scissors className="h-3.5 w-3.5" />
-                    <span>Cắt trang đáp án cuối (Còn {pdfTotalPages - 1} trang)</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleMaskPdfExam(0.32)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-bold text-xs hover:bg-amber-100 transition cursor-pointer"
+                  title="Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy (giữ trọn vẹn câu hỏi)"
+                >
+                  <Scissors className="h-3.5 w-3.5" />
+                  <span>Che đáp án cuối trang</span>
+                </button>
                 <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-bold text-xs hover:bg-blue-100 transition cursor-pointer">
                   <Upload className="h-3.5 w-3.5" />
                   <span>Đổi file PDF</span>
@@ -1289,8 +1308,8 @@ function ExamEditorContent() {
                 pdfUrl={pdfUrl}
                 title={pdfFileName || title}
                 className="h-full"
-                canTrim={pdfTotalPages > 1}
-                onTrimLastPage={handleTrimPdfExam}
+                canTrim={true}
+                onTrimLastPage={() => handleMaskPdfExam(0.32)}
               />
             </div>
           </div>
@@ -1987,34 +2006,31 @@ function ExamEditorContent() {
                   </div>
                 </div>
 
-                {/* Hiển thị số trang & Tùy chọn cắt bỏ trang cuối chứa đáp án */}
+                {/* Hiển thị số trang & Tùy chọn tự động che bảng đáp án ở đáy trang cuối */}
                 {pdfUrl && (
                   <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-3.5 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-amber-900">
                         📄 File PDF gồm: <strong>{pdfTotalPages} trang</strong>
                       </span>
-                      {pdfTotalPages > 1 && (
-                        <button
-                          type="button"
-                          onClick={handleTrimPdfExam}
-                          className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-500 transition cursor-pointer"
-                        >
-                          Cắt bỏ trang cuối ngay
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleMaskPdfExam(0.32)}
+                        className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-500 transition cursor-pointer"
+                        title="Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy"
+                      >
+                        Tự động che đáp án ngay
+                      </button>
                     </div>
-                    {pdfTotalPages > 1 && (
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-900 select-none">
-                        <input
-                          type="checkbox"
-                          checked={cutLastPage}
-                          onChange={(e) => setCutLastPage(e.target.checked)}
-                          className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
-                        />
-                        <span>✂️ Tự động cắt bỏ trang cuối (chứa bảng đáp án) khi tạo đề</span>
-                      </label>
-                    )}
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-900 select-none">
+                      <input
+                        type="checkbox"
+                        checked={cutLastPage}
+                        onChange={(e) => setCutLastPage(e.target.checked)}
+                        className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                      />
+                      <span>✂️ Tự động che bảng đáp án ở đáy trang cuối (Giữ trọn vẹn 100% câu hỏi, không cắt cả trang)</span>
+                    </label>
                   </div>
                 )}
 

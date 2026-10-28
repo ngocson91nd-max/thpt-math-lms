@@ -12,7 +12,7 @@ import { ExamCalculator } from '@/components/exam/ExamCalculator';
 import { ExamFormulaSheetModal } from '@/components/exam/ExamFormulaSheetModal';
 import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
-import { trimPdfPages } from '@/lib/pdf/pdfExamHelper';
+import { maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import {
   Clock,
   Flag,
@@ -103,19 +103,30 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         setViewMode('pdf');
       }
 
+      const applyAutoMask = async (rawPdf: string) => {
+        // Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy (giữ trọn vẹn câu hỏi)
+        try {
+          const res = await maskPdfAnswerKey(rawPdf);
+          setLoadedPdfUrl(res.maskedDataUrl);
+        } catch (e) {
+          console.warn('Lỗi auto-mask đáp án:', e);
+          setLoadedPdfUrl(rawPdf);
+        }
+      };
+
       if (targetExam.pdf_url) {
         if (targetExam.pdf_url.startsWith('idb:')) {
           const idbKey = targetExam.pdf_url.replace('idb:', '');
           getPdfFromIndexedDb(idbKey).then((data) => {
-            if (data) setLoadedPdfUrl(data);
+            if (data) applyAutoMask(data);
           });
         } else {
-          setLoadedPdfUrl(targetExam.pdf_url);
+          applyAutoMask(targetExam.pdf_url);
         }
       } else {
         // Fallback: Thử tìm trong IndexedDB theo id đề thi
         getPdfFromIndexedDb(`pdf_${targetExam.id}`).then((data) => {
-          if (data) setLoadedPdfUrl(data);
+          if (data) applyAutoMask(data);
         });
       }
     };
@@ -294,21 +305,6 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     Boolean(exam?.pdf_url) ||
     Boolean(loadedPdfUrl) ||
     (questions.length > 0 && questions.some((q) => q.content?.includes('file PDF')));
-
-  const handleTrimStudentPdf = async () => {
-    const current = loadedPdfUrl || exam?.pdf_url;
-    if (!current) return;
-    try {
-      const res = await trimPdfPages(current, { removeLastPage: true });
-      setLoadedPdfUrl(res.trimmedDataUrl);
-      if (exam) {
-        setExam({ ...exam, pdf_url: res.trimmedDataUrl });
-      }
-      alert(`Đã cắt bỏ trang cuối chứa bảng đáp án! Đề thi hiện còn ${res.totalNew} trang.`);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   // 6. BỘ ĐẾM THỜI GIAN THẬT & TỰ ĐỘNG NỘP KHI HẾT GIỜ
   useEffect(() => {
@@ -1068,8 +1064,6 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                     pdfUrl={loadedPdfUrl || exam.pdf_url || ''}
                     title={exam.title}
                     className="h-[calc(100vh-140px)] min-h-[640px]"
-                    canTrim={true}
-                    onTrimLastPage={handleTrimStudentPdf}
                   />
                 ) : (
                   <div className="h-[640px] flex flex-col items-center justify-center text-slate-400 gap-3">

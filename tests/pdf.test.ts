@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount } from '../src/lib/pdf/pdfExamHelper';
+import {
+  parseQuickAnswerKey,
+  buildPdfExamQuestions,
+  trimPdfPages,
+  getPdfPageCount,
+  maskPdfAnswerKey,
+} from '../src/lib/pdf/pdfExamHelper';
 import { PDFDocument } from 'pdf-lib';
 
 describe('Kiểm thử bộ phân tích đáp án đề thi PDF (pdfExamHelper)', () => {
@@ -90,5 +96,22 @@ describe('Kiểm thử bộ phân tích đáp án đề thi PDF (pdfExamHelper)'
     // Kiểm tra lại file PDF sau khi cắt
     const newCount = await getPdfPageCount(result.trimmedDataUrl);
     expect(newCount).toBe(3);
+  });
+
+  it('Tự động che bảng đáp án ở cuối trang mà không làm mất trang (maskPdfAnswerKey)', async () => {
+    // Tạo PDF mẫu có 3 trang
+    const doc = await PDFDocument.create();
+    doc.addPage([600, 800]); // Trang 1
+    doc.addPage([600, 800]); // Trang 2
+    doc.addPage([600, 800]); // Trang 3 (chứa câu hỏi + bảng đáp án ở đáy)
+    const base64 = await doc.saveAsBase64({ dataUri: true });
+
+    // Che bảng đáp án (giữ nguyên 3 trang)
+    const result = await maskPdfAnswerKey(base64, { bottomRatio: 0.35 });
+    expect(result.totalPages).toBe(3);
+
+    // Kiểm tra số trang sau khi che vẫn giữ đủ 3 trang, không mất câu hỏi cuối
+    const count = await getPdfPageCount(result.maskedDataUrl);
+    expect(count).toBe(3);
   });
 });

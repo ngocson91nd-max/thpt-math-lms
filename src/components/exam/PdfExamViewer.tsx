@@ -114,10 +114,10 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
               type="button"
               onClick={onTrimLastPage}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-600 text-white font-semibold text-xs transition cursor-pointer"
-              title="Cắt bỏ trang cuối chứa bảng đáp án để học sinh không nhìn thấy"
+              title="Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy (giữ trọn vẹn câu hỏi)"
             >
               <Scissors className="h-3.5 w-3.5" />
-              <span>Cắt trang đáp án cuối</span>
+              <span>Che bảng đáp án</span>
             </button>
           )}
 
