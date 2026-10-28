@@ -43,18 +43,16 @@ export const StudentPendingApprovalView: React.FC = () => {
       const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
 
       const saved = localStorage.getItem('lms_classes');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAvailableClasses(parsed.filter((c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)));
-          }
-        } catch (e) {
-          console.error(e);
+      const localClasses: ClassItem[] = saved ? JSON.parse(saved) : [];
+      const combined = [...localClasses];
+      MOCK_CLASSES.forEach((mock) => {
+        if (!combined.some((c) => c.id === mock.id || c.code?.toUpperCase() === mock.code?.toUpperCase())) {
+          combined.push(mock);
         }
-      } else {
-        setAvailableClasses(MOCK_CLASSES.filter((c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)));
-      }
+      });
+      const validClasses = combined.filter((c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code));
+      setAvailableClasses(validClasses);
+      localStorage.setItem('lms_classes', JSON.stringify(validClasses));
 
       if (user) {
         setPendingRequests(getPendingClassRequestsForUser(user.id));
