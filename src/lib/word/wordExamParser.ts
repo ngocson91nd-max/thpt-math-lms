@@ -724,11 +724,11 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     return str.replace(/@@DOCX_IMG_\d+@@/g, (token) => imgPlaceholders.get(token) || token);
   };
 
-  // Vị trí các phần trong tài liệu
+  // Vị trí các phần trong tài liệu (hỗ trợ cả chữ La Mã, số Ả Rập và từ khóa Tự luận)
   const p1Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
   const p2Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
   const p3Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
-  const p4Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)/i);
+  const p4Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)|(?:PHẦN\s+)?TỰ\s*LUẬN\b|BÀI\s*TẬP\s*TỰ\s*LUẬN\b/i);
 
   // Tách câu hỏi theo biểu thức đa dạng, hỗ trợ mọi thẻ lồng giữa "Câu" và số
   const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
@@ -784,9 +784,16 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     let correctAnswer: any = null;
     let questionContent = contentAndChoices;
 
-    const isPart1 = hasSections ? sectionPart === 1 : choicesMatches.length >= 3;
-    const isPart2 = hasSections ? sectionPart === 2 : !isPart1 && tfMatches.length >= 3;
-    const isPart3 = hasSections ? sectionPart === 3 : !isPart1 && !isPart2 && (body.includes('Điền kết quả') || body.includes('bằng bao nhiêu'));
+    // Kiểm tra câu tự luận rõ ràng hoặc nằm trong Phần Tự luận
+    const isExplicitEssay =
+      sectionPart === 4 ||
+      /(?:^|\s)(?:Tự\s*luận|TỰ\s*LUẬN|Bài\s*toán|Chứng\s*minh\s*rằng|Giải\s*phương\s*trình)/i.test(body);
+
+    const hasTrueFalseKeywords = /(?:Đúng|Sai|\[Đ\]|\[S\])/i.test(contentAndChoices);
+
+    const isPart1 = hasSections ? sectionPart === 1 : (choicesMatches.length >= 3 && !isExplicitEssay);
+    const isPart2 = hasSections ? sectionPart === 2 : (!isPart1 && tfMatches.length >= 3 && !isExplicitEssay && (hasTrueFalseKeywords || tailAnswers.part2.has(questionNumber)));
+    const isPart3 = hasSections ? sectionPart === 3 : (!isPart1 && !isPart2 && (body.includes('Điền kết quả') || body.includes('bằng bao nhiêu') || tailAnswers.part3.has(questionNumber)) && !isExplicitEssay);
 
     if (isPart1) {
       // Dạng Trắc nghiệm 4 lựa chọn (Phần I)

@@ -186,9 +186,12 @@ export default function ExamsPage() {
               (e: any) => !deletedIds.has(e.id) && !deletedIds.has(e.code)
             );
 
-            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất nếu chưa bị xóa
+            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất nếu chưa bị xóa và chưa bị người dùng sửa
             const mockMap = new Map(MOCK_EXAMS.map((m) => [m.id, m]));
-            const merged = filteredParsed.map((e: any) => mockMap.get(e.id) || e);
+            const merged = filteredParsed.map((e: any) => {
+              if (e.updated_at) return e; // Đề đã được giáo viên lưu hoặc sửa đổi
+              return mockMap.get(e.id) || e;
+            });
 
             // Chỉ thêm mock exam nếu nó CHƯA BAO GIỜ bị xóa và chưa có trong danh sách
             MOCK_EXAMS.forEach((m) => {
@@ -725,6 +728,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
     const created: Exam = {
       id: newId,
+      code: Math.random().toString(36).substring(2, 8).toUpperCase(),
       title: newTitle.trim(),
       description: newDescription.trim() || 'Đề thi trắc nghiệm và tự luận Toán THPT Thầy Sơn.',
       teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',

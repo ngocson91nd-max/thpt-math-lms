@@ -77,32 +77,57 @@ export function parseExamLatex(rawTex: string): {
   const questions: Question[] = [];
   let qIndex = 0;
 
-  // Xác định vị trí các phần
-  const p1Pos = rawTex.indexOf('Phần I');
-  const p2Pos = rawTex.indexOf('Phần II');
-  const p3Pos = rawTex.indexOf('Phần III');
-  const p4Pos = rawTex.indexOf('Phần IV');
+  // Xác định vị trí các phần (hỗ trợ cả số La Mã, số Ả Rập và từ khóa Tự luận)
+  const findSectionPos = (patterns: RegExp[]): number => {
+    for (const pat of patterns) {
+      const m = rawTex.match(pat);
+      if (m && m.index !== undefined) return m.index;
+    }
+    return -1;
+  };
+
+  const p1Pos = findSectionPos([/phần\s*(?:i\b|1\b)/i]);
+  const p2Pos = findSectionPos([/phần\s*(?:ii\b|2\b)/i]);
+  const p3Pos = findSectionPos([/phần\s*(?:iii\b|3\b)/i]);
+  const p4Pos = findSectionPos([/phần\s*(?:iv\b|4\b)/i, /tự\s*luận/i, /bài\s*tập\s*tự\s*luận/i]);
 
   while ((match = exRegex.exec(rawTex)) !== null) {
     qIndex++;
     const blockIndex = match.index;
     const block = match[1];
+    const isBtEnv = match[0].startsWith('\\begin{bt}');
 
     // Trích xuất mã ID bài toán nếu có (ví dụ: \begin{ex}[2D1-1.1] hoặc [TH])
     const tagMatch = block.match(/^\s*\[(.*?)\]/);
     const customTag = tagMatch ? tagMatch[1].trim() : '';
 
     let part: 1 | 2 | 3 | 4 = 1;
-    if (p4Pos !== -1 && blockIndex >= p4Pos) part = 4;
+    if (isBtEnv || (p4Pos !== -1 && blockIndex >= p4Pos)) part = 4;
     else if (p3Pos !== -1 && blockIndex >= p3Pos) part = 3;
     else if (p2Pos !== -1 && blockIndex >= p2Pos) part = 2;
     else if (p1Pos !== -1 && blockIndex >= p1Pos) part = 1;
 
     let type: QuestionType = 'single_choice';
-    if (block.includes('\\choiceTF')) type = 'true_false';
-    else if (block.includes('\\choice')) type = 'single_choice';
-    else if (block.includes('\\shortans')) type = 'short_answer';
-    else if (part === 4 || block.includes('\\begin{enumerate}')) type = 'essay';
+    if (block.includes('\\choiceTF')) {
+      type = 'true_false';
+      part = 2;
+    } else if (block.includes('\\choice')) {
+      type = 'single_choice';
+      part = 1;
+    } else if (block.includes('\\shortans')) {
+      type = 'short_answer';
+      part = 3;
+    } else if (isBtEnv || part === 4 || block.includes('\\begin{enumerate}') || /tự\s*luận/i.test(block)) {
+      type = 'essay';
+      part = 4;
+    } else if (part === 3) {
+      type = 'short_answer';
+    } else {
+      // Nếu không có \choice, không có \choiceTF, không có \shortans:
+      // Trong đề Toán, đó chính là câu TỰ LUẬN!
+      type = 'essay';
+      part = 4;
+    }
 
     // Bóc tách Lời giải \loigiai{...}
     let explanation = '';

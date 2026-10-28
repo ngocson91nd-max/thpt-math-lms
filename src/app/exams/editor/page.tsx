@@ -88,7 +88,9 @@ function ExamEditorContent() {
   const [showLeftSettings, setShowLeftSettings] = useState(true);
   const [showRightStructure, setShowRightStructure] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(true);
-  const [code, setCode] = useState('UXHF8H');
+  const [code, setCode] = useState(() => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  });
   const [noTimeLimit, setNoTimeLimit] = useState(false);
   const [accessType, setAccessType] = useState<'public' | 'restricted'>('restricted');
   const [assignedClasses, setAssignedClasses] = useState<string[]>(['12 Toán 1']);
@@ -933,6 +935,11 @@ function ExamEditorContent() {
       try {
         const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
         const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+        // Xóa đề thi đang lưu khỏi blacklist (nếu có lỡ dính ID hoặc Code trùng với đề đã từng xóa)
+        deletedIds.delete(examId);
+        if (updatedExam.code) deletedIds.delete(updatedExam.code);
+        localStorage.setItem('lms_deleted_exam_ids', JSON.stringify(Array.from(deletedIds)));
+
         const savedExams = localStorage.getItem('lms_exams');
         let examsList: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
         examsList = examsList.filter((e) => !deletedIds.has(e.id) && !deletedIds.has(e.code || ''));
@@ -1348,84 +1355,35 @@ function ExamEditorContent() {
                     </button>
                   </div>
                   <div className="space-y-3">
-                    <select
-                      value={popoverFileMode}
-                      onChange={(e) => setPopoverFileMode(e.target.value as any)}
-                      className="w-full rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="thcs_thpt">THCS / THPT (3 phần)</option>
-                      <option value="dinh_ky">Định kỳ / HSG (4 phần)</option>
-                    </select>
-
-                    <div className="space-y-1.5">
-                      {/* Chọn file tổng hợp */}
-                      <label className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 cursor-pointer shadow-md shadow-blue-500/20 transition">
-                        <Upload className="h-3.5 w-3.5" />
-                        <span>Chọn file từ máy tính...</span>
-                        <input
-                          type="file"
-                          accept=".docx,.tex,.txt,.pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            setShowUploadPopover(false);
-                            handleUploadDocx(e);
-                          }}
-                        />
-                      </label>
-                      <div className="text-[10.5px] text-slate-500 text-center font-medium">
-                        Hỗ trợ: Word (.docx), LaTeX (.tex) và PDF (.pdf)
-                      </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Cấu trúc đề của file:</label>
+                      <select
+                        value={popoverFileMode}
+                        onChange={(e) => setPopoverFileMode(e.target.value as any)}
+                        className="w-full rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="thcs_thpt">THCS / THPT (3 phần)</option>
+                        <option value="dinh_ky">Định kỳ / HSG (4 phần có tự luận)</option>
+                      </select>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
+                    <label className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 cursor-pointer shadow-md shadow-blue-500/20 transition">
+                      <Upload className="h-4 w-4" />
+                      <span>Chọn file từ máy tính...</span>
+                      <input
+                        type="file"
+                        accept=".docx,.tex,.txt,.pdf"
+                        className="hidden"
+                        onChange={(e) => {
                           setShowUploadPopover(false);
-                          setImportTab('word');
-                          setShowImportModal(true);
+                          handleUploadDocx(e);
                         }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center justify-between transition cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2">
-                          <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-                          Nhập Word có MathType...
-                        </span>
-                        <ChevronRight className="h-3 w-3 text-slate-400" />
-                      </button>
+                      />
+                    </label>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowUploadPopover(false);
-                          setImportTab('latex');
-                          setShowImportModal(true);
-                        }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-purple-50 hover:text-purple-700 font-semibold flex items-center justify-between transition cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2">
-                          <FileCode className="h-3.5 w-3.5 text-purple-600" />
-                          Dán / Tải mã LaTeX (.tex)...
-                        </span>
-                        <ChevronRight className="h-3 w-3 text-slate-400" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowUploadPopover(false);
-                          setImportTab('pdf');
-                          setShowImportModal(true);
-                        }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-rose-50 hover:text-rose-700 font-semibold flex items-center justify-between transition cursor-pointer"
-                      >
-                        <span className="flex items-center gap-2">
-                          <FileText className="h-3.5 w-3.5 text-rose-600" />
-                          Tạo đề từ PDF + Che đáp án...
-                        </span>
-                        <ChevronRight className="h-3 w-3 text-slate-400" />
-                      </button>
-                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed text-center">
+                      Hệ thống tự động nhận diện file Word (.docx), LaTeX (.tex) hoặc PDF (.pdf).
+                    </p>
                   </div>
                 </div>
               )}
@@ -2234,78 +2192,6 @@ function ExamEditorContent() {
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100/70">
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 flex justify-center">
             <div className="w-full max-w-[840px] bg-white rounded-xl shadow-md border border-slate-200 min-h-[1120px] p-8 sm:p-12 relative flex flex-col justify-between">
-              {/* Header trang giấy A4 */}
-              <div className="border-b-2 border-slate-900 pb-4 mb-6">
-                <div className="flex justify-between items-start text-xs sm:text-sm font-bold text-slate-900">
-                  <div className="text-center">
-                    <div>SỞ GIÁO DỤC VÀ ĐÀO TẠO</div>
-                    <div className="text-blue-700 uppercase">TOÁN THẦY SƠN - THPT</div>
-                    <div className="text-[11px] font-normal text-slate-500 mt-1">MÃ ĐỀ: {code}</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="uppercase">KỲ THI TỐT NGHIỆP THPT NĂM 2025</div>
-                    <div className="text-red-700 font-extrabold text-sm sm:text-base">MÔN TOÁN - LỚP {grade}</div>
-                    <div className="text-[11px] font-normal text-slate-500 mt-1">
-                      Thời gian làm bài: {duration} phút (không kể thời gian phát đề)
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Thanh nhập file nhanh luôn sẵn sàng */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 mb-6 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                  <Upload className="h-4 w-4 text-indigo-600" />
-                  <span>Nhập nhanh đề thi từ máy tính:</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 font-bold transition cursor-pointer shadow-2xs">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    <span>Word (.docx)</span>
-                    <input
-                      type="file"
-                      accept=".docx"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleUniversalFileUpload(f);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-
-                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-bold transition cursor-pointer shadow-2xs">
-                    <FileCode className="h-3.5 w-3.5" />
-                    <span>LaTeX (.tex)</span>
-                    <input
-                      type="file"
-                      accept=".tex,.txt"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleUniversalFileUpload(f);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-
-                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 font-bold transition cursor-pointer shadow-2xs">
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>PDF (.pdf)</span>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleUniversalFileUpload(f);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-
               {totalQuestions === 0 ? (
                 /* Hero box khi chưa có câu hỏi */
                 <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center space-y-6">
@@ -2776,6 +2662,46 @@ function ExamEditorContent() {
                   ))}
                 </div>
               </div>
+
+              {/* PHẦN IV (Tự luận) */}
+              {(format === 'periodic_4_parts' || part4Questions.length > 0) && (
+                <div className="space-y-1">
+                  <div
+                    onClick={() => scrollToSection('section-part4')}
+                    className="flex items-center justify-between p-2 rounded-xl bg-purple-50/70 border border-purple-200 cursor-pointer hover:bg-purple-100/60"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-purple-600" />
+                      <span className="font-extrabold text-[11px] text-purple-900">PHẦN IV (Tự luận)</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-800">{part4Questions.length} câu</span>
+                  </div>
+
+                  <div className="space-y-0.5 pl-1.5 pt-1">
+                    {part4Questions.map((q, idx) => (
+                      <div
+                        key={q.id}
+                        onClick={() => {
+                          setActiveQuestionId(q.id);
+                          const el = document.getElementById(`q-${q.id}`);
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition text-[11px] ${
+                          activeQuestionId === q.id
+                            ? 'bg-purple-100 text-purple-900 font-bold'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Radio className={`h-2.5 w-2.5 shrink-0 ${activeQuestionId === q.id ? 'text-purple-600' : 'text-slate-400'}`} />
+                        <span className="font-bold shrink-0">Câu {part1Questions.length + part2Questions.length + part3Questions.length + idx + 1}:</span>
+                        <span className="truncate text-slate-500">
+                          {q.content.replace(/[\$\\]/g, '').slice(0, 26)}...
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </aside>
         )}
@@ -3200,6 +3126,23 @@ function ExamEditorContent() {
                   })}
                 </div>
               </div>
+
+              {/* Phần IV: Tự luận */}
+              {part4Questions.length > 0 && (
+                <div>
+                  <h4 className="font-bold text-xs text-purple-900 mb-2 uppercase">PHẦN IV. Tự luận ({part4Questions.length} câu)</h4>
+                  <div className="space-y-2">
+                    {part4Questions.map((q, idx) => (
+                      <div key={q.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 text-xs">
+                        <div className="font-bold text-slate-700 mb-1">Câu {idx + 1} (Tự luận - {q.points || 2.0}đ):</div>
+                        <div className="text-slate-600 line-clamp-2 italic">
+                          {q.explanation || 'Đã có hướng dẫn chấm / đáp án tự luận.'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex justify-end">
