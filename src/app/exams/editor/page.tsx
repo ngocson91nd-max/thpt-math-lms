@@ -93,8 +93,8 @@ function ExamEditorContent() {
   });
   const [noTimeLimit, setNoTimeLimit] = useState(false);
   const [accessType, setAccessType] = useState<'public' | 'restricted'>('restricted');
-  const [assignedClasses, setAssignedClasses] = useState<string[]>(['12 Toán 1']);
-  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [partPoints, setPartPoints] = useState({ part1: 3, part2: 4, part3: 3, part4: 0 });
   const [trueFalseScoring, setTrueFalseScoring] = useState<'standard_thpt' | 'equal'>('standard_thpt');
   const [maxAttempts, setMaxAttempts] = useState<number>(0);
@@ -181,27 +181,33 @@ function ExamEditorContent() {
     const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
 
     const savedClasses = localStorage.getItem('lms_classes');
+    let loadedClasses: ClassItem[] = [];
     if (savedClasses) {
       try {
         const parsedCls = JSON.parse(savedClasses);
         if (Array.isArray(parsedCls)) {
-          const filteredCls = parsedCls.filter(
+          loadedClasses = parsedCls.filter(
             (c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
           );
-          setClasses(filteredCls);
+          setClasses(loadedClasses);
         }
       } catch {}
     } else {
-      const initialCls = MOCK_CLASSES.filter(
+      loadedClasses = MOCK_CLASSES.filter(
         (c) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code)
       );
-      setClasses(initialCls);
+      setClasses(loadedClasses);
     }
 
     // Đọc class param từ URL nếu có (ví dụ khi tạo đề từ trang chi tiết lớp)
     const classFromUrl = searchParams.get('class');
-    if (classFromUrl && !examIdParam) {
-      setAssignedClasses([classFromUrl]);
+    if (!examIdParam) {
+      if (classFromUrl) {
+        setAssignedClasses([classFromUrl]);
+      } else if (loadedClasses.length > 0) {
+        // Mặc định chọn các lớp hiện có của giáo viên
+        setAssignedClasses(loadedClasses.map((c) => c.name));
+      }
     }
 
     // Tải ngân hàng câu hỏi
@@ -1905,42 +1911,75 @@ function ExamEditorContent() {
             {accessType === 'restricted' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-slate-600">Lớp được phép thi</label>
-                  <Link
-                    href="/classes"
-                    className="text-[10px] font-bold text-blue-600 hover:underline inline-flex items-center gap-0.5"
-                    title="Mở trang Quản lý Lớp học"
-                  >
-                    <span>Quản lý lớp</span>
-                    <ArrowUpRight className="h-2.5 w-2.5" />
-                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-[11px] font-bold text-slate-700">Lớp được phép thi</label>
+                    <span className="text-[10px] text-slate-400 font-semibold">({assignedClasses.length}/{classes.length})</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setAssignedClasses(classes.map((c) => c.name))}
+                      className="text-blue-600 hover:underline cursor-pointer font-bold"
+                    >
+                      Chọn hết
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setAssignedClasses([])}
+                      className="text-slate-500 hover:underline cursor-pointer font-medium"
+                    >
+                      Bỏ chọn
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <Link
+                      href="/classes"
+                      className="font-bold text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                      title="Mở trang Quản lý Lớp học"
+                    >
+                      <span>Quản lý</span>
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                    </Link>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {classes.map((cls) => {
-                    const isSelected = assignedClasses.includes(cls.name);
-                    return (
-                      <button
-                        key={cls.id}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setAssignedClasses(assignedClasses.filter((c) => c !== cls.name));
-                          } else {
-                            setAssignedClasses([...assignedClasses, cls.name]);
-                          }
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-blue-600 text-white font-bold'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        <span>{cls.name}</span>
-                        {isSelected && <Check className="h-3 w-3" />}
-                      </button>
-                    );
-                  })}
-                </div>
+
+                {classes.length === 0 ? (
+                  <p className="text-[11px] text-amber-600 italic bg-amber-50 p-2 rounded-lg border border-amber-200">
+                    Chưa có lớp nào trong hệ thống. <Link href="/classes" className="underline font-bold">Bấm để tạo lớp mới</Link>
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {classes.map((cls) => {
+                      const isSelected = assignedClasses.includes(cls.name);
+                      return (
+                        <button
+                          key={cls.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setAssignedClasses(assignedClasses.filter((c) => c !== cls.name));
+                            } else {
+                              setAssignedClasses([...assignedClasses, cls.name]);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-600 text-white font-bold shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          <span>{cls.name}</span>
+                          {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {assignedClasses.length === 0 && classes.length > 0 && (
+                  <p className="text-[10px] text-rose-500 italic mt-0.5">
+                    * Chưa chọn lớp nào. Vui lòng bấm chọn lớp để học sinh được làm bài.
+                  </p>
+                )}
               </div>
             )}
 
@@ -2192,95 +2231,9 @@ function ExamEditorContent() {
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100/70">
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 flex justify-center">
             <div className="w-full max-w-[840px] bg-white rounded-xl shadow-md border border-slate-200 min-h-[1120px] p-8 sm:p-12 relative flex flex-col justify-between">
-              {totalQuestions === 0 ? (
-                /* Hero box khi chưa có câu hỏi */
-                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center space-y-6">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-50 text-blue-600 border border-blue-200 shadow-sm">
-                    <Upload className="h-8 w-8" />
-                  </div>
-                  <div className="max-w-md space-y-2">
-                    <h3 className="font-extrabold text-lg text-slate-900">Bắt đầu tạo câu hỏi cho đề thi</h3>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Thầy/cô có thể tải file đề thi từ máy tính (tự động nhận diện công thức MathType, gói ex_test và hình ảnh) hoặc tạo câu hỏi mới.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-lg">
-                    {/* Nạp Word */}
-                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 hover:bg-blue-50 hover:border-blue-400 transition cursor-pointer group">
-                      <BookOpen className="h-6 w-6 text-blue-600 group-hover:scale-110 transition" />
-                      <span className="font-bold text-xs text-slate-800">File Word (.docx)</span>
-                      <span className="text-[10px] text-slate-500">Giữ nguyên công thức MathType</span>
-                      <input
-                        type="file"
-                        accept=".docx"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleUniversalFileUpload(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-
-                    {/* Nạp LaTeX */}
-                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/30 hover:bg-purple-50 hover:border-purple-400 transition cursor-pointer group">
-                      <FileCode className="h-6 w-6 text-purple-600 group-hover:scale-110 transition" />
-                      <span className="font-bold text-xs text-slate-800">File LaTeX (.tex)</span>
-                      <span className="text-[10px] text-slate-500">Gói ex_test chuẩn THPT</span>
-                      <input
-                        type="file"
-                        accept=".tex,.txt"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleUniversalFileUpload(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-
-                    {/* Nạp PDF */}
-                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50/30 hover:bg-rose-50 hover:border-rose-400 transition cursor-pointer group">
-                      <FileText className="h-6 w-6 text-rose-600 group-hover:scale-110 transition" />
-                      <span className="font-bold text-xs text-slate-800">File PDF (.pdf)</span>
-                      <span className="text-[10px] text-slate-500">Xem trực tiếp + Phiếu OMR</span>
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleUniversalFileUpload(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleAddEmptyQuestion(1)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 shadow-md shadow-blue-500/20 cursor-pointer"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Thêm câu hỏi thủ công</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuestionsWithHistory(MOCK_QUESTIONS.slice(0, 7))}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
-                    >
-                      <Sparkles className="h-4 w-4 text-amber-600" />
-                      <span>Tải 7 câu hỏi mẫu</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Danh sách các phần câu hỏi */
-                <div className="space-y-8 flex-1">
-                  {/* PHẦN I: TRẮC NGHIỆM */}
+              {/* Danh sách các phần câu hỏi (Chuẩn bố cục trang giấy iExam) */}
+              <div className="space-y-8 flex-1">
+                {/* PHẦN I: TRẮC NGHIỆM */}
                   <section id="section-part1" className="space-y-4">
                     <div className="flex items-center justify-between border-b border-blue-200 pb-2">
                       <div>
@@ -2390,17 +2343,30 @@ function ExamEditorContent() {
                         </span>
                       </div>
 
-                      <div className="space-y-5">
-                        {part4Questions.map((q, idx) => (
-                          <div id={`q-${q.id}`} key={q.id}>
-                            {renderQuestionItem(q, part1Questions.length + part2Questions.length + part3Questions.length + idx + 1)}
-                          </div>
-                        ))}
-                      </div>
+                      {part4Questions.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-purple-200 p-6 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
+                          <span>Chưa có câu hỏi trong Phần IV.</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddEmptyQuestion(4)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 font-bold hover:bg-purple-100 transition cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Thêm câu tự luận</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-5">
+                          {part4Questions.map((q, idx) => (
+                            <div id={`q-${q.id}`} key={q.id}>
+                              {renderQuestionItem(q, part1Questions.length + part2Questions.length + part3Questions.length + idx + 1)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </section>
                   )}
                 </div>
-              )}
 
               {/* Chân trang đề thi */}
               <div className="border-t border-slate-300 pt-4 mt-8 flex justify-between items-center text-[11px] text-slate-500 italic">

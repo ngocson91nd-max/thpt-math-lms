@@ -102,6 +102,12 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState<ClassMember | null>(null);
 
+  // Modal Giao đề thi có sẵn cho lớp này
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [allAvailableExams, setAllAvailableExams] = useState<Exam[]>([]);
+  const [selectedExamIdsToAssign, setSelectedExamIdsToAssign] = useState<string[]>([]);
+  const [assignToast, setAssignToast] = useState<string | null>(null);
+
   // Add Member Form
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentEmail, setNewStudentEmail] = useState('');
@@ -232,6 +238,108 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     navigator.clipboard.writeText(currentClass.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Mở modal giao đề có sẵn cho lớp
+  const handleOpenAssignModal = () => {
+    if (typeof window !== 'undefined') {
+      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+      const savedExams = localStorage.getItem('lms_exams');
+      let list: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
+      list = list.filter((e) => !deletedIds.has(e.id) && !deletedIds.has(e.code || ''));
+      setAllAvailableExams(list);
+
+      // Khởi tạo các đề đã gán cho lớp này
+      const currentAssignedIds = list
+        .filter((e) => {
+          const inAssigned = e.assigned_classes?.some(
+            (c) => c.trim().toLowerCase() === currentClass.name.trim().toLowerCase()
+          );
+          return inAssigned || e.class_id === currentClass.id;
+        })
+        .map((e) => e.id);
+      setSelectedExamIdsToAssign(currentAssignedIds);
+      setShowAssignModal(true);
+    }
+  };
+
+  // Lưu phân công các đề thi cho lớp này
+  const handleSaveClassExamsAssignment = () => {
+    if (typeof window !== 'undefined') {
+      const savedExams = localStorage.getItem('lms_exams');
+      let list: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
+      const targetClassName = currentClass.name.trim();
+
+      const updatedList = list.map((e) => {
+        const isSelected = selectedExamIdsToAssign.includes(e.id);
+        let assigned = Array.isArray(e.assigned_classes) ? [...e.assigned_classes] : [];
+        const alreadyHas = assigned.some(
+          (c) => c.trim().toLowerCase() === targetClassName.toLowerCase()
+        );
+
+        if (isSelected) {
+          if (!alreadyHas) {
+            assigned.push(targetClassName);
+          }
+          return {
+            ...e,
+            assigned_classes: assigned,
+            access_type: 'restricted' as const,
+            updated_at: new Date().toISOString(),
+          };
+        } else {
+          if (alreadyHas) {
+            assigned = assigned.filter(
+              (c) => c.trim().toLowerCase() !== targetClassName.toLowerCase()
+            );
+          }
+          return {
+            ...e,
+            assigned_classes: assigned,
+            updated_at: new Date().toISOString(),
+          };
+        }
+      });
+
+      localStorage.setItem('lms_exams', JSON.stringify(updatedList));
+
+      // Cập nhật lại classExams hiện tại
+      const relevant = updatedList.filter((e) => {
+        const inAssigned = e.assigned_classes?.some(
+          (c) => c.trim().toLowerCase() === targetClassName.toLowerCase()
+        );
+        return inAssigned || e.class_id === currentClass.id;
+      });
+      setClassExams(relevant);
+      setShowAssignModal(false);
+      setAssignToast(`Đã cập nhật bài thi gán cho lớp ${currentClass.name} thành công!`);
+      setTimeout(() => setAssignToast(null), 3000);
+    }
+  };
+
+  // Bỏ giao một đề thi khỏi lớp
+  const handleUnassignExam = (examId: string) => {
+    if (typeof window !== 'undefined') {
+      const savedExams = localStorage.getItem('lms_exams');
+      let list: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
+      const targetClassName = currentClass.name.trim();
+
+      const updatedList = list.map((e) => {
+        if (e.id === examId) {
+          const assigned = (e.assigned_classes || []).filter(
+            (c) => c.trim().toLowerCase() !== targetClassName.toLowerCase()
+          );
+          return { ...e, assigned_classes: assigned, updated_at: new Date().toISOString() };
+        }
+        return e;
+      });
+
+      localStorage.setItem('lms_exams', JSON.stringify(updatedList));
+      setClassExams((prev) => prev.filter((e) => e.id !== examId));
+      setAssignToast(`Đã gỡ đề khỏi lớp ${currentClass.name}!`);
+      setTimeout(() => setAssignToast(null), 3000);
+    }
   };
 
   // Thêm học sinh vào lớp
@@ -605,7 +713,15 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               Danh sách các bài thi và đề kiểm tra dành riêng cho lớp <span className="font-bold text-slate-700">{currentClass.name}</span>.
             </p>
             {isTeacher && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAssignModal}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 shadow-2xs transition cursor-pointer"
+                >
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  <span>+ Giao đề có sẵn cho lớp</span>
+                </button>
                 <Link
                   href={`/exams?class=${encodeURIComponent(currentClass.name)}`}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
@@ -629,10 +745,18 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-slate-800">Chưa có bài kiểm tra nào gán cho lớp này</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Thầy có thể tạo đề kiểm tra mới hoặc gán các đề thi có sẵn cho lớp {currentClass.name}.
+                Thầy có thể bấm "Giao đề có sẵn cho lớp" để chọn đề thi hoặc tạo đề mới riêng cho lớp {currentClass.name}.
               </p>
               {isTeacher && (
-                <div className="mt-4 flex items-center justify-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenAssignModal}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-2xs cursor-pointer"
+                  >
+                    <GraduationCap className="h-3.5 w-3.5" />
+                    <span>Giao đề có sẵn cho lớp ngay</span>
+                  </button>
                   <Link
                     href={`/exams/editor?new=1&class=${encodeURIComponent(currentClass.name)}`}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 transition shadow-2xs"
@@ -698,12 +822,23 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                       {isTeacher ? (
                         <>
-                          <Link
-                            href={`/exams/results/${e.id}`}
-                            className="inline-flex items-center gap-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                          >
-                            <span>Xem điểm</span>
-                          </Link>
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/exams/results/${e.id}`}
+                              className="inline-flex items-center gap-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                            >
+                              <span>Xem điểm</span>
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handleUnassignExam(e.id)}
+                              className="inline-flex items-center gap-1 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 px-2 py-1.5 text-xs font-medium transition cursor-pointer"
+                              title="Bỏ giao bài thi này khỏi lớp"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span>Gỡ khỏi lớp</span>
+                            </button>
+                          </div>
                           <div className="flex items-center gap-1.5">
                             <Link
                               href={`/exams/editor?id=${e.id}`}
@@ -902,6 +1037,127 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* TOAST THÔNG BÁO */}
+      {assignToast && (
+        <div className="fixed top-20 right-6 z-50 rounded-2xl bg-slate-900 text-white px-5 py-3 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          <span>{assignToast}</span>
+        </div>
+      )}
+
+      {/* MODAL GIAO ĐỀ CÓ SẴN CHO LỚP NÀY */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">Giao đề thi cho lớp {currentClass.name}</h3>
+                  <p className="text-[11px] text-slate-500">Tick chọn các bài thi mà học sinh lớp này được phép làm</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">
+                  Danh sách đề thi ({selectedExamIdsToAssign.length}/{allAvailableExams.length} đã chọn):
+                </span>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExamIdsToAssign(allAvailableExams.map((e) => e.id))}
+                    className="text-blue-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Chọn hết
+                  </button>
+                  <span className="text-slate-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExamIdsToAssign([])}
+                    className="text-slate-500 hover:underline font-medium cursor-pointer"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+              </div>
+
+              {allAvailableExams.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500">
+                  Chưa có đề thi nào trong hệ thống. Thầy có thể tạo đề mới từ trang Đề thi.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {allAvailableExams.map((exam) => {
+                    const isSelected = selectedExamIdsToAssign.includes(exam.id);
+                    return (
+                      <label
+                        key={exam.id}
+                        className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition text-xs ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50/50 shadow-2xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            if (isSelected) {
+                              setSelectedExamIdsToAssign(selectedExamIdsToAssign.filter((id) => id !== exam.id));
+                            } else {
+                              setSelectedExamIdsToAssign([...selectedExamIdsToAssign, exam.id]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded">
+                              {exam.code || exam.id.slice(0, 6).toUpperCase()}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              Khối {exam.grade || 12} • {exam.duration_minutes} phút
+                            </span>
+                          </div>
+                          <p className="font-bold text-slate-900 truncate">{exam.title}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveClassExamsAssignment}
+                className="rounded-xl bg-blue-600 px-5 py-2 font-bold text-white hover:bg-blue-500 shadow-md shadow-blue-500/20 transition cursor-pointer"
+              >
+                Lưu phân công
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -70,6 +70,11 @@ export default function ExamsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
+  // Modal Giao đề thi cho lớp học
+  const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
+  const [assignClassesSelection, setAssignClassesSelection] = useState<string[]>([]);
+  const [assignAccessType, setAssignAccessType] = useState<'public' | 'restricted'>('restricted');
+
   // Tạo đề từ PDF
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfExamTitle, setPdfExamTitle] = useState('');
@@ -181,10 +186,12 @@ export default function ExamsPage() {
         try {
           const parsed = JSON.parse(savedExams);
           if (Array.isArray(parsed)) {
-            // Lọc bỏ triệt để các đề đã bị xóa vĩnh viễn
-            const filteredParsed = parsed.filter(
-              (e: any) => !deletedIds.has(e.id) && !deletedIds.has(e.code)
-            );
+            // Lọc bỏ triệt để các đề đã bị xóa vĩnh viễn (đề giáo viên tự lưu với updated_at không bị lọc nhầm bởi code cũ)
+            const filteredParsed = parsed.filter((e: any) => {
+              if (deletedIds.has(e.id)) return false;
+              if (e.updated_at) return true;
+              return !deletedIds.has(e.code);
+            });
 
             // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất nếu chưa bị xóa và chưa bị người dùng sửa
             const mockMap = new Map(MOCK_EXAMS.map((m) => [m.id, m]));
@@ -879,13 +886,41 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     }
   };
 
-  // Tính số lượng đề thi gán cho từng lớp học thực tế
+  // Mở modal giao đề cho lớp
+  const handleOpenAssignModal = (exam: Exam) => {
+    setAssigningExam(exam);
+    setAssignAccessType(exam.access_type || 'restricted');
+    setAssignClassesSelection(Array.isArray(exam.assigned_classes) ? exam.assigned_classes : []);
+  };
+
+  // Lưu phân công đề thi cho các lớp học
+  const handleSaveClassAssignment = () => {
+    if (!assigningExam) return;
+    const updated = exams.map((e) => {
+      if (e.id === assigningExam.id) {
+        return {
+          ...e,
+          access_type: assignAccessType,
+          assigned_classes: assignAccessType === 'public' ? [] : assignClassesSelection,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return e;
+    });
+    saveExamsToStorage(updated);
+    setAssigningExam(null);
+    setCopyToast(`Đã cập nhật phân công giao đề "${assigningExam.title}" cho lớp thành công!`);
+    setTimeout(() => setCopyToast(null), 3000);
+  };
+
+  // Tính số lượng đề thi gán cho từng lớp học thực tế (khớp chính xác tên lớp)
   const getExamCountForClass = (clsName: string, clsGrade?: number) => {
+    const target = clsName.trim().toLowerCase();
     return exams.filter((e) => {
       const inAssigned = e.assigned_classes?.some(
-        (c) => c.toLowerCase() === clsName.toLowerCase() || c.toLowerCase().includes(clsName.toLowerCase())
+        (c) => c.trim().toLowerCase() === target
       );
-      const inClassName = e.class_name?.toLowerCase() === clsName.toLowerCase();
+      const inClassName = e.class_name?.trim().toLowerCase() === target;
       return inAssigned || inClassName;
     }).length;
   };
@@ -893,8 +928,9 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   const filteredExams = exams.filter((e) => {
     if (selectedGrade !== 'all' && e.grade !== selectedGrade) return false;
     if (selectedClass !== 'all') {
-      const inAssigned = e.assigned_classes?.some((c) => c.toLowerCase().includes(selectedClass.toLowerCase()));
-      const inClassName = e.class_name?.toLowerCase().includes(selectedClass.toLowerCase());
+      const target = selectedClass.trim().toLowerCase();
+      const inAssigned = e.assigned_classes?.some((c) => c.trim().toLowerCase() === target);
+      const inClassName = e.class_name?.trim().toLowerCase() === target;
       if (!inAssigned && !inClassName) return false;
     }
     if (filterType === 'timed' && e.duration_minutes < 45) return false;
@@ -980,19 +1016,6 @@ Khi đó chiều cao $h = 2\\text{ m}$.
               <List className="h-4 w-4" />
             </button>
           </div>
-
-          {/* NÚT NHẬP FILE WORD / LATEX */}
-          <button
-            type="button"
-            onClick={() => {
-              setCreatorMode('word');
-              setShowCreateModal(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-indigo-500/20 hover:from-indigo-500 hover:to-purple-500 transition cursor-pointer"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Nhập file (Word / LaTeX)</span>
-          </button>
 
           {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
           <button
@@ -1243,16 +1266,29 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
                       {/* LỚP ĐƯỢC PHÉP THI - Liên kết trực tiếp lớp học */}
                       <div className="text-[11px] text-slate-500 mt-2 mb-1">
-                        <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block mb-1">
-                          LỚP ĐƯỢC PHÉP THI
-                        </span>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block">
+                            LỚP ĐƯỢC PHÉP THI
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssignModal(exam)}
+                            className="text-[10.5px] font-bold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            + Đổi lớp
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
+                          {exam.access_type === 'public' ? (
+                            <span className="rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold">
+                              Công khai (Mọi học sinh)
+                            </span>
+                          ) : Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
                             exam.assigned_classes.map((clsName) => {
                               const matchedClass = classes.find(
                                 (c) =>
-                                  c.name.toLowerCase() === clsName.toLowerCase() ||
-                                  c.code.toLowerCase() === clsName.toLowerCase()
+                                  c.name.trim().toLowerCase() === clsName.trim().toLowerCase() ||
+                                  c.code.trim().toLowerCase() === clsName.trim().toLowerCase()
                               );
                               return (
                                 <div
@@ -1280,9 +1316,13 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                               );
                             })
                           ) : (
-                            <span className="rounded-md bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px] font-medium italic">
-                              Toán Khối {exam.grade || 12} (Chưa gán lớp riêng)
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignModal(exam)}
+                              className="rounded-md bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-100 cursor-pointer"
+                            >
+                              Chưa gán lớp (Bấm để gán)
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1341,14 +1381,26 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                         </Link>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicateExam(exam)}
-                        className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
-                      >
-                        <Copy className="h-3.5 w-3.5 text-slate-400" />
-                        <span>Nhân bản</span>
-                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAssignModal(exam)}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
+                          title="Giao đề thi cho các lớp học"
+                        >
+                          <GraduationCap className="h-3.5 w-3.5" />
+                          <span>Giao lớp</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateExam(exam)}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-slate-400" />
+                          <span>Nhân bản</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2273,6 +2325,159 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL GIAO ĐỀ THI CHO LỚP HỌC */}
+      {assigningExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">Giao đề thi cho lớp</h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[260px]">{assigningExam.title}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssigningExam(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quyền truy cập */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">Quyền truy cập đề thi:</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setAssignAccessType('restricted')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    assignAccessType === 'restricted'
+                      ? 'border-blue-600 bg-blue-50/60 text-blue-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block font-bold">Giới hạn lớp</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Chỉ học sinh lớp được chọn</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignAccessType('public')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    assignAccessType === 'public'
+                      ? 'border-blue-600 bg-blue-50/60 text-blue-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block font-bold">Công khai</span>
+                  <span className="text-[10px] text-slate-500 font-normal">Mọi học sinh đều làm được</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Danh sách lớp học để tick chọn (khi ở chế độ restricted) */}
+            {assignAccessType === 'restricted' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Chọn các lớp được phép thi:
+                  </label>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setAssignClassesSelection(classes.map((c) => c.name))}
+                      className="text-blue-600 hover:underline font-bold cursor-pointer"
+                    >
+                      Chọn hết
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setAssignClassesSelection([])}
+                      className="text-slate-500 hover:underline font-medium cursor-pointer"
+                    >
+                      Bỏ chọn
+                    </button>
+                  </div>
+                </div>
+
+                {classes.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 text-center">
+                    Chưa có lớp nào trong danh mục. <Link href="/classes" className="underline font-bold">Tạo lớp ngay</Link>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {classes.map((cls) => {
+                      const isChecked = assignClassesSelection.some(
+                        (c) => c.trim().toLowerCase() === cls.name.trim().toLowerCase()
+                      );
+                      return (
+                        <label
+                          key={cls.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition text-xs ${
+                            isChecked
+                              ? 'border-blue-500 bg-blue-50/50 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setAssignClassesSelection(
+                                    assignClassesSelection.filter(
+                                      (c) => c.trim().toLowerCase() !== cls.name.trim().toLowerCase()
+                                    )
+                                  );
+                                } else {
+                                  setAssignClassesSelection([...assignClassesSelection, cls.name]);
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>{cls.name}</span>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-normal">
+                            Khối {cls.grade}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {assignClassesSelection.length === 0 && classes.length > 0 && (
+                  <p className="text-[11px] text-amber-600 italic">
+                    * Chưa chọn lớp nào. Vui lòng bấm tick chọn ít nhất 1 lớp.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button
+                type="button"
+                onClick={() => setAssigningExam(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveClassAssignment}
+                className="rounded-xl bg-blue-600 px-5 py-2 font-bold text-white hover:bg-blue-500 shadow-md shadow-blue-500/20 transition cursor-pointer"
+              >
+                Lưu giao đề
+              </button>
+            </div>
           </div>
         </div>
       )}
