@@ -286,7 +286,7 @@ export function renderMathToHtml(content: string): string {
     }
 
     // 8d. Fallback cho TikzJax (WebAssembly) đối với các hình vẽ đặc thù ngoài phạm vi parser thuần
-    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"><script type="text/tikz" data-tikz-libraries="arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds">${optimizedTikz}</script></div></div>`;
+    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"></div></div>`;
 
     return savePlaceholder(tikzWrapper);
   });

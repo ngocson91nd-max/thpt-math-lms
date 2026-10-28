@@ -112,32 +112,31 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         return;
       }
 
-      // D. NẾU CHƯA CÓ SVG THUẦN: HIỂN THỊ KHUNG NẠP HÌNH ĐẸP MẮT CHO TIKZJAX WEBASSEMBLY
-      // Kiểm tra xem đã có thẻ script text/tikz chưa
-      const existingScriptTag = target.querySelector('script[type="text/tikz"]');
-      if (!existingScriptTag) {
-        target.innerHTML = `
-          <div class="tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2">
-            <svg class="animate-spin h-3.5 w-3.5 text-blue-600 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Đang dựng hình vẽ TikZ...</span>
-          </div>
-        `;
+      // D. NẾU CHƯA CÓ SVG THUẦN: TẠO THẺ SCRIPT SỐNG CHO TIKZJAX WEBASSEMBLY
+      target.innerHTML = '';
+      const loaderDiv = document.createElement('div');
+      loaderDiv.className = 'tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2';
+      loaderDiv.innerHTML = `
+        <svg class="animate-spin h-3.5 w-3.5 text-blue-600 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Đang dựng hình vẽ TikZ...</span>
+      `;
+      target.appendChild(loaderDiv);
 
-        const scriptTag = document.createElement('script');
-        scriptTag.type = 'text/tikz';
-        scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
-        scriptTag.textContent = rawTikz;
-        target.appendChild(scriptTag);
-      }
+      const scriptTag = document.createElement('script');
+      scriptTag.type = 'text/tikz';
+      scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
+      scriptTag.textContent = rawTikz;
+      target.appendChild(scriptTag);
 
       // E. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
-      // TUYỆT ĐỐI CHỈ BẮT SVG DO TIKZJAX VẼ, KHÔNG ĐƯỢC BẮT SVG SPINNER CỦA LOADER!
+      let isRendered = false;
       const observer = new MutationObserver((_mutations, obs) => {
         const svg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
         if (svg && !svg.classList.contains('animate-spin') && !svg.closest('.tikz-loading')) {
+          isRendered = true;
           const loader = target.querySelector('.tikz-loading');
           if (loader) loader.remove();
 
@@ -150,6 +149,26 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         }
       });
       observer.observe(target, { childList: true, subtree: true });
+
+      // F. TIMEOUT AN TOÀN (6 GIÂY): NẾU TIKZJAX HOẶC CDN LỖI THÌ HIỂN THỊ HỘP MÃ TIKZ GỌN GÀNG, KHÔNG TREO SPINNER
+      setTimeout(() => {
+        if (!isRendered && target.querySelector('.tikz-loading')) {
+          observer.disconnect();
+          const cleanSnippet = rawTikz
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .trim();
+          target.innerHTML = `
+            <div class="my-2 rounded-2xl border border-blue-200/80 bg-blue-50/40 p-3.5 text-center">
+              <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-blue-100 text-xs font-bold text-blue-900">
+                <span>📐 Hình vẽ TikZ (Mã nguồn hình học)</span>
+                <span class="text-[11px] font-normal text-slate-500">Đang lưu mã gốc</span>
+              </div>
+              <pre class="text-[11px] text-slate-700 font-mono text-left bg-white p-2.5 rounded-xl border border-slate-200 overflow-x-auto max-h-40 leading-relaxed">${cleanSnippet}</pre>
+            </div>
+          `;
+        }
+      }, 6000);
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á
