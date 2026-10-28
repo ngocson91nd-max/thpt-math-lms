@@ -4,11 +4,26 @@ import { getSupabaseAdmin } from '@/lib/supabase/adminClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function resolveStudentUuid(rawId: string | null | undefined, email?: string | null): string {
+  const s = (rawId || '').trim();
+  const em = (email || '').trim().toLowerCase();
+  if (s === 'user-an-toan-12' || em === 'an.toan12@gmail.com' || s === 'an.toan12@gmail.com') {
+    return '48dc643d-1b47-4c4e-a473-ca2f622b761c';
+  }
+  if (s === '33333333-3333-3333-3333-333333333333' || em === 'student.mai@thpt-math-lms.vn') {
+    return '33333333-3333-3333-3333-333333333333';
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(s)) return s;
+  return s;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const classId = searchParams.get('classId');
     const userId = searchParams.get('userId');
+    const emailParam = searchParams.get('email');
     const getClasses = searchParams.get('classes');
 
     const supabase = getSupabaseAdmin();
@@ -86,35 +101,48 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Kiểm tra các lớp mà học sinh đã tham gia hoặc đang chờ duyệt
-    if (userId) {
-      const uid = userId.trim();
-      let targetUserId = uid;
+    if (userId || emailParam) {
+      let targetUserId = resolveStudentUuid(userId, emailParam);
 
       // Tìm user ID nếu truyền vào email
-      if (uid.includes('@')) {
+      if (targetUserId.includes('@')) {
         const { data: prof } = await supabase
           .from('profiles')
           .select('id')
-          .ilike('email', uid)
+          .ilike('email', targetUserId)
           .single();
         if (prof) targetUserId = prof.id;
       }
 
-      const { data: userMembers, error: uErr } = await supabase
-        .from('class_members')
-        .select('class_id, status')
-        .eq('user_id', targetUserId);
-
-      if (uErr) {
-        console.error('Supabase user members error:', uErr);
-        return NextResponse.json({ success: false, error: uErr.message }, { status: 500 });
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(targetUserId) && emailParam) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('email', emailParam.trim())
+          .single();
+        if (prof) targetUserId = prof.id;
       }
 
-      const pendingClasses = (userMembers || [])
+      let userMembers: any[] = [];
+      if (uuidRegex.test(targetUserId)) {
+        const { data: members, error: uErr } = await supabase
+          .from('class_members')
+          .select('class_id, status')
+          .eq('user_id', targetUserId);
+
+        if (uErr) {
+          console.error('Supabase user members error:', uErr);
+        } else if (members) {
+          userMembers = members;
+        }
+      }
+
+      const pendingClasses = userMembers
         .filter((m: any) => m.status === 'pending')
         .map((m: any) => m.class_id);
 
-      const approvedClasses = (userMembers || [])
+      const approvedClasses = userMembers
         .filter((m: any) => m.status === 'active')
         .map((m: any) => m.class_id);
 
@@ -139,10 +167,7 @@ export async function POST(req: NextRequest) {
     // 1. Học sinh xin vào lớp (chờ duyệt)
     if (action === 'request_join') {
       const studentProfile = user || student;
-      const targetUserId =
-        studentProfile?.id === 'user-an-toan-12' || studentProfile?.email === 'an.toan12@gmail.com'
-          ? '48dc643d-1b47-4c4e-a473-ca2f622b761c'
-          : studentProfile?.id || userId;
+      const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
 
       if (!targetClassId || !targetUserId) {
         return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
@@ -168,16 +193,32 @@ export async function POST(req: NextRequest) {
       }
 
       // Lưu trạng thái pending vào class_members
-      const { error: reqErr } = await supabase.from('class_members').upsert([
-        {
-          id: `${targetClassId}_${targetUserId}`,
-          class_id: targetClassId,
-          user_id: targetUserId,
-          role: 'student',
-          status: 'pending',
-          joined_at: new Date().toISOString(),
-        },
-      ]);
+      const { data: existing } = await supabase
+        .from('class_members')
+        .select('id')
+        .eq('class_id', targetClassId)
+        .eq('user_id', targetUserId)
+        .maybeSingle();
+
+      let reqErr: any = null;
+      if (existing) {
+        const { error } = await supabase
+          .from('class_members')
+          .update({ status: 'pending', joined_at: new Date().toISOString() })
+          .eq('id', existing.id);
+        reqErr = error;
+      } else {
+        const { error } = await supabase.from('class_members').insert([
+          {
+            class_id: targetClassId,
+            user_id: targetUserId,
+            role: 'student',
+            status: 'pending',
+            joined_at: new Date().toISOString(),
+          },
+        ]);
+        reqErr = error;
+      }
 
       if (reqErr) {
         console.error('Request join error:', reqErr);
@@ -190,10 +231,7 @@ export async function POST(req: NextRequest) {
     // 2. Học sinh kích hoạt mã vào lớp thành công (active ngay)
     if (action === 'join_with_code') {
       const studentProfile = user || student;
-      const targetUserId =
-        studentProfile?.id === 'user-an-toan-12' || studentProfile?.email === 'an.toan12@gmail.com'
-          ? '48dc643d-1b47-4c4e-a473-ca2f622b761c'
-          : studentProfile?.id || userId;
+      const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
 
       if (!targetClassId || !targetUserId) {
         return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
@@ -215,16 +253,32 @@ export async function POST(req: NextRequest) {
         } catch (e) {}
       }
 
-      const { error: joinErr } = await supabase.from('class_members').upsert([
-        {
-          id: `${targetClassId}_${targetUserId}`,
-          class_id: targetClassId,
-          user_id: targetUserId,
-          role: 'student',
-          status: 'active',
-          joined_at: new Date().toISOString(),
-        },
-      ]);
+      const { data: existing } = await supabase
+        .from('class_members')
+        .select('id')
+        .eq('class_id', targetClassId)
+        .eq('user_id', targetUserId)
+        .maybeSingle();
+
+      let joinErr: any = null;
+      if (existing) {
+        const { error } = await supabase
+          .from('class_members')
+          .update({ status: 'active', joined_at: new Date().toISOString() })
+          .eq('id', existing.id);
+        joinErr = error;
+      } else {
+        const { error } = await supabase.from('class_members').insert([
+          {
+            class_id: targetClassId,
+            user_id: targetUserId,
+            role: 'student',
+            status: 'active',
+            joined_at: new Date().toISOString(),
+          },
+        ]);
+        joinErr = error;
+      }
 
       if (joinErr) {
         console.error('Join with code cloud error:', joinErr);
@@ -237,26 +291,29 @@ export async function POST(req: NextRequest) {
     // 3. Thầy Sơn duyệt học sinh vào lớp
     if (action === 'approve_student') {
       const studentProfile = student || user;
-      const targetUserId =
-        studentProfile?.id === 'user-an-toan-12' || studentProfile?.email === 'an.toan12@gmail.com'
-          ? '48dc643d-1b47-4c4e-a473-ca2f622b761c'
-          : studentProfile?.id || userId;
+      const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
 
       if (!targetClassId || !targetUserId) {
         return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
       }
 
-      const { error: appErr } = await supabase
+      const { data: existing } = await supabase
         .from('class_members')
-        .update({ status: 'active' })
+        .select('id')
         .eq('class_id', targetClassId)
-        .eq('user_id', targetUserId);
+        .eq('user_id', targetUserId)
+        .maybeSingle();
 
-      if (appErr) {
-        // Fallback upsert
-        await supabase.from('class_members').upsert([
+      let appErr: any = null;
+      if (existing) {
+        const { error } = await supabase
+          .from('class_members')
+          .update({ status: 'active' })
+          .eq('id', existing.id);
+        appErr = error;
+      } else {
+        const { error } = await supabase.from('class_members').insert([
           {
-            id: `${targetClassId}_${targetUserId}`,
             class_id: targetClassId,
             user_id: targetUserId,
             role: 'student',
@@ -264,6 +321,12 @@ export async function POST(req: NextRequest) {
             joined_at: new Date().toISOString(),
           },
         ]);
+        appErr = error;
+      }
+
+      if (appErr) {
+        console.error('Approve student cloud error:', appErr);
+        return NextResponse.json({ success: false, error: appErr.message }, { status: 500 });
       }
 
       return NextResponse.json({ success: true, message: 'Đã phê duyệt học sinh trên Supabase Cloud thành công!' });
@@ -271,8 +334,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Từ chối yêu cầu hoặc xóa học sinh khỏi lớp
     if (action === 'reject_student' || action === 'remove_student') {
-      const targetUserId =
-        userId === 'user-an-toan-12' ? '48dc643d-1b47-4c4e-a473-ca2f622b761c' : userId;
+      const targetUserId = resolveStudentUuid(userId, (student || user)?.email);
 
       await supabase
         .from('class_members')

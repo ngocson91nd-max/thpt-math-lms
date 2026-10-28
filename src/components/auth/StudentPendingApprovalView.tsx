@@ -41,7 +41,7 @@ export const StudentPendingApprovalView: React.FC = () => {
 
     // 2. Kiểm tra nếu Thầy Sơn đã duyệt học sinh trên Cloud
     if (user) {
-      fetch(`/api/cloud-sync?userId=${user.id}`)
+      fetch(`/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`)
         .then((r) => r.json())
         .then((res) => {
           if (res.success && Array.isArray(res.approvedClasses)) {
@@ -49,7 +49,7 @@ export const StudentPendingApprovalView: React.FC = () => {
             // Chỉ đồng bộ các lớp thực sự active trên Supabase Cloud
             localStorage.setItem(studentClassesKey, JSON.stringify(res.approvedClasses));
             if (res.approvedClasses.length > 0) {
-              window.location.reload();
+              window.dispatchEvent(new Event('lms_enrollment_changed'));
             }
           }
         })

@@ -18,27 +18,25 @@ export const getEnrolledClassIdsForUser = (userId: string): string[] => {
   // 1. Lấy danh sách các lớp học hiện có thực tế trên hệ thống (từ lms_classes)
   const classesRaw = storage.getItem('lms_classes');
   const activeClasses: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : [];
-
-  // Nếu hệ thống hiện chưa có lớp nào -> học sinh không thể thuộc về bất kỳ lớp nào!
-  if (activeClasses.length === 0) {
-    return [];
-  }
-
   const activeClassIdSet = new Set<string>(activeClasses.map((c) => c.id));
   const enrolledSet = new Set<string>();
 
-  // 2. Kiểm tra bộ nhớ cache riêng của học sinh (CHỈ chấp nhận các lớp ID ĐANG TỒN TẠI thực tế)
+  // 2. Kiểm tra bộ nhớ cache riêng của học sinh
   try {
     const cached = storage.getItem(`lms_student_classes_${userId}`);
     if (cached) {
       const parsed: string[] = JSON.parse(cached);
       if (Array.isArray(parsed)) {
-        // Lọc bỏ toàn bộ các lớp đã bị xóa trên Cloud
-        const validParsed = parsed.filter((id) => activeClassIdSet.has(id));
-        validParsed.forEach((id) => enrolledSet.add(id));
-        // Tự động dọn dẹp cache trình duyệt nếu có lớp rác / lớp đã bị xóa
-        if (validParsed.length !== parsed.length) {
-          storage.setItem(`lms_student_classes_${userId}`, JSON.stringify(validParsed));
+        if (activeClasses.length > 0) {
+          // Lọc bỏ toàn bộ các lớp đã bị xóa trên Cloud nếu activeClasses đã nạp xong
+          const validParsed = parsed.filter((id) => activeClassIdSet.has(id));
+          validParsed.forEach((id) => enrolledSet.add(id));
+          if (validParsed.length !== parsed.length) {
+            storage.setItem(`lms_student_classes_${userId}`, JSON.stringify(validParsed));
+          }
+        } else {
+          // Khi activeClasses chưa kịp nạp vào localStorage, vẫn bảo lưu các lớp của học sinh để tránh bị đá văng
+          parsed.forEach((id) => enrolledSet.add(id));
         }
       }
     }

@@ -8,13 +8,45 @@ import { Footer } from './Footer';
 import { GuestAuthWall } from '@/components/auth/GuestAuthWall';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
 import { isUserEnrolledInAnyClass } from '@/lib/auth/enrollment';
-import { PanelLeftOpen } from 'lucide-react';
+import { MOCK_USERS } from '@/lib/supabase/mockStore';
+import { PanelLeftOpen, Loader2 } from 'lucide-react';
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const pathname = usePathname();
-  const { user } = useAuth();
-  // Mặc định là false để chặn triệt để tình trạng lộ đề thi khi chưa vào lớp
-  const [isEnrolled, setIsEnrolled] = useState<boolean>(false);
+  const { user, isLoading } = useAuth();
+  
+  // Khởi tạo ngay trạng thái từ cache localStorage để không bao giờ bị "out ra" khi F5 reload
+  const [isEnrolled, setIsEnrolled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const savedUserId = localStorage.getItem('lms_current_user_id');
+      if (savedUserId) {
+        const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
+        const found =
+          registeredList.find((u: any) => u.id === savedUserId) ||
+          MOCK_USERS.find((u) => u.id === savedUserId);
+        if (found) {
+          if (found.role === 'teacher' || found.role === 'admin') return true;
+          return isUserEnrolledInAnyClass(found);
+        }
+      }
+    } catch {}
+    return false;
+  });
+
+  const [hasCheckedEnrollment, setHasCheckedEnrollment] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const savedUserId = localStorage.getItem('lms_current_user_id');
+      if (savedUserId) {
+        const key = `lms_student_classes_${savedUserId}`;
+        const raw = localStorage.getItem(key);
+        if (raw && JSON.parse(raw).length > 0) return true;
+      }
+    } catch {}
+    return false;
+  });
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   // Khôi phục tùy chọn ẩn/hiện thanh bên từ localStorage
@@ -43,51 +75,73 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
     const checkEnrollment = async () => {
       if (!user) {
-        if (isMounted) setIsEnrolled(false);
+        if (isMounted) {
+          setIsEnrolled(false);
+          setHasCheckedEnrollment(true);
+        }
         return;
       }
 
       // Giáo viên hoặc Quản trị viên luôn có toàn quyền
       if (user.role === 'teacher' || user.role === 'admin') {
-        if (isMounted) setIsEnrolled(true);
+        if (isMounted) {
+          setIsEnrolled(true);
+          setHasCheckedEnrollment(true);
+        }
         return;
       }
 
-      // 1. Đối với học sinh: Tải danh sách lớp thực tế ĐANG HOẠT ĐỘNG trên Cloud
+      // 1. Kiểm tra nhanh từ cache nội bộ: nếu học sinh đã có lớp thì mở ngay lập tức!
+      const initialLocalCheck = isUserEnrolledInAnyClass(user);
+      if (initialLocalCheck && isMounted) {
+        setIsEnrolled(true);
+      }
+
+      // 2. Đối với học sinh: Tải danh sách lớp thực tế ĐANG HOẠT ĐỘNG trên Cloud
       try {
         const res = await fetch('/api/classes');
         const data = await res.json();
+        let activeIds = new Set<string>();
         if (data.success && Array.isArray(data.classes)) {
           localStorage.setItem('lms_classes', JSON.stringify(data.classes));
+          activeIds = new Set(data.classes.map((c: any) => c.id));
 
-          const activeIds = new Set(data.classes.map((c: any) => c.id));
           const key = `lms_student_classes_${user.id}`;
           const currentEnrolled: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-          // Loại bỏ ngay lập tức các lớp đã bị Thầy xóa trên Cloud
-          const cleaned = currentEnrolled.filter((id) => activeIds.has(id));
-          localStorage.setItem(key, JSON.stringify(cleaned));
+          if (activeIds.size > 0 && currentEnrolled.length > 0) {
+            // Loại bỏ các lớp đã bị Thầy xóa trên Cloud
+            const cleaned = currentEnrolled.filter((id) => activeIds.has(id));
+            localStorage.setItem(key, JSON.stringify(cleaned));
+          }
         }
 
-        // 2. Đồng bộ trạng thái duyệt lớp thực tế từ Supabase Cloud
-        const syncRes = await fetch(`/api/cloud-sync?userId=${user.id}`);
+        // 3. Đồng bộ trạng thái duyệt lớp thực tế từ Supabase Cloud
+        const syncUrl = `/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`;
+        const syncRes = await fetch(syncUrl);
         const syncData = await syncRes.json();
         if (syncData.success) {
           const key = `lms_student_classes_${user.id}`;
-          const activeClasses: any[] = JSON.parse(localStorage.getItem('lms_classes') || '[]');
-          const activeIds = new Set(activeClasses.map((c) => c.id));
           const cloudApproved = Array.isArray(syncData.approvedClasses)
-            ? syncData.approvedClasses.filter((id: string) => activeIds.has(id))
+            ? (activeIds.size > 0
+                ? syncData.approvedClasses.filter((id: string) => activeIds.has(id))
+                : syncData.approvedClasses)
             : [];
-          localStorage.setItem(key, JSON.stringify(cloudApproved));
+          if (cloudApproved.length > 0) {
+            localStorage.setItem(key, JSON.stringify(cloudApproved));
+          } else if (syncData.approvedClasses && syncData.approvedClasses.length === 0) {
+            // Thầy đã thực sự xóa/từ chối học sinh khỏi lớp trên Cloud
+            localStorage.setItem(key, JSON.stringify([]));
+          }
         }
       } catch (e) {
         console.error('Check enrollment error:', e);
       }
 
-      // 3. Đánh giá quyền chính thức: Học sinh phải thuộc ít nhất 1 lớp thực tế
+      // 4. Đánh giá quyền chính thức: Học sinh phải thuộc ít nhất 1 lớp thực tế
       if (isMounted) {
         const enrolled = isUserEnrolledInAnyClass(user);
         setIsEnrolled(enrolled);
+        setHasCheckedEnrollment(true);
       }
     };
 
@@ -109,19 +163,47 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       return children;
     }
 
-    // 2. Khách chưa đăng nhập: Yêu cầu đăng nhập khi truy cập nội dung
+    // 2. Chờ tải thông tin tài khoản nếu Auth đang nạp
+    if (isLoading) {
+      return (
+        <div className="min-h-[60vh] flex items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="text-xs font-semibold text-slate-500">Đang tải tài khoản...</span>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. Khách chưa đăng nhập: Yêu cầu đăng nhập khi truy cập nội dung
     if (!user) {
       return <GuestAuthWall />;
     }
 
-    // 3. Học sinh CHƯA ĐƯỢC DUYỆT VÀO LỚP:
-    // TUYỆT ĐỐI CHẶN MỌI TRANG (kể cả Trang chủ, Đề thi, Làm bài...) VÀ HIỂN THỊ PHÒNG CHỜ NHẬP MÃ LỚP
-    if (user.role === 'student' && !isEnrolled) {
-      return <StudentPendingApprovalView />;
+    // 4. Giáo viên hoặc Quản trị viên: Toàn quyền truy cập
+    if (user.role === 'teacher' || user.role === 'admin') {
+      return children;
     }
 
-    // 4. Giáo viên hoặc Học sinh đã được duyệt vào lớp: Cho phép truy cập 100% nội dung
-    return children;
+    // 5. Học sinh ĐÃ ĐƯỢC VÀO LỚP: Cho phép truy cập ngay, không bao giờ out!
+    if (isEnrolled) {
+      return children;
+    }
+
+    // 6. Nếu đang kiểm tra xác thực lần đầu: Hiện loading êm dịu, tuyệt đối không flash phòng chờ
+    if (!hasCheckedEnrollment) {
+      return (
+        <div className="min-h-[60vh] flex items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="text-xs font-semibold text-slate-500">Đang đồng bộ lớp học...</span>
+          </div>
+        </div>
+      );
+    }
+
+    // 7. Học sinh THỰC SỰ CHƯA VÀO LỚP: Hiển thị phòng chờ nhập mã
+    return <StudentPendingApprovalView />;
   };
 
   return (
