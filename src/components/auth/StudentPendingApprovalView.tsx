@@ -33,44 +33,41 @@ export const StudentPendingApprovalView: React.FC = () => {
   const [codeSuccess, setCodeSuccess] = useState<string | null>(null);
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
 
-  const [availableClasses, setAvailableClasses] = useState<ClassItem[]>(MOCK_CLASSES);
+  const [availableClasses, setAvailableClasses] = useState<ClassItem[]>([]);
   const [pendingRequests, setPendingRequests] = useState<string[]>([]);
   const [requestNotice, setRequestNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedDeletedCls = localStorage.getItem('lms_deleted_class_ids');
-      const deletedClassIds = new Set<string>(savedDeletedCls ? JSON.parse(savedDeletedCls) : []);
-
-      const saved = localStorage.getItem('lms_classes');
-      const localClasses: ClassItem[] = saved ? JSON.parse(saved) : [];
-      const combined = [...localClasses];
-      MOCK_CLASSES.forEach((mock) => {
-        if (!combined.some((c) => c.id === mock.id || c.code?.toUpperCase() === mock.code?.toUpperCase())) {
-          combined.push(mock);
+    // 1. Tải danh sách lớp thực tế trực tiếp từ Supabase Cloud qua /api/classes
+    fetch('/api/classes')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.classes)) {
+          setAvailableClasses(data.classes);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lms_classes', JSON.stringify(data.classes));
+            localStorage.removeItem('lms_deleted_class_ids');
+          }
         }
-      });
-      const validClasses = combined.filter((c: any) => !deletedClassIds.has(c.id) && !deletedClassIds.has(c.code));
-      setAvailableClasses(validClasses);
-      localStorage.setItem('lms_classes', JSON.stringify(validClasses));
+      })
+      .catch(console.error);
 
-      if (user) {
-        setPendingRequests(getPendingClassRequestsForUser(user.id));
+    if (user) {
+      setPendingRequests(getPendingClassRequestsForUser(user.id));
 
-        // Kiểm tra xem Thầy Sơn đã phê duyệt vào lớp trên Cloud chưa
-        fetch(`/api/cloud-sync?userId=${user.id}`)
-          .then((r) => r.json())
-          .then((res) => {
-            if (res.success && Array.isArray(res.approvedClasses) && res.approvedClasses.length > 0) {
-              const studentClassesKey = `lms_student_classes_${user.id}`;
-              const existing: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
-              const merged = Array.from(new Set([...existing, ...res.approvedClasses]));
-              localStorage.setItem(studentClassesKey, JSON.stringify(merged));
-              window.location.reload();
-            }
-          })
-          .catch(() => {});
-      }
+      // Kiểm tra xem Thầy Sơn đã phê duyệt vào lớp trên Cloud chưa
+      fetch(`/api/cloud-sync?userId=${user.id}`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && Array.isArray(res.approvedClasses) && res.approvedClasses.length > 0) {
+            const studentClassesKey = `lms_student_classes_${user.id}`;
+            const existing: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
+            const merged = Array.from(new Set([...existing, ...res.approvedClasses]));
+            localStorage.setItem(studentClassesKey, JSON.stringify(merged));
+            window.location.reload();
+          }
+        })
+        .catch(() => {});
     }
   }, [user]);
 
@@ -229,37 +226,43 @@ export const StudentPendingApprovalView: React.FC = () => {
           )}
 
           <div className="space-y-2 overflow-y-auto max-h-56 pr-1">
-            {availableClasses.map((c) => {
-              const isRequested = pendingRequests.includes(c.id);
-              return (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition"
-                >
-                  <div className="min-w-0">
-                    <div className="font-bold text-xs text-slate-900 truncate">{c.name}</div>
-                    <div className="text-[11px] text-slate-400">
-                      Khối Lớp {c.grade} • Năm học {c.academic_year || '2025-2026'}
+            {availableClasses.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                Chưa có lớp học nào trên hệ thống. Thầy Sơn sẽ tạo lớp và mở đăng ký sớm nhất!
+              </div>
+            ) : (
+              availableClasses.map((c) => {
+                const isRequested = pendingRequests.includes(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs text-slate-900 truncate">{c.name}</div>
+                      <div className="text-[11px] text-slate-400">
+                        Khối Lớp {c.grade} • Năm học {c.academic_year || '2025-2026'}
+                      </div>
                     </div>
-                  </div>
 
-                  {isRequested ? (
-                    <span className="shrink-0 rounded-xl bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-800 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      <span>Đang chờ duyệt</span>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleRequestJoin(c.id)}
-                      className="shrink-0 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 transition cursor-pointer shadow-2xs"
-                    >
-                      Xin vào lớp
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                    {isRequested ? (
+                      <span className="shrink-0 rounded-xl bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>Đang chờ duyệt</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleRequestJoin(c.id)}
+                        className="shrink-0 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 transition cursor-pointer shadow-2xs"
+                      >
+                        Xin vào lớp
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

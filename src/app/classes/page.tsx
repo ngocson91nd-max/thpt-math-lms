@@ -25,7 +25,7 @@ import {
 
 export default function ClassesPage() {
   const { user, isTeacher, isStudent } = useAuth();
-  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Modal State
@@ -51,96 +51,28 @@ export default function ClassesPage() {
   const [joinInput, setJoinInput] = useState('');
   const [joinSuccess, setJoinSuccess] = useState(false);
 
-  // Đếm số lượng học sinh thực tế của lớp (ưu tiên dữ liệu đã lưu hoặc mock store)
-  const getRealMemberCount = (classId: string, fallbackCount?: number): number => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`lms_class_members_${classId}`);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed.length;
-        } catch {}
-      }
-    }
-    const mockMembers = MOCK_CLASS_MEMBERS.filter((m) => m.class_id === classId);
-    if (mockMembers.length > 0) return mockMembers.length;
-    return fallbackCount !== undefined ? fallbackCount : 0;
-  };
-
-  // Hàm tải và đồng bộ danh sách lớp học
-  const loadClassesFromStorage = () => {
-    if (typeof window === 'undefined') return;
-
-    const savedDeleted = localStorage.getItem('lms_deleted_class_ids');
-    const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
-
-    const saved = localStorage.getItem('lms_classes');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Gộp các lớp chuẩn từ MOCK_CLASSES nếu chưa có trong parsed (trừ các lớp đã xóa)
-          const existingIds = new Set(parsed.map((c: any) => c.id));
-          const existingCodes = new Set(parsed.map((c: any) => c.code));
-          const missingMocks = MOCK_CLASSES.filter(
-            (m) =>
-              !existingIds.has(m.id) &&
-              !existingCodes.has(m.code) &&
-              !deletedIds.has(m.id) &&
-              !deletedIds.has(m.code)
-          );
-          const combined = [...parsed, ...missingMocks];
-
-          // Lọc bỏ triệt để các lớp đã bị xóa vĩnh viễn (kể cả mock class)
-          const filtered = combined.filter((c: any) => !deletedIds.has(c.id) && !deletedIds.has(c.code));
-          const updatedWithCount = filtered.map((c: any) => ({
-            ...c,
-            member_count: getRealMemberCount(c.id, c.member_count),
-          }));
-          setClasses(updatedWithCount);
-          localStorage.setItem('lms_classes', JSON.stringify(updatedWithCount));
-          return;
+  // Tải danh sách lớp học thời gian thực trực tiếp từ Supabase Cloud
+  const fetchClasses = async () => {
+    try {
+      const res = await fetch('/api/classes');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.classes)) {
+        setClasses(data.classes);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_classes', JSON.stringify(data.classes));
+          localStorage.removeItem('lms_deleted_class_ids');
         }
-      } catch (e) {
-        console.error(e);
       }
-    } else {
-      // Khởi tạo lần đầu: loại bỏ lớp đã xóa
-      const initial = MOCK_CLASSES.filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.code)).map((c) => ({
-        ...c,
-        member_count: getRealMemberCount(c.id, c.member_count),
-      }));
-      setClasses(initial);
-      localStorage.setItem('lms_classes', JSON.stringify(initial));
-      return;
+    } catch (e) {
+      console.error('Fetch classes error:', e);
     }
   };
 
-  // Tải danh sách lớp từ localStorage hoặc Supabase
   useEffect(() => {
-    loadClassesFromStorage();
-    window.addEventListener('lms_classes_updated', loadClassesFromStorage);
-
-    const supabase = createClient();
-    if (supabase) {
-      supabase
-        .from('classes')
-        .select('*')
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            const savedDeleted = localStorage.getItem('lms_deleted_class_ids');
-            const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
-            const filteredData = (data as any[]).filter((c) => !deletedIds.has(c.id) && !deletedIds.has(c.code));
-            setClasses(filteredData);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_classes', JSON.stringify(filteredData));
-            }
-          }
-        });
-    }
-
+    fetchClasses();
+    window.addEventListener('lms_classes_updated', fetchClasses);
     return () => {
-      window.removeEventListener('lms_classes_updated', loadClassesFromStorage);
+      window.removeEventListener('lms_classes_updated', fetchClasses);
     };
   }, []);
 
@@ -154,52 +86,28 @@ export default function ClassesPage() {
     e.preventDefault();
     if (!className.trim()) return;
 
-    const newId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `c-${Date.now()}`;
-
     const finalCode =
       classCode.trim().toUpperCase() || `TOAN${grade}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const newClass: ClassItem = {
-      id: newId,
-      name: className.trim(),
-      code: finalCode,
-      grade,
-      academic_year: '2025-2026',
-      teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
-      teacher: user || MOCK_USERS[1],
-      description: desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.',
-      is_active: true,
-      member_count: 0,
-    };
-
-    const updated = [newClass, ...classes];
-    setClasses(updated);
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lms_classes', JSON.stringify(updated));
-    }
-
     try {
-      const supabase = createClient();
-      if (supabase && user) {
-        await supabase.from('classes').insert([
-          {
-            id: newId,
-            name: newClass.name,
-            code: newClass.code,
-            grade: newClass.grade,
-            academic_year: newClass.academic_year,
-            teacher_id: user.id,
-            description: newClass.description,
-            is_active: true,
-          },
-        ]);
+      const res = await fetch('/api/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: className.trim(),
+          code: finalCode,
+          grade,
+          academic_year: '2025-2026',
+          teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
+          description: desc.trim() || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchClasses();
       }
     } catch (err) {
-      console.warn('Lỗi khi thêm lớp vào Supabase:', err);
+      console.error('Lỗi khi thêm lớp vào Supabase:', err);
     }
 
     setShowCreateModal(false);
@@ -222,41 +130,22 @@ export default function ClassesPage() {
     e.preventDefault();
     if (!editingClass || !editName.trim()) return;
 
-    const updated = classes.map((c) => {
-      if (c.id === editingClass.id) {
-        return {
-          ...c,
+    try {
+      await fetch('/api/classes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingClass.id,
           name: editName.trim(),
-          code: editCode.trim().toUpperCase() || c.code,
+          code: editCode.trim().toUpperCase() || editingClass.code,
           grade: editGrade,
           description: editDesc.trim(),
           academic_year: editYear.trim(),
-        };
-      }
-      return c;
-    });
-
-    setClasses(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lms_classes', JSON.stringify(updated));
-    }
-
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase
-          .from('classes')
-          .update({
-            name: editName.trim(),
-            code: editCode.trim().toUpperCase() || editingClass.code,
-            grade: editGrade,
-            description: editDesc.trim(),
-            academic_year: editYear.trim(),
-          })
-          .eq('id', editingClass.id);
-      }
+        }),
+      });
+      await fetchClasses();
     } catch (err) {
-      console.warn('Lỗi khi cập nhật lớp trên Supabase:', err);
+      console.error('Lỗi khi cập nhật lớp trên Supabase:', err);
     }
 
     setShowEditModal(false);
@@ -270,40 +159,23 @@ export default function ClassesPage() {
     );
     if (!isConfirmed) return;
 
-    // 1. Ghi ID và code lớp vào danh sách đen lms_deleted_class_ids trong localStorage
-    try {
-      const savedDeleted = localStorage.getItem('lms_deleted_class_ids');
-      const deletedIds: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
-      const targetClass = classes.find((c) => c.id === classId);
-      if (!deletedIds.includes(classId)) deletedIds.push(classId);
-      if (targetClass?.code && !deletedIds.includes(targetClass.code)) deletedIds.push(targetClass.code);
-      localStorage.setItem('lms_deleted_class_ids', JSON.stringify(deletedIds));
+    // 1. Cập nhật giao diện ngay lập tức
+    setClasses((prev) => prev.filter((c) => c.id !== classId));
 
-      // Dọn dẹp cache học sinh và yêu cầu vào lớp của lớp này
+    // 2. Xóa vĩnh viễn trên Supabase Cloud Database qua API Server
+    try {
+      await fetch(`/api/classes?id=${classId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Lỗi khi xóa lớp trên Cloud:', err);
+    }
+
+    // 3. Dọn dẹp cache
+    if (typeof window !== 'undefined') {
       localStorage.removeItem(`lms_class_members_${classId}`);
       localStorage.removeItem(`lms_class_pending_requests_${classId}`);
-    } catch (e) {
-      console.error('Lỗi lưu danh sách lớp đã xóa:', e);
     }
 
-    // 2. Cập nhật state & lms_classes
-    const updated = classes.filter((c) => c.id !== classId);
-    setClasses(updated);
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lms_classes', JSON.stringify(updated));
-      window.dispatchEvent(new Event('lms_classes_updated'));
-    }
-
-    // 3. Xóa trên Supabase nếu có kết nối
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('classes').delete().eq('id', classId);
-      }
-    } catch (err) {
-      console.warn('Lỗi khi xóa lớp trên Supabase:', err);
-    }
+    await fetchClasses();
   };
 
   const handleJoinClass = (e: React.FormEvent) => {
@@ -458,7 +330,7 @@ export default function ClassesPage() {
               <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Users className="h-4 w-4 text-blue-600" />
-                  <span className="font-semibold text-slate-700">{getRealMemberCount(c.id, c.member_count)} học sinh</span>
+                  <span className="font-semibold text-slate-700">{c.member_count || 0} học sinh</span>
                 </div>
 
                 <div className="flex items-center gap-2">

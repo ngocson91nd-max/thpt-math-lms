@@ -76,9 +76,29 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         (c.code && c.code.toLowerCase() === decodedId.toLowerCase())
     );
   }
-  if (!initialClass) initialClass = MOCK_CLASSES[0];
 
-  const [currentClass] = useState(initialClass);
+  if (!initialClass || isClassDeleted) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Lớp học không tồn tại</h2>
+        <p className="text-sm text-slate-500 max-w-md">
+          Lớp học này đã bị xóa hoặc đường dẫn không chính xác. Thầy/học sinh vui lòng quay lại danh sách lớp học.
+        </p>
+        <Link
+          href="/classes"
+          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-blue-700 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Về danh sách lớp</span>
+        </Link>
+      </div>
+    );
+  }
+
+  const [currentClass] = useState<ClassItem>(initialClass);
   const [activeTab, setActiveTab] = useState<'members' | 'exams' | 'pending'>('members');
   const [copied, setCopied] = useState(false);
 
