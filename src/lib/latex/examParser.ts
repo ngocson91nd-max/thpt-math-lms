@@ -112,11 +112,12 @@ export function parseExamLatex(rawTex: string): {
       if (g) explanation = g.text.trim();
     }
 
-    // Bóc tách nội dung đề bài (đặc biệt bảo toàn hình ảnh TikZ trong \immini)
+    // Bóc tách nội dung đề bài (đặc biệt bảo toàn hình ảnh TikZ trong \immini của đề bài)
     let content = '';
     const imminiIdx = block.indexOf('\\immini');
 
-    if (imminiIdx !== -1) {
+    // Chỉ bóc tách \immini cho đề bài nếu \immini nằm TRƯỚC \loigiai (tức là hình của đề bài, không phải hình của lời giải)
+    if (imminiIdx !== -1 && (lgIdx === -1 || imminiIdx < lgIdx)) {
       let pos = imminiIdx + 7;
       while (pos < block.length && /\s/.test(block[pos])) pos++;
       // Hỗ trợ tham số tùy chọn ngoặc vuông: \immini[1]{...}{...} hoặc \immini[0.5]{...}{...}

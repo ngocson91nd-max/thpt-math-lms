@@ -2,7 +2,7 @@ import { Question, Exam } from '@/types/database';
 
 export const HUE_HSG_QUESTIONS: Question[] = [
   {
-    "id": "tex-q-1793148613705-1",
+    "id": "tex-q-1793150703526-1",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Giới hạn hàm số",
@@ -34,7 +34,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613705-2",
+    "id": "tex-q-1793150703527-2",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Hình học không gian",
@@ -66,7 +66,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-3",
+    "id": "tex-q-1793150703527-3",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Khảo sát hàm số",
@@ -98,7 +98,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-4",
+    "id": "tex-q-1793150703527-4",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Phương pháp tọa độ Oxyz",
@@ -130,7 +130,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-5",
+    "id": "tex-q-1793150703527-5",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Mũ & Logarit",
@@ -162,7 +162,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-6",
+    "id": "tex-q-1793150703527-6",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Khảo sát hàm số",
@@ -194,7 +194,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-7",
+    "id": "tex-q-1793150703527-7",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Lượng giác",
@@ -226,7 +226,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-8",
+    "id": "tex-q-1793150703527-8",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Khảo sát hàm số",
@@ -258,7 +258,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-9",
+    "id": "tex-q-1793150703527-9",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Dãy số & Cấp số",
@@ -290,7 +290,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-10",
+    "id": "tex-q-1793150703527-10",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -322,7 +322,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-11",
+    "id": "tex-q-1793150703527-11",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Đại số & Giải tích",
@@ -354,7 +354,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-12",
+    "id": "tex-q-1793150703527-12",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -386,7 +386,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613706-13",
+    "id": "tex-q-1793150703528-13",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Toán thực tế & Tối ưu hóa",
@@ -423,7 +423,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-14",
+    "id": "tex-q-1793150703528-14",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Khảo sát hàm số",
@@ -460,14 +460,14 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-15",
+    "id": "tex-q-1793150703528-15",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Phương pháp tọa độ Oxyz",
     "part": 2,
     "difficulty": "van_dung",
     "type": "true_false",
-    "content": "Cho hình chóp $S.ABCD$ có $SA\\perp(ABCD)$ và đáy $ABCD$ là hình thoi tâm $O$, cạnh $AB=2$, $AC=2$, $SA=1$. Gọi $M$ là trung điểm của $SD$.\r\n\t\\choiceTF\r\n\t{\\True Diện tích hình thoi $ABCD$ bằng $2\\sqrt{3}$}\r\n\t{\\True Góc giữa hai đường thẳng $SO$ và $BD$ bằng $90^{\\circ}$}\r\n\t{Diện tích tam giác $MAC$ bằng $\\dfrac{3}{4}$}\r\n\t{Góc nhị diện $[M,AC,D]$ bằng $60^{\\circ}$}\r\n\t\\loigiai{\n\\immini{\n\\begin{itemchoice}\r\n\t\t\t\t\\itemch Đúng. Hình thoi $ABCD$ có $AB=BC=CD=DA=AC=2$ nên $\\triangle ABC$ và $\\triangle ACD$ là hai tam giác đều cạnh $2$.\\\\\r\n\t\t\t\tDo đó $S_{ABCD}=2\\cdot S_{\\triangle ABC}=2\\cdot\\dfrac{2^2\\sqrt{3}}{4}=2\\sqrt{3}$.\r\n\t\t\t\t\\itemch Đúng. Ta có $\\heva{&BD\\perp AC\\text{ (tính chất hình thoi)}\\\\ &BD\\perp SA\\text{ (do }SA\\perp(ABCD)\\text{)}}\\Rightarrow BD\\perp(SAC)$.\\\\\r\n\t\t\t\tVì $SO\\subset(SAC)$ nên $BD\\perp SO$, suy ra góc giữa $SO$ và $BD$ bằng $90^{\\circ}$.\r\n\t\t\t\t\\itemch Sai. Gọi $H$ là trung điểm của $AD$, khi đó $MH$ là đường trung bình của $\\triangle SAD$ nên $MH\\parallel SA$, $MH=\\dfrac{1}{2}SA=\\dfrac{1}{2}$ và $MH\\perp(ABCD)$.\\\\\r\n\t\t\t\tTrong $(ABCD)$, kẻ $HK\\perp AC$ tại $K$. Vì $\\triangle ACD$ đều cạnh $2$ và $AH=1$ nên $HK=AH\\sin 60^{\\circ}=\\dfrac{\\sqrt{3}}{2}$.\\\\\r\n\t\t\t\tDo $AC\\perp HK$ và $AC\\perp MH$ nên $AC\\perp MK$. Độ dài đường cao $MK$ của $\\triangle MAC$ là\r\n\t\t\t\t\\[ MK=\\sqrt{MH^2+HK^2}=\\sqrt{\\left(\\dfrac{1}{2}\\right)^2+\\left(\\dfrac{\\sqrt{3}}{2}\\right)^2}=1. \\]\r\n\t\t\t\tDiện tích tam giác $MAC$ là $S_{\\triangle MAC}=\\dfrac{1}{2}AC\\cdot MK=\\dfrac{1}{2}\\cdot 2\\cdot 1=1$.\r\n\t\t\t\t\\itemch Sai. Ta có $\\heva{&AC\\perp HK\\\\ &AC\\perp MK}$ nên góc phẳng nhị diện của góc nhị diện $[M,AC,D]$ là $\\widehat{MKH}$.\\\\\r\n\t\t\t\tXét $\\triangle MHK$ vuông tại $H$, ta có $\\tan\\widehat{MKH}=\\dfrac{MH}{HK}=\\dfrac{1}{\\sqrt{3}}\\Rightarrow\\widehat{MKH}=30^{\\circ}$.\r\n\t\t\t\\end{itemchoice}\n}{\n\\begin{tikzpicture}[scale=0.85, font=\\footnotesize, line join=round, line cap=round]\r\n\t\t\t\t\\coordinate (A) at (0,0);\r\n\t\t\t\t\\coordinate (B) at (-1.4,-1.3);\r\n\t\t\t\t\\coordinate (D) at (3.2,0);\r\n\t\t\t\t\\coordinate (C) at ($(B)+(D)-(A)$);\r\n\t\t\t\t\\coordinate (S) at (0,2.6);\r\n\t\t\t\t\\coordinate (O) at ($(A)!0.5!(C)$);\r\n\t\t\t\t\\coordinate (M) at ($(S)!0.5!(D)$);\r\n\t\t\t\t\\coordinate (H) at ($(A)!0.5!(D)$);\r\n\t\t\t\t\\coordinate (K) at ($(A)!0.25!(C)$);\r\n\t\t\t\t\\draw[dashed, thin] (S)--(A) (A)--(B) (A)--(D) (A)--(C) (B)--(D) (S)--(O) (M)--(H) (H)--(K) (M)--(K) (M)--(A);\r\n\t\t\t\t\\draw[thick] (S)--(B) (S)--(C) (S)--(D) (B)--(C) (C)--(D) (M)--(C);\r\n\t\t\t\t\\foreach \\p/\\pos in {S/above, A/above left, B/below left, C/below right, D/right, O/below, M/above right, H/above, K/below left}\r\n\t\t\t\t\\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};\r\n\t\t\t\\end{tikzpicture}\n}\n}",
+    "content": "Cho hình chóp $S.ABCD$ có $SA\\perp(ABCD)$ và đáy $ABCD$ là hình thoi tâm $O$, cạnh $AB=2$, $AC=2$, $SA=1$. Gọi $M$ là trung điểm của $SD$.",
     "options": [
       {
         "id": "a",
@@ -497,7 +497,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-16",
+    "id": "tex-q-1793150703528-16",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -534,7 +534,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-17",
+    "id": "tex-q-1793150703528-17",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -552,7 +552,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-18",
+    "id": "tex-q-1793150703528-18",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Mũ & Logarit",
@@ -570,7 +570,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-19",
+    "id": "tex-q-1793150703528-19",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Đại số & Giải tích",
@@ -588,14 +588,14 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-20",
+    "id": "tex-q-1793150703528-20",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Phương pháp tọa độ Oxyz",
     "part": 3,
     "difficulty": "van_dung",
     "type": "short_answer",
-    "content": "Cho hình lăng trụ đứng $ABCD.A'B'C'D'$ có đáy $ABCD$ là hình thang cân, $AD$ song song $BC$, $AB=BC=CD=7\\sqrt{6}$, $AD=14\\sqrt{6}$. Góc giữa mặt phẳng $(A'CD)$ và $(ABCD)$ bằng $45^{\\circ}$. Tính khoảng cách từ $B$ đến mặt phẳng $(A'CD)$.\r\n\t\\shortans[0]{10,5}\r\n\t\\loigiai{\n\\immini{\nĐặt $a=7\\sqrt{6}$. Khi đó hình thang cân $ABCD$ có $AB=BC=CD=a$ và đáy lớn $AD=2a$ là nửa lục giác đều nội tiếp đường tròn đường kính $AD$, suy ra $AC\\perp CD$ và $AC=a\\sqrt{3}$.\\\\\r\n\t\t\tTa có $\\heva{&CD\\perp AC\\\\ &CD\\perp AA'}\\Rightarrow CD\\perp(A'AC)\\Rightarrow CD\\perp A'C$.\\\\\r\n\t\t\tDo đó góc giữa hai mặt phẳng $(A'CD)$ và $(ABCD)$ là $\\widehat{A'CA}=45^{\\circ}$.\\\\\r\n\t\t\tTrong $\\triangle A'AC$ vuông cân tại $A$, kẻ đường cao $AH\\perp A'C$ tại $H$. Vì $CD\\perp(A'AC)$ nên $CD\\perp AH$, suy ra $AH\\perp(A'CD)$.\\\\\r\n\t\t\tTa có $\\mathrm{d}\\left(A,(A'CD)\\right)=AH=\\dfrac{AC}{\\sqrt{2}}=\\dfrac{7\\sqrt{6}\\cdot\\sqrt{3}}{\\sqrt{2}}=21$.\\\\\r\n\t\t\tGọi $E$ là giao điểm của $AB$ và $CD$. Vì $BC\\parallel AD$ và $BC=\\dfrac{1}{2}AD$ nên $BC$ là đường trung bình của $\\triangle EAD$, suy ra $B$ là trung điểm của $EA$.\\\\\r\n\t\t\tVì $E\\in CD\\subset(A'CD)$ nên $\\dfrac{\\mathrm{d}\\left(B,(A'CD)\\right)}{\\mathrm{d}\\left(A,(A'CD)\\right)}=\\dfrac{EB}{EA}=\\dfrac{1}{2}$.\\\\\r\n\t\t\tSuy ra $\\mathrm{d}\\left(B,(A'CD)\\right)=\\dfrac{21}{2}=10{,}5$.\\\\\r\n\t\t\tVậy khoảng cách từ $B$ đến mặt phẳng $(A'CD)$ bằng $10{,}5$.\n}{\n\\begin{tikzpicture}[scale=0.8, font=\\footnotesize, line join=round, line cap=round]\r\n\t\t\t\t\\coordinate (A) at (0,0);\r\n\t\t\t\t\\coordinate (D) at (3.6,0);\r\n\t\t\t\t\\coordinate (B) at (0.8,-1.2);\r\n\t\t\t\t\\coordinate (C) at (2.8,-1.2);\r\n\t\t\t\t\\coordinate (A') at (0,2.6);\r\n\t\t\t\t\\coordinate (D') at (3.6,2.6);\r\n\t\t\t\t\\coordinate (B') at (0.8,1.4);\r\n\t\t\t\t\\coordinate (C') at (2.8,1.4);\r\n\t\t\t\t\\coordinate (H) at ($(A')!0.5!(C)$);\r\n\t\t\t\t\\draw[dashed, thin] (A)--(D) (A)--(C) (A')--(C) (A)--(H);\r\n\t\t\t\t\\draw[thick] (A)--(B)--(C)--(D) (A')--(B')--(C')--(D')--(A') (A)--(A') (B)--(B') (C)--(C') (D)--(D') (A')--(D);\r\n\t\t\t\t\\foreach \\p/\\pos in {A/left, B/below left, C/below right, D/right, A'/above left, B'/above left, C'/above, D'/above right, H/above right}\r\n\t\t\t\t\\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};\r\n\t\t\t\\end{tikzpicture}\n}\n}",
+    "content": "Cho hình lăng trụ đứng $ABCD.A'B'C'D'$ có đáy $ABCD$ là hình thang cân, $AD$ song song $BC$, $AB=BC=CD=7\\sqrt{6}$, $AD=14\\sqrt{6}$. Góc giữa mặt phẳng $(A'CD)$ và $(ABCD)$ bằng $45^{\\circ}$. Tính khoảng cách từ $B$ đến mặt phẳng $(A'CD)$.",
     "options": [],
     "correct_answer": [
       "10,5",
@@ -606,7 +606,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-21",
+    "id": "tex-q-1793150703528-21",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Khảo sát hàm số",
@@ -624,7 +624,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-22",
+    "id": "tex-q-1793150703528-22",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Dãy số & Cấp số",
@@ -642,7 +642,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-23",
+    "id": "tex-q-1793150703528-23",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -657,7 +657,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-24",
+    "id": "tex-q-1793150703528-24",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Mũ & Logarit",
@@ -672,7 +672,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-25",
+    "id": "tex-q-1793150703528-25",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Xác suất & Thống kê",
@@ -687,7 +687,7 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-26",
+    "id": "tex-q-1793150703528-26",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Phương pháp tọa độ Oxyz",
@@ -702,14 +702,14 @@ export const HUE_HSG_QUESTIONS: Question[] = [
     "is_public": true
   },
   {
-    "id": "tex-q-1793148613707-27",
+    "id": "tex-q-1793150703528-27",
     "teacher_id": "11111111-1111-1111-1111-111111111111",
     "grade": 12,
     "topic": "Phương pháp tọa độ Oxyz",
     "part": 4,
     "difficulty": "van_dung_cao",
     "type": "essay",
-    "content": "Một khối gỗ đặc có dạng hình chóp $S.ABCD$ với đáy $ABCD$ là hình chữ nhật, mặt bên $SAB$ là tam giác vuông cân có cạnh huyền bằng $2a$ và nằm trong mặt phẳng vuông góc với mặt đáy, đồng thời tam giác $SCD$ là tam giác đều.\r\n\t\\begin{enumerate}[a)]\r\n\t\t\\item Tính độ dài cạnh $AD$ theo $a$.\r\n\t\t\\item Người ta muốn nối một sợi dây nằm trên bề mặt của khối gỗ từ trọng tâm tam giác $SAB$ đến trọng tâm tam giác $SCD$. Tính độ dài ngắn nhất của sợi dây theo $a$.\r\n\t\\end{enumerate}\r\n\t\\loigiai{\r\n\t\t\\begin{enumerate}[a)]\r\n\t\t\t\\item\n\\immini{\nGọi $H$, $K$ lần lượt là trung điểm của $AB$ và $CD$.\\\\\r\n\t\t\t\tVì $\\triangle SAB$ vuông cân tại $S$ có cạnh huyền $AB=2a$ nên $SH\\perp AB$ và $SH=\\dfrac{1}{2}AB=a$.\\\\\r\n\t\t\t\tDo $(SAB)\\perp(ABCD)$ theo giao tuyến $AB$ nên $SH\\perp(ABCD)\\Rightarrow SH\\perp HK$.\\\\\r\n\t\t\t\tTam giác $SCD$ đều cạnh $CD=AB=2a$ nên đường trung tuyến $SK=\\dfrac{2a\\sqrt{3}}{2}=a\\sqrt{3}$.\\\\\r\n\t\t\t\tXét $\\triangle SHK$ vuông tại $H$, ta có $AD=HK=\\sqrt{SK^2-SH^2}=\\sqrt{3a^2-a^2}=a\\sqrt{2}$.\\\\\r\n\t\t\t\tVậy $AD=a\\sqrt{2}$.\n}{\n\\begin{tikzpicture}[scale=0.85, font=\\footnotesize, line join=round, line cap=round]\r\n\t\t\t\t\t\\coordinate (A) at (0,0);\r\n\t\t\t\t\t\\coordinate (B) at (-1.4,-1.4);\r\n\t\t\t\t\t\\coordinate (D) at (3.2,0);\r\n\t\t\t\t\t\\coordinate (C) at ($(B)+(D)-(A)$);\r\n\t\t\t\t\t\\coordinate (H) at ($(A)!0.5!(B)$);\r\n\t\t\t\t\t\\coordinate (K) at ($(C)!0.5!(D)$);\r\n\t\t\t\t\t\\coordinate (S) at ($(H)+(0,2.5)$);\r\n\t\t\t\t\t\\coordinate (G1) at ($(S)!0.667!(H)$);\r\n\t\t\t\t\t\\coordinate (G2) at ($(S)!0.667!(K)$);\r\n\t\t\t\t\t\\draw[dashed, thin] (A)--(B) (A)--(D) (S)--(A) (S)--(H) (H)--(K);\r\n\t\t\t\t\t\\draw[thick] (S)--(B) (S)--(C) (S)--(D) (B)--(C) (C)--(D) (S)--(K);\r\n\t\t\t\t\t\\foreach \\p/\\pos in {S/above, A/above right, B/below left, C/below right, D/right, H/left, K/right, G1/left, G2/above right}\r\n\t\t\t\t\t\\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};\r\n\t\t\t\t\\end{tikzpicture}\n}\n\\item Gọi $G_1$, $G_2$ lần lượt là trọng tâm của $\\triangle SAB$ và $\\triangle SCD$. Ta có $SG_1=\\dfrac{2}{3}SH=\\dfrac{2a}{3}$ và $SG_2=\\dfrac{2}{3}SK=\\dfrac{2a\\sqrt{3}}{3}$.\\\\\r\n\t\t\tXét $\\triangle SAD$ có $SA=a\\sqrt{2}$, $AD=a\\sqrt{2}$ và $SD=2a$. Vì $SA^2+AD^2=2a^2+2a^2=4a^2=SD^2$ nên $\\triangle SAD$ vuông cân tại $A$, suy ra $\\widehat{ASD}=45^{\\circ}$.\\\\\r\n\t\t\tMặt khác, trong $\\triangle SAB$ vuông cân tại $S$ ta có $\\widehat{G_1SA}=45^{\\circ}$; trong $\\triangle SCD$ đều ta có $\\widehat{DSG_2}=30^{\\circ}$.\\\\\r\n\t\t\tTrải phẳng ba mặt bên $(SAB)$, $(SAD)$, $(SCD)$ lên cùng một mặt phẳng xoay quanh các cạnh $SA$, $SD$, khi đó góc $\\widehat{G_1SG_2}$ trên mặt phẳng trải là\r\n\t\t\t\\[ \\widehat{G_1SG_2}=\\widehat{G_1SA}+\\widehat{ASD}+\\widehat{DSG_2}=45^{\\circ}+45^{\\circ}+30^{\\circ}=120^{\\circ}. \\]\r\n\t\t\tĐộ dài đường đi ngắn nhất từ $G_1$ đến $G_2$ qua các mặt bên là\r\n\t\t\t\\[ L_1=G_1G_2=\\sqrt{SG_1^2+SG_2^2-2\\cdot SG_1\\cdot SG_2\\cdot\\cos 120^{\\circ}}=\\sqrt{\\dfrac{4a^2}{9}+\\dfrac{12a^2}{9}+2\\cdot\\dfrac{2a}{3}\\cdot\\dfrac{2a\\sqrt{3}}{3}\\cdot\\dfrac{1}{2}}=\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}. \\]\r\n\t\t\tNếu sợi dây đi qua mặt đáy $(ABCD)$ thì độ dài ngắn nhất là $L_2=G_1H+HK+KG_2=\\dfrac{a}{3}+a\\sqrt{2}+\\dfrac{a\\sqrt{3}}{3}>L_1$.\\\\\r\n\t\t\tVậy độ dài ngắn nhất của sợi dây là $\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}$.\r\n\t\t\\end{enumerate}\r\n\t}",
+    "content": "Một khối gỗ đặc có dạng hình chóp $S.ABCD$ với đáy $ABCD$ là hình chữ nhật, mặt bên $SAB$ là tam giác vuông cân có cạnh huyền bằng $2a$ và nằm trong mặt phẳng vuông góc với mặt đáy, đồng thời tam giác $SCD$ là tam giác đều.\r\n\t\\begin{enumerate}[a)]\r\n\t\t\\item Tính độ dài cạnh $AD$ theo $a$.\r\n\t\t\\item Người ta muốn nối một sợi dây nằm trên bề mặt của khối gỗ từ trọng tâm tam giác $SAB$ đến trọng tâm tam giác $SCD$. Tính độ dài ngắn nhất của sợi dây theo $a$.\r\n\t\\end{enumerate}",
     "options": [],
     "correct_answer": "\\begin{enumerate}[a)]\r\n\t\t\t\\item\r\n\t\t\t\\immini{\r\n\t\t\t\tGọi $H$, $K$ lần lượt là trung điểm của $AB$ và $CD$.\\\\\r\n\t\t\t\tVì $\\triangle SAB$ vuông cân tại $S$ có cạnh huyền $AB=2a$ nên $SH\\perp AB$ và $SH=\\dfrac{1}{2}AB=a$.\\\\\r\n\t\t\t\tDo $(SAB)\\perp(ABCD)$ theo giao tuyến $AB$ nên $SH\\perp(ABCD)\\Rightarrow SH\\perp HK$.\\\\\r\n\t\t\t\tTam giác $SCD$ đều cạnh $CD=AB=2a$ nên đường trung tuyến $SK=\\dfrac{2a\\sqrt{3}}{2}=a\\sqrt{3}$.\\\\\r\n\t\t\t\tXét $\\triangle SHK$ vuông tại $H$, ta có $AD=HK=\\sqrt{SK^2-SH^2}=\\sqrt{3a^2-a^2}=a\\sqrt{2}$.\\\\\r\n\t\t\t\tVậy $AD=a\\sqrt{2}$.\r\n\t\t\t}{\r\n\t\t\t\t\\begin{tikzpicture}[scale=0.85, font=\\footnotesize, line join=round, line cap=round]\r\n\t\t\t\t\t\\coordinate (A) at (0,0);\r\n\t\t\t\t\t\\coordinate (B) at (-1.4,-1.4);\r\n\t\t\t\t\t\\coordinate (D) at (3.2,0);\r\n\t\t\t\t\t\\coordinate (C) at ($(B)+(D)-(A)$);\r\n\t\t\t\t\t\\coordinate (H) at ($(A)!0.5!(B)$);\r\n\t\t\t\t\t\\coordinate (K) at ($(C)!0.5!(D)$);\r\n\t\t\t\t\t\\coordinate (S) at ($(H)+(0,2.5)$);\r\n\t\t\t\t\t\\coordinate (G1) at ($(S)!0.667!(H)$);\r\n\t\t\t\t\t\\coordinate (G2) at ($(S)!0.667!(K)$);\r\n\t\t\t\t\t\\draw[dashed, thin] (A)--(B) (A)--(D) (S)--(A) (S)--(H) (H)--(K);\r\n\t\t\t\t\t\\draw[thick] (S)--(B) (S)--(C) (S)--(D) (B)--(C) (C)--(D) (S)--(K);\r\n\t\t\t\t\t\\foreach \\p/\\pos in {S/above, A/above right, B/below left, C/below right, D/right, H/left, K/right, G1/left, G2/above right}\r\n\t\t\t\t\t\\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};\r\n\t\t\t\t\\end{tikzpicture}\r\n\t\t\t}\r\n\t\t\t\\item Gọi $G_1$, $G_2$ lần lượt là trọng tâm của $\\triangle SAB$ và $\\triangle SCD$. Ta có $SG_1=\\dfrac{2}{3}SH=\\dfrac{2a}{3}$ và $SG_2=\\dfrac{2}{3}SK=\\dfrac{2a\\sqrt{3}}{3}$.\\\\\r\n\t\t\tXét $\\triangle SAD$ có $SA=a\\sqrt{2}$, $AD=a\\sqrt{2}$ và $SD=2a$. Vì $SA^2+AD^2=2a^2+2a^2=4a^2=SD^2$ nên $\\triangle SAD$ vuông cân tại $A$, suy ra $\\widehat{ASD}=45^{\\circ}$.\\\\\r\n\t\t\tMặt khác, trong $\\triangle SAB$ vuông cân tại $S$ ta có $\\widehat{G_1SA}=45^{\\circ}$; trong $\\triangle SCD$ đều ta có $\\widehat{DSG_2}=30^{\\circ}$.\\\\\r\n\t\t\tTrải phẳng ba mặt bên $(SAB)$, $(SAD)$, $(SCD)$ lên cùng một mặt phẳng xoay quanh các cạnh $SA$, $SD$, khi đó góc $\\widehat{G_1SG_2}$ trên mặt phẳng trải là\r\n\t\t\t\\[ \\widehat{G_1SG_2}=\\widehat{G_1SA}+\\widehat{ASD}+\\widehat{DSG_2}=45^{\\circ}+45^{\\circ}+30^{\\circ}=120^{\\circ}. \\]\r\n\t\t\tĐộ dài đường đi ngắn nhất từ $G_1$ đến $G_2$ qua các mặt bên là\r\n\t\t\t\\[ L_1=G_1G_2=\\sqrt{SG_1^2+SG_2^2-2\\cdot SG_1\\cdot SG_2\\cdot\\cos 120^{\\circ}}=\\sqrt{\\dfrac{4a^2}{9}+\\dfrac{12a^2}{9}+2\\cdot\\dfrac{2a}{3}\\cdot\\dfrac{2a\\sqrt{3}}{3}\\cdot\\dfrac{1}{2}}=\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}. \\]\r\n\t\t\tNếu sợi dây đi qua mặt đáy $(ABCD)$ thì độ dài ngắn nhất là $L_2=G_1H+HK+KG_2=\\dfrac{a}{3}+a\\sqrt{2}+\\dfrac{a\\sqrt{3}}{3}>L_1$.\\\\\r\n\t\t\tVậy độ dài ngắn nhất của sợi dây là $\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}$.\r\n\t\t\\end{enumerate}",
     "explanation": "\\begin{enumerate}[a)]\r\n\t\t\t\\item\r\n\t\t\t\\immini{\r\n\t\t\t\tGọi $H$, $K$ lần lượt là trung điểm của $AB$ và $CD$.\\\\\r\n\t\t\t\tVì $\\triangle SAB$ vuông cân tại $S$ có cạnh huyền $AB=2a$ nên $SH\\perp AB$ và $SH=\\dfrac{1}{2}AB=a$.\\\\\r\n\t\t\t\tDo $(SAB)\\perp(ABCD)$ theo giao tuyến $AB$ nên $SH\\perp(ABCD)\\Rightarrow SH\\perp HK$.\\\\\r\n\t\t\t\tTam giác $SCD$ đều cạnh $CD=AB=2a$ nên đường trung tuyến $SK=\\dfrac{2a\\sqrt{3}}{2}=a\\sqrt{3}$.\\\\\r\n\t\t\t\tXét $\\triangle SHK$ vuông tại $H$, ta có $AD=HK=\\sqrt{SK^2-SH^2}=\\sqrt{3a^2-a^2}=a\\sqrt{2}$.\\\\\r\n\t\t\t\tVậy $AD=a\\sqrt{2}$.\r\n\t\t\t}{\r\n\t\t\t\t\\begin{tikzpicture}[scale=0.85, font=\\footnotesize, line join=round, line cap=round]\r\n\t\t\t\t\t\\coordinate (A) at (0,0);\r\n\t\t\t\t\t\\coordinate (B) at (-1.4,-1.4);\r\n\t\t\t\t\t\\coordinate (D) at (3.2,0);\r\n\t\t\t\t\t\\coordinate (C) at ($(B)+(D)-(A)$);\r\n\t\t\t\t\t\\coordinate (H) at ($(A)!0.5!(B)$);\r\n\t\t\t\t\t\\coordinate (K) at ($(C)!0.5!(D)$);\r\n\t\t\t\t\t\\coordinate (S) at ($(H)+(0,2.5)$);\r\n\t\t\t\t\t\\coordinate (G1) at ($(S)!0.667!(H)$);\r\n\t\t\t\t\t\\coordinate (G2) at ($(S)!0.667!(K)$);\r\n\t\t\t\t\t\\draw[dashed, thin] (A)--(B) (A)--(D) (S)--(A) (S)--(H) (H)--(K);\r\n\t\t\t\t\t\\draw[thick] (S)--(B) (S)--(C) (S)--(D) (B)--(C) (C)--(D) (S)--(K);\r\n\t\t\t\t\t\\foreach \\p/\\pos in {S/above, A/above right, B/below left, C/below right, D/right, H/left, K/right, G1/left, G2/above right}\r\n\t\t\t\t\t\\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};\r\n\t\t\t\t\\end{tikzpicture}\r\n\t\t\t}\r\n\t\t\t\\item Gọi $G_1$, $G_2$ lần lượt là trọng tâm của $\\triangle SAB$ và $\\triangle SCD$. Ta có $SG_1=\\dfrac{2}{3}SH=\\dfrac{2a}{3}$ và $SG_2=\\dfrac{2}{3}SK=\\dfrac{2a\\sqrt{3}}{3}$.\\\\\r\n\t\t\tXét $\\triangle SAD$ có $SA=a\\sqrt{2}$, $AD=a\\sqrt{2}$ và $SD=2a$. Vì $SA^2+AD^2=2a^2+2a^2=4a^2=SD^2$ nên $\\triangle SAD$ vuông cân tại $A$, suy ra $\\widehat{ASD}=45^{\\circ}$.\\\\\r\n\t\t\tMặt khác, trong $\\triangle SAB$ vuông cân tại $S$ ta có $\\widehat{G_1SA}=45^{\\circ}$; trong $\\triangle SCD$ đều ta có $\\widehat{DSG_2}=30^{\\circ}$.\\\\\r\n\t\t\tTrải phẳng ba mặt bên $(SAB)$, $(SAD)$, $(SCD)$ lên cùng một mặt phẳng xoay quanh các cạnh $SA$, $SD$, khi đó góc $\\widehat{G_1SG_2}$ trên mặt phẳng trải là\r\n\t\t\t\\[ \\widehat{G_1SG_2}=\\widehat{G_1SA}+\\widehat{ASD}+\\widehat{DSG_2}=45^{\\circ}+45^{\\circ}+30^{\\circ}=120^{\\circ}. \\]\r\n\t\t\tĐộ dài đường đi ngắn nhất từ $G_1$ đến $G_2$ qua các mặt bên là\r\n\t\t\t\\[ L_1=G_1G_2=\\sqrt{SG_1^2+SG_2^2-2\\cdot SG_1\\cdot SG_2\\cdot\\cos 120^{\\circ}}=\\sqrt{\\dfrac{4a^2}{9}+\\dfrac{12a^2}{9}+2\\cdot\\dfrac{2a}{3}\\cdot\\dfrac{2a\\sqrt{3}}{3}\\cdot\\dfrac{1}{2}}=\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}. \\]\r\n\t\t\tNếu sợi dây đi qua mặt đáy $(ABCD)$ thì độ dài ngắn nhất là $L_2=G_1H+HK+KG_2=\\dfrac{a}{3}+a\\sqrt{2}+\\dfrac{a\\sqrt{3}}{3}>L_1$.\\\\\r\n\t\t\tVậy độ dài ngắn nhất của sợi dây là $\\dfrac{2a\\sqrt{4+\\sqrt{3}}}{3}$.\r\n\t\t\\end{enumerate}",

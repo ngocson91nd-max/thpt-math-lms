@@ -165,9 +165,16 @@ describe('5. Kiểm thử Phân tích Đề thi HSG Huế (Hue-HSG12-26-27.tex)'
     expect(metadata.duration).toBe(150);
     expect(questions.length).toBe(27);
 
-    // Kiểm tra câu có TikZ
-    const questionsWithTikz = questions.filter((q) => q.content.includes('tikzpicture'));
-    expect(questionsWithTikz.length).toBe(6);
+    // Kiểm tra câu có TikZ trong đề bài (Q14, Q21, Q22)
+    const questionsWithTikzInContent = questions.filter((q) => q.content.includes('tikzpicture'));
+    expect(questionsWithTikzInContent.length).toBe(3);
+
+    // Kiểm tra câu có TikZ trong toàn bộ câu hỏi và lời giải (bảo toàn không sót hình nào: Q14, Q15, Q20, Q21, Q22, Q23, Q27)
+    const allQuestionsWithTikz = questions.filter((q) => q.content.includes('tikzpicture') || (q.explanation && q.explanation.includes('tikzpicture')));
+    expect(allQuestionsWithTikz.length).toBe(7);
+
+    // Tuyệt đối không để rò rỉ lời giải vào nội dung đề bài
+    expect(questions.every((q) => !q.content.includes('\\loigiai'))).toBe(true);
 
     // Kiểm tra câu 12 có tabular
     const q12 = questions[11];
