@@ -20,10 +20,7 @@ import {
   LogIn,
   UserPlus,
   LogOut,
-  User,
-  School,
-  Settings,
-  ChevronRight,
+  PanelLeftClose,
 } from 'lucide-react';
 
 interface NavLinkItem {
@@ -39,7 +36,12 @@ interface NavGroup {
   links: NavLinkItem[];
 }
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isCollapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { user, role, isTeacher, signOut } = useAuth();
@@ -72,9 +74,9 @@ export const Sidebar: React.FC = () => {
       ],
     },
     {
-      title: 'LỚP HỌC & HỌC LIỆU',
+      title: isTeacher ? 'LỚP HỌC & HỌC LIỆU' : 'HỌC LIỆU & TÀI LIỆU',
       links: [
-        { href: '/classes', label: 'Lớp học trực tuyến', icon: GraduationCap },
+        ...(isTeacher ? [{ href: '/classes', label: 'Quản lý lớp học', icon: GraduationCap }] : []),
         { href: '/courses', label: 'Khóa học THPT', icon: BookOpen },
         { href: '/materials', label: 'Học liệu & PDF', icon: FolderDown },
       ],
@@ -113,11 +115,25 @@ export const Sidebar: React.FC = () => {
             </div>
           </Link>
 
+          {/* Nút thu gọn thanh bên trên Desktop */}
+          {onToggle && (
+            <button
+              type="button"
+              onClick={onToggle}
+              className="hidden lg:flex items-center justify-center rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+              title="Ẩn thanh bên"
+              aria-label="Ẩn thanh bên"
+            >
+              <PanelLeftClose className="h-5 w-5" />
+            </button>
+          )}
+
           {/* Nút đóng trên mobile */}
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+            className="lg:hidden rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+            aria-label="Đóng menu"
           >
             <X className="h-5 w-5" />
           </button>
@@ -181,7 +197,7 @@ export const Sidebar: React.FC = () => {
             <button
               type="button"
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white p-2.5 text-left shadow-2xs hover:border-slate-300 transition"
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white p-2.5 text-left shadow-2xs hover:border-slate-300 transition cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-xs">
@@ -255,9 +271,11 @@ export const Sidebar: React.FC = () => {
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 transition"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          aria-label="Mở menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
+          <span>Menu</span>
         </button>
       </div>
 
@@ -275,7 +293,11 @@ export const Sidebar: React.FC = () => {
       )}
 
       {/* Sidebar cố định bên trái trên Màn hình máy tính (Desktop >= lg) */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-40 w-64 flex-col border-r border-slate-200 bg-white shadow-xs">
+      <aside
+        className={`hidden lg:flex fixed inset-y-0 left-0 z-40 w-64 flex-col border-r border-slate-200 bg-white shadow-xs transition-transform duration-300 ease-in-out ${
+          isCollapsed ? '-translate-x-full' : 'translate-x-0'
+        }`}
+      >
         <SidebarContent />
       </aside>
     </>

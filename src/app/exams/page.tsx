@@ -1105,102 +1105,104 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
       {/* BỐ CỤC CHÍNH: CỘT LỌC LỚP BÊN TRÁI + LƯỚI ĐỀ THI BÊN PHẢI (Ảnh 7 iExam) */}
       <div className="flex flex-col lg:flex-row gap-5 items-start">
-        {/* Cột trái: Danh mục lớp học liên kết trực tiếp với /classes */}
-        <aside className="w-full lg:w-64 shrink-0 space-y-2 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100 pb-2">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <GraduationCap className="h-4 w-4 text-blue-600" />
-              Danh mục lớp
-            </span>
-            <Link
-              href="/classes"
-              className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 hover:underline"
-              title="Đi tới trang Quản lý Lớp học"
-            >
-              <span>Quản lý</span>
-              <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </div>
+        {/* Cột trái: Danh mục lớp học (Chỉ hiển thị cho Giáo viên/Admin để quản lý) */}
+        {isTeacher && (
+          <aside className="w-full lg:w-64 shrink-0 space-y-2 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100 pb-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <GraduationCap className="h-4 w-4 text-blue-600" />
+                Danh mục lớp
+              </span>
+              <Link
+                href="/classes"
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 hover:underline"
+                title="Đi tới trang Quản lý Lớp học"
+              >
+                <span>Quản lý</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
 
-          <div className="space-y-1">
-            {/* Mục: Tất cả lớp */}
-            <button
-              type="button"
-              onClick={() => setSelectedClass('all')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                selectedClass === 'all'
-                  ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <FileText className={`h-3.5 w-3.5 ${selectedClass === 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
-                <span>Tất cả các lớp</span>
-              </div>
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                  selectedClass === 'all' ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
+            <div className="space-y-1">
+              {/* Mục: Tất cả lớp */}
+              <button
+                type="button"
+                onClick={() => setSelectedClass('all')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  selectedClass === 'all'
+                    ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {isTeacher
-                  ? exams.length
-                  : exams.filter((e) => isExamPermittedForStudent(e, user?.id, classes)).length}
-              </span>
-            </button>
-
-            {/* Danh sách lớp động tải từ classes */}
-            {classes.map((cls) => {
-              const isActive = selectedClass.toLowerCase() === cls.name.toLowerCase();
-              const count = getExamCountForClass(cls.name, cls.grade);
-              return (
-                <div
-                  key={cls.id}
-                  className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
-                    isActive ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50'
+                <div className="flex items-center gap-2">
+                  <FileText className={`h-3.5 w-3.5 ${selectedClass === 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>Tất cả các lớp</span>
+                </div>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                    selectedClass === 'all' ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedClass(cls.name)}
-                    className="flex-1 flex items-center gap-2 text-left cursor-pointer overflow-hidden py-0.5"
-                    title={`Lọc đề thi lớp ${cls.name}`}
+                  {isTeacher
+                    ? exams.length
+                    : exams.filter((e) => isExamPermittedForStudent(e, user?.id, classes)).length}
+                </span>
+              </button>
+
+              {/* Danh sách lớp động tải từ classes */}
+              {classes.map((cls) => {
+                const isActive = selectedClass.toLowerCase() === cls.name.toLowerCase();
+                const count = getExamCountForClass(cls.name, cls.grade);
+                return (
+                  <div
+                    key={cls.id}
+                    className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+                      isActive ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                    <span className="truncate">{cls.name}</span>
-                    <span className="text-[10px] text-slate-400 font-normal shrink-0">K{cls.grade}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedClass(cls.name)}
+                      className="flex-1 flex items-center gap-2 text-left cursor-pointer overflow-hidden py-0.5"
+                      title={`Lọc đề thi lớp ${cls.name}`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                      <span className="truncate">{cls.name}</span>
+                      <span className="text-[10px] text-slate-400 font-normal shrink-0">K{cls.grade}</span>
+                    </button>
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span
-                      className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold ${
-                        isActive ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                    <Link
-                      href={`/classes/${cls.id}`}
-                      className="p-1 text-slate-400 hover:text-blue-600 rounded-md hover:bg-white transition"
-                      title={`Xem chi tiết và học sinh lớp ${cls.name}`}
-                    >
-                      <ArrowUpRight className="h-3 w-3" />
-                    </Link>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span
+                        className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold ${
+                          isActive ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                      <Link
+                        href={`/classes/${cls.id}`}
+                        className="p-1 text-slate-400 hover:text-blue-600 rounded-md hover:bg-white transition"
+                        title={`Xem chi tiết và học sinh lớp ${cls.name}`}
+                      >
+                        <ArrowUpRight className="h-3 w-3" />
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          <div className="pt-2 border-t border-slate-100">
-            <Link
-              href="/classes"
-              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition border border-dashed border-slate-200 hover:border-blue-300"
-            >
-              <Plus className="h-3.5 w-3.5 text-blue-600" />
-              <span>Tạo hoặc quản lý lớp</span>
-            </Link>
-          </div>
-        </aside>
+            <div className="pt-2 border-t border-slate-100">
+              <Link
+                href="/classes"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition border border-dashed border-slate-200 hover:border-blue-300"
+              >
+                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                <span>Tạo hoặc quản lý lớp</span>
+              </Link>
+            </div>
+          </aside>
+        )}
 
         {/* Cột phải: Lưới đề thi chuẩn iExam */}
         <main className="flex-1 w-full">
@@ -1208,7 +1210,11 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
               <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-slate-800">Không tìm thấy đề thi phù hợp</h3>
-              <p className="text-xs text-slate-400 mt-1">Thầy hãy thử chọn lớp khác hoặc tạo đề mới.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {isTeacher
+                  ? 'Thầy hãy thử chọn lớp khác hoặc tạo đề mới.'
+                  : 'Hiện chưa có đề thi mới được giao cho lớp của em. Thầy Sơn sẽ đăng tải sớm!'}
+              </p>
             </div>
           ) : (
             <div className={`grid gap-4 sm:gap-5 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
@@ -1296,13 +1302,13 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                         {exam.title}
                       </h3>
 
-                      {/* LỚP ĐƯỢC PHÉP THI - Liên kết trực tiếp lớp học */}
-                      <div className="text-[11px] text-slate-500 mt-2 mb-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block">
-                            LỚP ĐƯỢC PHÉP THI
-                          </span>
-                          {isTeacher && (
+                      {/* LỚP ĐƯỢC PHÉP THI - Chỉ hiển thị cho Giáo viên để quản trị */}
+                      {isTeacher && (
+                        <div className="text-[11px] text-slate-500 mt-2 mb-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block">
+                              LỚP ĐƯỢC PHÉP THI
+                            </span>
                             <button
                               type="button"
                               onClick={() => handleOpenAssignModal(exam)}
@@ -1310,56 +1316,56 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                             >
                               + Đổi lớp
                             </button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {exam.access_type === 'public' ? (
-                            <span className="rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold">
-                              Công khai (Mọi học sinh)
-                            </span>
-                          ) : Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
-                            exam.assigned_classes.map((clsName) => {
-                              const matchedClass = classes.find(
-                                (c) =>
-                                  c.name.trim().toLowerCase() === clsName.trim().toLowerCase() ||
-                                  c.code.trim().toLowerCase() === clsName.trim().toLowerCase()
-                              );
-                              return (
-                                <div
-                                  key={clsName}
-                                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold hover:bg-blue-100 transition"
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedClass(clsName)}
-                                    title={`Lọc theo lớp ${clsName}`}
-                                    className="cursor-pointer hover:underline"
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {exam.access_type === 'public' ? (
+                              <span className="rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold">
+                                Công khai (Mọi học sinh)
+                              </span>
+                            ) : Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
+                              exam.assigned_classes.map((clsName) => {
+                                const matchedClass = classes.find(
+                                  (c) =>
+                                    c.name.trim().toLowerCase() === clsName.trim().toLowerCase() ||
+                                    c.code.trim().toLowerCase() === clsName.trim().toLowerCase()
+                                );
+                                return (
+                                  <div
+                                    key={clsName}
+                                    className="inline-flex items-center gap-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold hover:bg-blue-100 transition"
                                   >
-                                    {clsName}
-                                  </button>
-                                  {matchedClass && (
-                                    <Link
-                                      href={`/classes/${matchedClass.id}`}
-                                      title={`Mở trang chi tiết lớp ${clsName}`}
-                                      className="text-blue-500 hover:text-blue-900 ml-0.5 p-0.5 rounded hover:bg-blue-200/50"
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedClass(clsName)}
+                                      title={`Lọc theo lớp ${clsName}`}
+                                      className="cursor-pointer hover:underline"
                                     >
-                                      <ArrowUpRight className="h-2.5 w-2.5" />
-                                    </Link>
-                                  )}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAssignModal(exam)}
-                              className="rounded-md bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-100 cursor-pointer"
-                            >
-                              Chưa gán lớp (Bấm để gán)
-                            </button>
-                          )}
+                                      {clsName}
+                                    </button>
+                                    {matchedClass && (
+                                      <Link
+                                        href={`/classes/${matchedClass.id}`}
+                                        title={`Mở trang chi tiết lớp ${clsName}`}
+                                        className="text-blue-500 hover:text-blue-900 ml-0.5 p-0.5 rounded hover:bg-blue-200/50"
+                                      >
+                                        <ArrowUpRight className="h-2.5 w-2.5" />
+                                      </Link>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAssignModal(exam)}
+                                className="rounded-md bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-medium hover:bg-amber-100 cursor-pointer"
+                              >
+                                Chưa gán lớp (Bấm để gán)
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Thông số câu và lượt thi */}
                       <div className="text-xs text-slate-500 my-2">

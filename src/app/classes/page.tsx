@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_CLASSES, MOCK_USERS, MOCK_CLASS_MEMBERS } from '@/lib/supabase/mockStore';
 import { ClassItem } from '@/types/database';
@@ -24,9 +25,17 @@ import {
 } from 'lucide-react';
 
 export default function ClassesPage() {
+  const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Phân quyền: Học sinh không cần xem danh mục quản lý lớp, chuyển hướng sang danh sách đề thi
+  useEffect(() => {
+    if (user && !isTeacher) {
+      router.replace('/exams');
+    }
+  }, [user, isTeacher, router]);
 
   // Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -194,6 +203,10 @@ export default function ClassesPage() {
       alert('Không tìm thấy lớp học với mã này. Thầy/học sinh vui lòng kiểm tra lại!');
     }
   };
+
+  if (user && !isTeacher) {
+    return null;
+  }
 
   return (
     <div className="space-y-8 pb-12">
