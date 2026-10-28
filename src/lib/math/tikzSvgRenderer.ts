@@ -143,6 +143,9 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
+  // 0. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
+  rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
+
   const defs: DefMap = {};
   const coords: CoordMap = {};
   const drawItems: DrawItem[] = [];
@@ -333,11 +336,27 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
   }
 
-  // 8. Phân tích điểm đặc biệt: \fill (x,y) circle (r);
-  const fillRegex = /\\fill(?:\[([^\]]*)\])?\s*(\([^)]+\))\s*circle\s*\(([^)]+)\);/g;
-  while ((m = fillRegex.exec(rawTikz)) !== null) {
-    const pt = parsePoint(m[2], coords, defs);
+  // 8. Phân tích điểm chấm đặc biệt: \fill (x,y) circle (r); hoặc \draw (x,y) circle (r); (kể cả dạng chuỗi nối tiếp)
+  const circleMatches = rawTikz.matchAll(/(\([^)]+\))\s*(?:node(?:\[[^\]]*\])?\s*\{[^}]*\}\s*)?circle\s*\(([^)]+)\)/g);
+  for (const cm of circleMatches) {
+    const pt = parsePoint(cm[1], coords, defs);
     drawItems.push({ type: 'point', pt, radius: 2.5 });
+    updateBounds(pt.x, pt.y);
+  }
+
+  // Bổ sung quét các nhãn node nằm trong chuỗi lệnh \fill (x,y) node[...] {...}
+  const chainedNodeMatches = rawTikz.matchAll(/(\([^)]+\))\s*node\s*(?:\[([^\]]*)\])?\s*\{([^}]*)\}/g);
+  for (const nm of chainedNodeMatches) {
+    const pt = parsePoint(nm[1], coords, defs);
+    const pos = (nm[2] || '').trim();
+    let text = nm[3].replace(/\$/g, '').trim();
+    text = text
+      .replace(/\\alpha/g, 'α')
+      .replace(/\\beta/g, 'β')
+      .replace(/\\pi/g, 'π')
+      .replace(/\\infty/g, '∞')
+      .replace(/\\Delta/g, 'Δ');
+    drawItems.push({ type: 'node', pt, text, pos });
     updateBounds(pt.x, pt.y);
   }
 

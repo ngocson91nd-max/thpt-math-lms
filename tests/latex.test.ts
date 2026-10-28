@@ -3,6 +3,7 @@ import fs from 'fs';
 import { renderMathToHtml, renderTabularToHtml } from '../src/lib/math/katexRenderer';
 import { parseTkzTabCode, generateTkzTabSvg } from '../src/lib/math/tkzTabRenderer';
 import { parseExamLatex } from '../src/lib/latex/examParser';
+import { renderTikzToSvg } from '../src/lib/math/tikzSvgRenderer';
 
 describe('1. Kiểm thử môi trường Tabular và Bảng số liệu LaTeX', () => {
   it('Chuyển đổi \begin{tabular} thành HTML <table> có căn lề và công thức KaTeX', () => {
@@ -295,5 +296,23 @@ Cho biết $\\vv{F_1} + \\vv{F_2} + \\vv{F_3} = \\vv{P}$ và $|\\vv{F_1}| = 5000
     expect(rendered).toContain('marker id="tikz-arrow-pure"');
     // Đảm bảo không bị kẹt spinner, có sẵn SVG nhúng trực tiếp
     expect(rendered).toContain('<path d="');
+  });
+
+  it('renderTikzToSvg biên dịch đồ thị hàm trùng phương chữ W với nhãn tọa độ và nét đứt chuẩn xác', () => {
+    const wGraphCode = `\\begin{tikzpicture}[scale=0.7, font=\\footnotesize, line join=round, line cap=round, >=stealth]
+      \\draw[->] (-3,0) -- (3,0) node[below] {$x$};
+      \\draw[->] (0,-4.5) -- (0,2) node[right] {$y$};
+      \\draw (0,0) node[above right] {$0$};
+      \\draw[thick, samples=100, domain=-2.1:2.1] plot (\\x, {(\\x)^4 - 4*(\\x)^2});
+      \\draw[dashed] (-1.414,0) -- (-1.414,-4) -- (1.414,-4) -- (1.414,0);
+      \\draw[dashed] (-1.414,-4) -- (0,-4) node[left] {$-4$};
+      \\draw (1,0) node[below] {$1$};
+    \\end{tikzpicture}`;
+
+    const svg = renderTikzToSvg(wGraphCode);
+    expect(svg).not.toBeNull();
+    expect(svg).toContain('tikz-svg-pure');
+    expect(svg).toContain('<path d="');
+    expect(svg).toContain('stroke-dasharray="4,4"');
   });
 });
