@@ -88,6 +88,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   // 1. Tải đề thi từ Supabase hoặc localStorage
   useEffect(() => {
+    const mockExam = MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
+
     if (typeof window !== 'undefined') {
       const savedExams = localStorage.getItem('lms_exams');
       if (savedExams) {
@@ -95,6 +97,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           const parsed: Exam[] = JSON.parse(savedExams);
           const found = parsed.find((e) => e.id === resolvedParams.id);
           if (found) {
+            // Nếu là đề hệ thống chuẩn, ưu tiên bản cập nhật câu hỏi mới nhất từ MOCK_EXAMS để tránh cache cũ làm rò rỉ lời giải
+            if (mockExam) {
+              setExam(mockExam);
+              setTimeLeft(mockExam.duration_minutes * 60);
+              return;
+            }
             setExam(found);
             setTimeLeft(found.duration_minutes * 60);
             return;
@@ -103,6 +111,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           console.error(e);
         }
       }
+    }
+
+    if (mockExam) {
+      setExam(mockExam);
+      setTimeLeft(mockExam.duration_minutes * 60);
+      return;
     }
 
     const supabase = createClient();

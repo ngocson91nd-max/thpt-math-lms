@@ -107,11 +107,14 @@ export default function ExamsPage() {
         try {
           const parsed = JSON.parse(savedExams);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // Đảm bảo không mất các đề thi mẫu quan trọng như Huế HSG và MOET 2025
-            const existingIds = new Set(parsed.map((e: any) => e.id));
-            const missingMocks = MOCK_EXAMS.filter((m) => !existingIds.has(m.id));
-            const merged = [...parsed, ...missingMocks];
+            // Cập nhật các đề thi hệ thống chuẩn lên phiên bản mới nhất để không rò rỉ đáp án/lời giải từ cache cũ
+            const mockMap = new Map(MOCK_EXAMS.map((m) => [m.id, m]));
+            const merged = parsed.map((e: any) => mockMap.get(e.id) || e);
+            MOCK_EXAMS.forEach((m) => {
+              if (!merged.some((e: any) => e.id === m.id)) merged.push(m);
+            });
             setExams(merged);
+            localStorage.setItem('lms_exams', JSON.stringify(merged));
             return;
           }
         } catch (e) {
