@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_EXAMS, MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
 import { Exam, Question } from '@/types/database';
@@ -9,6 +10,8 @@ import { parseExamLatex } from '@/lib/latex/examParser';
 import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
 import { createClient } from '@/lib/supabase/client';
+import { savePdfToIndexedDb } from '@/lib/pdf/pdfStorage';
+import { maskPdfAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
 import {
   ClipboardList,
   Clock,
@@ -30,19 +33,48 @@ import {
   X,
   Search,
   RefreshCw,
+  Copy,
+  Link2,
+  Radio,
+  Lock,
+  Unlock,
+  BarChart3,
+  FileUp,
+  CheckCircle2,
+  Grid,
+  List,
+  Eye,
 } from 'lucide-react';
 
 export default function ExamsPage() {
+  const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
   const [exams, setExams] = useState<Exam[]>(MOCK_EXAMS);
   const [questionsPool, setQuestionsPool] = useState<Question[]>(MOCK_QUESTIONS);
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
+  const [selectedClass, setSelectedClass] = useState<string>('all');
   const [filterType, setFilterType] = useState<'all' | 'timed' | 'practice'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPdfCreateModal, setShowPdfCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
+
+  // Tạo đề từ PDF
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfExamTitle, setPdfExamTitle] = useState('');
+  const [pdfGrade, setPdfGrade] = useState<10 | 11 | 12>(12);
+  const [pdfDuration, setPdfDuration] = useState<number>(45);
+  const [pdfAssignedClass, setPdfAssignedClass] = useState<string>('12 Toán 1');
+  const [pdfP1Count, setPdfP1Count] = useState<number>(12);
+  const [pdfP2Count, setPdfP2Count] = useState<number>(4);
+  const [pdfP3Count, setPdfP3Count] = useState<number>(6);
+  const [pdfSmartMask, setPdfSmartMask] = useState<boolean>(true);
+  const [isCreatingPdfExam, setIsCreatingPdfExam] = useState<boolean>(false);
 
   // Creator Modal Tabs: 'matrix' | 'manual' | 'latex' | 'word'
   const [creatorMode, setCreatorMode] = useState<'matrix' | 'manual' | 'latex' | 'word'>('matrix');
@@ -143,6 +175,139 @@ export default function ExamsPage() {
     setExams(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem('lms_exams', JSON.stringify(updated));
+    }
+  };
+
+  const handleCopyExamCode = (code: string) => {
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      setCopyToast(`Đã sao chép mã đề: ${code}`);
+      setTimeout(() => setCopyToast(null), 2500);
+    }
+  };
+
+  const handleCopyExamLink = (examId: string) => {
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      const origin = window.location.origin;
+      const link = `${origin}/exams/${examId}/take`;
+      navigator.clipboard.writeText(link);
+      setCopyToast('Đã sao chép link làm bài thi của học sinh!');
+      setTimeout(() => setCopyToast(null), 2500);
+    }
+  };
+
+  const handleToggleLockExam = (examId: string) => {
+    const updated = exams.map((e) => {
+      if (e.id === examId) {
+        const isLocked = !e.is_locked;
+        return {
+          ...e,
+          is_locked: isLocked,
+          status: isLocked ? ('closed' as const) : ('published' as const),
+        };
+      }
+      return e;
+    });
+    saveExamsToStorage(updated);
+    setCopyToast('Đã cập nhật trạng thái đề thi!');
+    setTimeout(() => setCopyToast(null), 2500);
+  };
+
+  const handleDuplicateExam = (exam: Exam) => {
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const duplicated: Exam = {
+      ...exam,
+      id: `exam-${Date.now()}`,
+      code: newCode,
+      title: `${exam.title} (Bản sao)`,
+      created_at: new Date().toISOString(),
+      submissions_count: 0,
+    };
+    const updated = [duplicated, ...exams];
+    saveExamsToStorage(updated);
+    setCopyToast(`Đã nhân bản đề thi! Mã đề mới: ${newCode}`);
+    setTimeout(() => setCopyToast(null), 2500);
+  };
+
+  const handleCreatePdfExamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pdfFile) {
+      alert('Vui lòng chọn 1 file PDF đề thi!');
+      return;
+    }
+    setIsCreatingPdfExam(true);
+    try {
+      const arrayBuffer = await pdfFile.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8.byteLength; i++) {
+        binary += String.fromCharCode(uint8[i]);
+      }
+      let dataUrl = `data:application/pdf;base64,${btoa(binary)}`;
+
+      let totalPages = 1;
+      if (pdfSmartMask) {
+        try {
+          const maskResult = await maskPdfAnswerKey(dataUrl, { bottomRatio: 0.80 });
+          dataUrl = maskResult.maskedDataUrl;
+          totalPages = maskResult.totalPages;
+        } catch (err) {
+          console.warn('Lỗi tự động che đáp án PDF:', err);
+        }
+      }
+
+      const newId = `pdf-exam-${Date.now()}`;
+      const idbKey = `pdf_${newId}`;
+      await savePdfToIndexedDb(idbKey, dataUrl);
+
+      const generatedQuestions = buildPdfExamQuestions(pdfP1Count, pdfP2Count, pdfP3Count);
+      const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      const newExam: Exam = {
+        id: newId,
+        code: newCode,
+        title: pdfExamTitle.trim() || pdfFile.name.replace(/\.[^/.]+$/, ''),
+        grade: pdfGrade,
+        duration_minutes: pdfDuration,
+        passing_score: 5.0,
+        shuffle_questions: false,
+        shuffle_options: false,
+        max_attempts: 1,
+        status: 'published',
+        format: 'standard_3_parts',
+        exam_mode: 'pdf_view',
+        pdf_url: `idb:${idbKey}`,
+        pdf_total_pages: 1,
+        pdf_cut_last_page: pdfSmartMask,
+        assigned_classes: [pdfAssignedClass],
+        part_points: { part1: 3, part2: 4, part3: 3, part4: 0 },
+        part_structure: {
+          part1_count: pdfP1Count,
+          part2_count: pdfP2Count,
+          part3_count: pdfP3Count,
+          part4_count: 0,
+        },
+        true_false_scoring: 'standard_thpt',
+        violation_action: 'lock_exam',
+        max_violations: 3,
+        view_answer_policy: 'immediately',
+        view_score_allowed: true,
+        view_leaderboard_allowed: true,
+        is_view_answer_allowed: true,
+        teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
+        submissions_count: 0,
+        created_at: new Date().toISOString(),
+        questions: generatedQuestions,
+      };
+
+      const updated = [newExam, ...exams];
+      saveExamsToStorage(updated);
+      setIsCreatingPdfExam(false);
+      setShowPdfCreateModal(false);
+      router.push(`/exams/editor?id=${newId}&mode=pdf`);
+    } catch (err: any) {
+      alert(`Lỗi tạo đề thi PDF: ${err?.message || 'Không xác định'}`);
+      setIsCreatingPdfExam(false);
     }
   };
 
@@ -628,8 +793,19 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
   const filteredExams = exams.filter((e) => {
     if (selectedGrade !== 'all' && e.grade !== selectedGrade) return false;
+    if (selectedClass !== 'all') {
+      const inAssigned = e.assigned_classes?.some((c) => c.toLowerCase().includes(selectedClass.toLowerCase()));
+      const inClassName = e.class_name?.toLowerCase().includes(selectedClass.toLowerCase());
+      if (!inAssigned && !inClassName) return false;
+    }
     if (filterType === 'timed' && e.duration_minutes < 45) return false;
     if (filterType === 'practice' && e.duration_minutes >= 90) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = e.title.toLowerCase().includes(q);
+      const matchCode = (e.code || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchCode) return false;
+    }
     return true;
   });
 
@@ -656,96 +832,96 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   const selectedP4 = selectedQuestions.filter((q) => q.part === 4 || q.type === 'essay');
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <ClipboardList className="h-8 w-8 text-blue-600 shrink-0" />
-            Đề Thi & Bài Kiểm Tra Toán THPT
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Hệ thống bài kiểm tra định kỳ và đề thi thử Tốt nghiệp THPT chuẩn Bộ GD&ĐT 2025 có bấm giờ, hỗ trợ tự luận và tự động chấm điểm.
-          </p>
-        </div>
-
-        {isTeacher && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/exams/editor?new=1"
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition self-start sm:self-auto cursor-pointer"
-            >
-              <Sparkles className="h-4 w-4" />
-              Soạn Đề Thi Mới (iExam Editor)
-            </Link>
-            <button
-              onClick={() => {
-                handleSelectFormat('standard_3_parts');
-                setShowCreateModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Plus className="h-4 w-4 text-slate-500" />
-              Tạo Nhanh Ma Trận
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Student Welcome Banner */}
-      {user ? (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 p-5 shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-lg shadow-sm">
-              {user.full_name.charAt(0)}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900 text-base">{user.full_name}</span>
-                <span className="rounded-md bg-blue-600 text-white px-2 py-0.5 text-[10px] font-bold">
-                  {user.role === 'teacher' ? 'Thầy Cô' : `Học sinh Lớp ${user.grade || 12}`}
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                {user.school_name || 'THPT Chuyên Lê Hồng Phong'} • Hãy chọn đề thi bên dưới để bắt đầu làm bài!
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href="/gradebook"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-blue-200 px-4 py-2 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-50 transition"
-          >
-            <Award className="h-4 w-4 text-blue-600" />
-            <span>{isTeacher ? 'Xem Sổ Điểm Lớp' : 'Xem Điểm Thi Của Tôi'}</span>
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-bold">
-              !
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-amber-900">
-                Bạn chưa đăng nhập vào Toán Thầy Sơn
-              </h3>
-              <p className="text-xs text-amber-700 mt-0.5">
-                Đăng ký tài khoản hoặc đăng nhập để lưu kết quả bài thi vào bảng vàng và xem lời giải chi tiết.
-              </p>
-            </div>
-          </div>
+    <div className="space-y-6 pb-16 relative">
+      {/* Toast thông báo */}
+      {copyToast && (
+        <div className="fixed top-20 right-6 z-50 rounded-2xl bg-slate-900 text-white px-5 py-3 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          <span>{copyToast}</span>
         </div>
       )}
 
-      {/* Filter Tabs */}
+      {/* Header Bar chuẩn iExam */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-xs font-semibold text-slate-400 mr-2 flex items-center gap-1">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <ClipboardList className="h-8 w-8 text-blue-600 shrink-0" />
+            <span>Đề thi của tôi</span>
+            <span className="text-sm font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+              {filteredExams.length} đề thi
+            </span>
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-500">
+            Quản lý ngân hàng đề thi, tạo đề từ file PDF hoặc bộ soạn thảo iExam Editor trực tuyến.
+          </p>
+        </div>
+
+        {/* Nút tác vụ Tạo đề & Chế độ xem */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Toggle Grid / List */}
+          <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 text-slate-600">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs' : 'hover:text-slate-900'
+              }`}
+              title="Xem dạng lưới"
+            >
+              <Grid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                viewMode === 'list' ? 'bg-white text-blue-600 shadow-2xs' : 'hover:text-slate-900'
+              }`}
+              title="Xem dạng danh sách"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
+          <button
+            type="button"
+            onClick={() => setShowPdfCreateModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 transition cursor-pointer"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Tạo từ PDF</span>
+          </button>
+
+          {/* NÚT TẠO ĐỀ MỚI */}
+          <Link
+            href="/exams/editor?new=1"
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Tạo đề mới</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Thanh tìm kiếm & lọc nhanh */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm theo tên đề thi hoặc mã đề (ví dụ: UXHF8H)..."
+            className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-slate-400 font-semibold flex items-center gap-1">
             <Filter className="h-3.5 w-3.5" /> Khối:
           </span>
           {[
-            { id: 'all', label: 'Tất cả lớp' },
+            { id: 'all', label: 'Tất cả' },
             { id: 12, label: 'Lớp 12' },
             { id: 11, label: 'Lớp 11' },
             { id: 10, label: 'Lớp 10' },
@@ -753,203 +929,418 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             <button
               key={tab.id}
               onClick={() => setSelectedGrade(tab.id as any)}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              className={`rounded-lg px-2.5 py-1 font-semibold transition cursor-pointer ${
                 selectedGrade === tab.id
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 p-1 rounded-xl">
-          <button
-            onClick={() => setFilterType('all')}
-            className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
-              filterType === 'all' ? 'bg-white text-slate-900 font-semibold shadow-2xs' : 'hover:text-slate-900'
-            }`}
-          >
-            Tất cả đề thi
-          </button>
-          <button
-            onClick={() => setFilterType('timed')}
-            className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
-              filterType === 'timed' ? 'bg-white text-slate-900 font-semibold shadow-2xs' : 'hover:text-slate-900'
-            }`}
-          >
-            ⏱️ Đề bấm giờ (90 - 150 phút)
-          </button>
-          <button
-            onClick={() => setFilterType('practice')}
-            className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
-              filterType === 'practice' ? 'bg-white text-slate-900 font-semibold shadow-2xs' : 'hover:text-slate-900'
-            }`}
-          >
-            📚 Đề ôn tập chuyên đề (45 phút)
-          </button>
-        </div>
       </div>
 
-      {/* Exams Grid */}
-      {filteredExams.length === 0 ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-3">
-            <ClipboardList className="h-7 w-7" />
+      {/* BỐ CỤC CHÍNH: CỘT LỌC LỚP BÊN TRÁI + LƯỚI ĐỀ THI BÊN PHẢI (Ảnh 7 iExam) */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        {/* Cột trái: Danh mục lớp học */}
+        <aside className="w-full lg:w-56 shrink-0 space-y-1.5 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 px-3 py-1">
+            Danh mục lớp
           </div>
-          <h3 className="text-base font-bold text-slate-900">Chưa có đề thi nào phù hợp</h3>
-          <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-            Thầy có thể bấm &quot;Tạo Đề Thi Mới&quot; để thiết lập thêm bài kiểm tra cho học sinh.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-          {filteredExams.map((exam) => {
-            const qList = exam.questions || [];
-            const p1 = qList.filter((q) => q.part === 1 || q.type === 'single_choice' || q.type === 'multiple_choice').length;
-            const p2 = qList.filter((q) => q.part === 2 || q.type === 'true_false').length;
-            const p3 = qList.filter((q) => q.part === 3 || q.type === 'short_answer').length;
-            const p4 = qList.filter((q) => q.part === 4 || q.type === 'essay').length;
-
+          {[
+            { id: 'all', label: 'Tất cả', count: exams.length },
+            {
+              id: '11 Anh 1',
+              label: '11 Anh 1',
+              count: exams.filter((e) => e.assigned_classes?.includes('11 Anh 1') || e.grade === 11).length,
+            },
+            {
+              id: '11 Sử',
+              label: '11 Sử',
+              count: exams.filter((e) => e.assigned_classes?.includes('11 Sử') || e.grade === 11).length,
+            },
+            {
+              id: '12 Toán 1',
+              label: '12 Toán 1',
+              count: exams.filter((e) => e.assigned_classes?.includes('12 Toán 1') || e.grade === 12).length,
+            },
+          ].map((tab) => {
+            const isActive = selectedClass === tab.id;
             return (
-              <div
-                key={exam.id}
-                className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-7 shadow-xs hover:shadow-md transition hover:border-blue-300 relative overflow-hidden"
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedClass(tab.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
               >
-                {/* Format Indicator Bar */}
-                {exam.format === 'periodic_4_parts' ? (
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 to-indigo-600" />
-                ) : exam.format === 'standard_3_parts' ? (
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-cyan-500" />
-                ) : null}
-
-                <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-lg bg-blue-100/80 px-2.5 py-1 text-xs font-bold text-blue-700">
-                        Toán Lớp {exam.grade}
-                      </span>
-                      {(exam.exam_mode === 'pdf_view' || exam.pdf_url) && (
-                        <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200 flex items-center gap-1">
-                          <FileText className="h-3 w-3" />
-                          Đề PDF
-                        </span>
-                      )}
-                      {exam.format === 'periodic_4_parts' ? (
-                        <span className="rounded-lg bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200">
-                          Định kỳ / HSG (4 Phần)
-                        </span>
-                      ) : exam.format === 'standard_3_parts' ? (
-                        <span className="rounded-lg bg-cyan-100 px-2 py-0.5 text-[11px] font-bold text-cyan-800 border border-cyan-200">
-                          Chuẩn Bộ GD&ĐT 2025 (3 Phần)
-                        </span>
-                      ) : (
-                        <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                          Đề Tùy Chọn
-                        </span>
-                      )}
-                    </div>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
-                      <Clock className="h-3.5 w-3.5 text-blue-600" />
-                      {exam.duration_minutes} phút
-                    </span>
-                  </div>
-
-                  <h3 className="text-lg font-bold text-slate-900 leading-snug">
-                    {exam.title}
-                  </h3>
-
-                  <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                    {exam.description || 'Đề thi trắc nghiệm và tự luận Toán THPT.'}
-                  </p>
-
-                  {/* Structure Breakdown */}
-                  <div className="mt-4 pt-3 border-t border-slate-100">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-semibold text-slate-700">Cấu trúc:</span>
-                      {p1 > 0 && (
-                        <span className="rounded-md bg-blue-50 px-2 py-0.5 font-medium text-blue-700 border border-blue-100">
-                          {p1} câu TN (I)
-                        </span>
-                      )}
-                      {p2 > 0 && (
-                        <span className="rounded-md bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700 border border-indigo-100">
-                          {p2} câu Đ/S (II)
-                        </span>
-                      )}
-                      {p3 > 0 && (
-                        <span className="rounded-md bg-amber-50 px-2 py-0.5 font-medium text-amber-700 border border-amber-100">
-                          {p3} câu Điền số (III)
-                        </span>
-                      )}
-                      {p4 > 0 && (
-                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 border border-emerald-100">
-                          {p4} câu Tự luận (IV)
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-                      <div className="flex items-center gap-1.5">
-                        <HelpCircle className="h-3.5 w-3.5 text-slate-400" />
-                        <span>Tổng: {qList.length} câu</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Award className="h-3.5 w-3.5 text-slate-400" />
-                        <span>Thang điểm: {exam.format === 'periodic_4_parts' ? '20.0' : '10.0'}</span>
-                      </div>
-                      {exam.shuffle_questions && (
-                        <div className="flex items-center gap-1.5 text-indigo-600 font-medium">
-                          <Shuffle className="h-3.5 w-3.5" />
-                          <span>Xáo câu ngẫu nhiên</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <FileText className={`h-3.5 w-3.5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
                 </div>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                    isActive ? 'bg-blue-200/70 text-blue-800' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </aside>
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Đang mở làm bài
-                  </span>
+        {/* Cột phải: Lưới đề thi chuẩn iExam */}
+        <main className="flex-1 w-full">
+          {filteredExams.length === 0 ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
+              <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-slate-800">Không tìm thấy đề thi phù hợp</h3>
+              <p className="text-xs text-slate-400 mt-1">Thầy hãy thử chọn lớp khác hoặc tạo đề mới.</p>
+            </div>
+          ) : (
+            <div className={`grid gap-4 sm:gap-5 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
+              {filteredExams.map((exam) => {
+                const examCode = exam.code || exam.id.slice(0, 6).toUpperCase();
+                const qCount = (exam.questions || []).length;
+                const isLocked = exam.is_locked || exam.status === 'closed';
 
-                  <div className="flex items-center gap-2">
-                    {isTeacher && (
-                      <>
-                        <Link
-                          href={`/exams/editor?id=${exam.id}`}
-                          className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
-                          title="Mở trình soạn thảo sửa toàn bộ nội dung đề thi"
+                return (
+                  <div
+                    key={exam.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs hover:shadow-md transition flex flex-col justify-between hover:border-blue-300"
+                  >
+                    <div>
+                      {/* Top Card Header: Mã đề, Copy, Link, Date, Trash */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-extrabold text-slate-800 text-xs tracking-wider bg-slate-100 px-2 py-0.5 rounded-md">
+                            {examCode}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyExamCode(examCode)}
+                            className="p-1 text-slate-400 hover:text-blue-600 transition cursor-pointer"
+                            title="Sao chép mã đề"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyExamLink(exam.id)}
+                            className="p-1 text-slate-400 hover:text-blue-600 transition cursor-pointer"
+                            title="Sao chép link làm bài của học sinh"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-slate-400">
+                          <span className="text-[11px] flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {exam.created_at ? new Date(exam.created_at).toLocaleDateString('vi-VN') : '26/10/2026'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExam(exam.id, exam.title)}
+                            className="p-1 text-rose-400 hover:text-rose-600 transition cursor-pointer"
+                            title="Xóa đề thi"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Status Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-2.5 mb-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            isLocked
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                          <span>Sửa Đề</span>
-                        </Link>
+                          {isLocked ? 'Đã khóa' : 'Đang mở'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-50 text-slate-600 border border-slate-200">
+                          {exam.start_time ? `Lịch: ${new Date(exam.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Không đặt lịch'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                          {exam.access_type === 'public' ? 'Công khai' : 'Giới hạn lớp'}
+                        </span>
+                        {(exam.exam_mode === 'pdf_view' || exam.pdf_url) && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                            <FileText className="h-3 w-3" />
+                            PDF
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Tiêu đề đề thi */}
+                      <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-snug line-clamp-2 my-1">
+                        {exam.title}
+                      </h3>
+
+                      {/* LỚP ĐƯỢC PHÉP THI */}
+                      <div className="text-[11px] text-slate-500 mt-2 mb-1">
+                        <span className="font-semibold text-slate-400 uppercase text-[9px] tracking-wider block mb-1">
+                          LỚP ĐƯỢC PHÉP THI
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0 ? (
+                            exam.assigned_classes.map((cls) => (
+                              <span
+                                key={cls}
+                                className="rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold"
+                              >
+                                {cls}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="rounded-md bg-slate-100 text-slate-700 px-2 py-0.5 text-[11px] font-semibold">
+                              Lớp {exam.grade || 12}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Thông số câu và lượt thi */}
+                      <div className="text-xs text-slate-500 my-2">
+                        <span className="font-semibold text-slate-700">{qCount} câu</span>
+                        <span className="mx-1.5">•</span>
+                        <span>{exam.submissions_count || 0} HS đã thi</span>
+                        <span className="mx-1.5">•</span>
+                        <span>{exam.duration_minutes} phút</span>
+                      </div>
+                    </div>
+
+                    {/* Hàng nút tác vụ (matching Screenshot 7 iExam) */}
+                    <div className="pt-3 border-t border-slate-100 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => handleDeleteExam(exam.id, exam.title)}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                          title="Xóa đề thi"
+                          onClick={() => handleToggleLockExam(exam.id)}
+                          className={`inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                            isLocked
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                              : 'bg-rose-50/50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                          }`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>Xóa</span>
+                          {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                          <span>{isLocked ? 'Mở đề' : 'Khoá đề'}</span>
                         </button>
-                      </>
-                    )}
 
-                    <Link
-                      href={`/exams/${exam.id}/take`}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition active:scale-95 cursor-pointer"
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      <span>Làm Bài Thi</span>
-                    </Link>
+                        <Link
+                          href={`/exams/${exam.id}/take`}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
+                          title="Giám sát phòng thi thời gian thực"
+                        >
+                          <Radio className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                          <span>Live</span>
+                        </Link>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Link
+                          href={`/exams/editor?id=${exam.id}`}
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Sửa</span>
+                        </Link>
+
+                        <Link
+                          href="/gradebook"
+                          className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 transition"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5" />
+                          <span>Kết quả</span>
+                        </Link>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateExam(exam)}
+                        className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <Copy className="h-3.5 w-3.5 text-slate-400" />
+                        <span>Nhân bản</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* MODAL TẠO ĐỀ TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
+      {showPdfCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-700 font-bold">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">Tạo Đề Thi Từ File PDF</h3>
+                  <p className="text-[11px] text-slate-500">Tải đề PDF và cấu hình phiếu đáp án điện tử OMR</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPdfCreateModal(false)}
+                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePdfExamSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Chọn file PDF đề thi:</label>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  required
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setPdfFile(f);
+                      if (!pdfExamTitle) setPdfExamTitle(f.name.replace(/\.[^/.]+$/, ''));
+                    }
+                  }}
+                  className="w-full rounded-xl border border-dashed border-purple-300 p-4 text-center bg-purple-50/40 text-purple-700 font-medium cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tiêu đề đề thi:</label>
+                <input
+                  type="text"
+                  required
+                  value={pdfExamTitle}
+                  onChange={(e) => setPdfExamTitle(e.target.value)}
+                  placeholder="VD: Bài 3. Đường tiệm cận - Lớp 12 Toán 1"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Khối lớp:</label>
+                  <select
+                    value={pdfGrade}
+                    onChange={(e) => setPdfGrade(Number(e.target.value) as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs bg-white focus:outline-none"
+                  >
+                    <option value={12}>Lớp 12</option>
+                    <option value={11}>Lớp 11</option>
+                    <option value={10}>Lớp 10</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Lớp thi:</label>
+                  <select
+                    value={pdfAssignedClass}
+                    onChange={(e) => setPdfAssignedClass(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs bg-white focus:outline-none"
+                  >
+                    <option value="12 Toán 1">12 Toán 1</option>
+                    <option value="11 Anh 1">11 Anh 1</option>
+                    <option value="11 Sử">11 Sử</option>
+                    <option value="Khác">Tất cả lớp</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Thời gian (phút):</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={180}
+                    value={pdfDuration}
+                    onChange={(e) => setPdfDuration(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Cấu hình số câu */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <span className="font-bold text-slate-700 text-xs block">Cấu hình số câu trên phiếu trả lời:</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-0.5">Phần I (Trắc nghiệm):</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={pdfP1Count}
+                      onChange={(e) => setPdfP1Count(Number(e.target.value))}
+                      className="w-full p-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-0.5">Phần II (Đúng/Sai):</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={pdfP2Count}
+                      onChange={(e) => setPdfP2Count(Number(e.target.value))}
+                      className="w-full p-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-0.5">Phần III (Điền số):</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={pdfP3Count}
+                      onChange={(e) => setPdfP3Count(Number(e.target.value))}
+                      className="w-full p-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold"
+                    />
                   </div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Tùy chọn Smart Mask */}
+              <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-50/70 border border-amber-200">
+                <input
+                  type="checkbox"
+                  id="pdf-smart-mask"
+                  checked={pdfSmartMask}
+                  onChange={(e) => setPdfSmartMask(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                />
+                <label htmlFor="pdf-smart-mask" className="text-[11px] text-amber-900 leading-relaxed cursor-pointer">
+                  <span className="font-bold block">Tự động che bảng đáp án ở cuối trang (Smart Mask):</span>
+                  Tự động che phủ vùng bảng đáp án ở đáy trang cuối PDF bằng hộp trắng để học sinh không thấy trước đáp án khi làm bài.
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPdfCreateModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingPdfExam}
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 disabled:opacity-50 cursor-pointer shadow-md"
+                >
+                  {isCreatingPdfExam ? 'Đang xử lý PDF...' : 'Tạo đề & Mở phiếu đáp án'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

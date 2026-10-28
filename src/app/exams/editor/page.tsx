@@ -34,6 +34,8 @@ import {
   Search,
   Check,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Printer,
   Table as TableIcon,
   Layers,
@@ -53,6 +55,13 @@ import {
   Image as ImageIcon,
   Wand2,
   Scissors,
+  Lock,
+  Unlock,
+  ShieldAlert,
+  Star,
+  Sliders,
+  Settings,
+  Radio,
 } from 'lucide-react';
 
 function ExamEditorContent() {
@@ -67,10 +76,38 @@ function ExamEditorContent() {
   const [examId, setExamId] = useState<string>(() => examIdParam || `exam-${Date.now()}`);
   const [title, setTitle] = useState('Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (Chuẩn Bộ GD&ĐT)');
   const [grade, setGrade] = useState<10 | 11 | 12>(12);
-  const [duration, setDuration] = useState(90);
-  const [description, setDescription] = useState('Đề thi theo cấu trúc đề minh họa mới nhất gồm các phần Trắc nghiệm, Đúng/Sai, Điền số.');
+  const [duration, setDuration] = useState(42);
+  const [description, setDescription] = useState('Đề kiểm tra thường, câu xếp theo loại (trắc nghiệm, Đúng/Sai, trả lời ngắn, tự luận), điểm cấu hình theo phần.');
   const [format, setFormat] = useState<'standard_3_parts' | 'periodic_4_parts' | 'custom'>('standard_3_parts');
-  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [shuffleQuestions, setShuffleQuestions] = useState(true);
+
+  // 3-Column panels state chuẩn iExam (Ảnh 1-4)
+  const [showLeftSettings, setShowLeftSettings] = useState(true);
+  const [showRightStructure, setShowRightStructure] = useState(true);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(true);
+  const [code, setCode] = useState('UXHF8H');
+  const [noTimeLimit, setNoTimeLimit] = useState(false);
+  const [accessType, setAccessType] = useState<'public' | 'restricted'>('restricted');
+  const [assignedClasses, setAssignedClasses] = useState<string[]>(['12 Toán 1']);
+  const [partPoints, setPartPoints] = useState({ part1: 3, part2: 4, part3: 3, part4: 0 });
+  const [trueFalseScoring, setTrueFalseScoring] = useState<'standard_thpt' | 'equal'>('standard_thpt');
+  const [maxAttempts, setMaxAttempts] = useState<number>(0);
+  const [submissionRestriction, setSubmissionRestriction] = useState<'anytime' | 'min_time'>('anytime');
+  const [submissionMinMinutes, setSubmissionMinMinutes] = useState<number>(10);
+  const [violationAction, setViolationAction] = useState<'warning_only' | 'lock_exam'>('lock_exam');
+  const [maxViolations, setMaxViolations] = useState<number>(3);
+  const [viewAnswerPolicy, setViewAnswerPolicy] = useState<'immediately' | 'after_closed' | 'specific_time'>('immediately');
+  const [viewScoreAllowed, setViewScoreAllowed] = useState(true);
+  const [viewLeaderboardAllowed, setViewLeaderboardAllowed] = useState(true);
+  const [shuffleOptions, setShuffleOptions] = useState(true);
+  const [shuffleTrueFalse, setShuffleTrueFalse] = useState(true);
+  const [autoRandomPick, setAutoRandomPick] = useState(false);
+  const [openTime, setOpenTime] = useState('');
+  const [closeTime, setCloseTime] = useState('');
+  const [showUploadPopover, setShowUploadPopover] = useState(false);
+  const [popoverFileMode, setPopoverFileMode] = useState<'thcs_thpt' | 'dinh_ky'>('thcs_thpt');
+  const [activeQuestionSetTab, setActiveQuestionSetTab] = useState('set-1');
+  const [questionSets, setQuestionSets] = useState([{ id: 'set-1', name: 'Bộ câu hỏi 1' }]);
 
   // 2. Danh sách câu hỏi trong đề thi
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -158,12 +195,24 @@ function ExamEditorContent() {
 
       if (found) {
         setExamId(found.id);
+        if (found.code) setCode(found.code);
         setTitle(found.title);
         setGrade(found.grade);
         setDuration(found.duration_minutes);
         setDescription(found.description || '');
         setFormat(found.format || (found.questions?.some((q) => q.part === 4) ? 'periodic_4_parts' : 'standard_3_parts'));
-        setShuffleQuestions(found.shuffle_questions || false);
+        setShuffleQuestions(found.shuffle_questions !== undefined ? found.shuffle_questions : true);
+        if (found.assigned_classes) setAssignedClasses(found.assigned_classes);
+        if (found.part_points) setPartPoints({ ...partPoints, ...found.part_points });
+        if (found.access_type) setAccessType(found.access_type);
+        if (found.no_time_limit !== undefined) setNoTimeLimit(found.no_time_limit);
+        if (found.true_false_scoring) setTrueFalseScoring(found.true_false_scoring);
+        if (found.violation_action) setViolationAction(found.violation_action);
+        if (found.max_violations) setMaxViolations(found.max_violations);
+        if (found.view_answer_policy) setViewAnswerPolicy(found.view_answer_policy);
+        if (found.start_time) setOpenTime(found.start_time);
+        if (found.end_time) setCloseTime(found.end_time);
+        if (found.max_attempts !== undefined) setMaxAttempts(found.max_attempts);
         if (found.exam_mode) setExamMode(found.exam_mode);
         if (found.pdf_url) {
           if (found.pdf_url.startsWith('idb:')) {
@@ -682,6 +731,7 @@ function ExamEditorContent() {
 
     const updatedExam: Exam = {
       id: examId,
+      code,
       title: title.trim(),
       description: description.trim(),
       teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
@@ -689,11 +739,26 @@ function ExamEditorContent() {
       duration_minutes: Number(duration),
       passing_score: 5.0,
       shuffle_questions: shuffleQuestions,
-      shuffle_options: !shuffleQuestions,
-      max_attempts: 2,
+      shuffle_options: shuffleOptions,
+      shuffle_true_false: shuffleTrueFalse,
+      max_attempts: maxAttempts,
       status: 'published',
       format,
       exam_mode: examMode,
+      assigned_classes: assignedClasses,
+      access_type: accessType,
+      no_time_limit: noTimeLimit,
+      part_points: partPoints,
+      true_false_scoring: trueFalseScoring,
+      submission_restriction: submissionRestriction,
+      submission_min_minutes: submissionMinMinutes,
+      violation_action: violationAction,
+      max_violations: maxViolations,
+      view_answer_policy: viewAnswerPolicy,
+      view_score_allowed: viewScoreAllowed,
+      view_leaderboard_allowed: viewLeaderboardAllowed,
+      start_time: openTime || undefined,
+      end_time: closeTime || undefined,
       pdf_url: storedPdfUrl,
       solution_pdf_url: storedSolutionPdfUrl,
       pdf_total_pages: pdfTotalPages,
@@ -1076,12 +1141,16 @@ function ExamEditorContent() {
             </div>
           </div>
 
-          {/* Nhóm nút tác vụ trên đầu */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Nhóm nút tác vụ trên đầu (chuẩn Ảnh 1 & 9 iExam) */}
+          <div className="flex flex-wrap items-center gap-2 relative">
             <button
               type="button"
-              onClick={() => setShowInfoModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+              onClick={() => setShowLeftSettings(!showLeftSettings)}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer ${
+                showLeftSettings
+                  ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
             >
               <FileText className="h-3.5 w-3.5 text-blue-600" />
               <span>Thông tin đề</span>
@@ -1096,14 +1165,63 @@ function ExamEditorContent() {
               <span>Sinh đề AI</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
-            >
-              <Upload className="h-3.5 w-3.5 text-indigo-600" />
-              <span>Nhập file</span>
-            </button>
+            {/* Nút Nhập file với Popover chuẩn Ảnh 9 iExam */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUploadPopover(!showUploadPopover)}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer ${
+                  showUploadPopover
+                    ? 'bg-indigo-50 border-indigo-400 text-indigo-700 font-bold'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Upload className="h-3.5 w-3.5 text-indigo-600" />
+                <span>Nhập file</span>
+              </button>
+
+              {/* Popover chọn loại đề của file (Ảnh 9 iExam) */}
+              {showUploadPopover && (
+                <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 w-72 rounded-2xl bg-white shadow-2xl border border-slate-200 p-4 z-50 animate-in fade-in zoom-in-95 text-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+                    <span className="font-extrabold text-slate-800">Loại đề của file</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowUploadPopover(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <select
+                      value={popoverFileMode}
+                      onChange={(e) => setPopoverFileMode(e.target.value as any)}
+                      className="w-full rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="thcs_thpt">THCS / THPT</option>
+                      <option value="dinh_ky">Định kỳ / HSG (4 phần)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Đề kiểm tra thường: câu xếp theo loại (trắc nghiệm, Đúng/Sai, trả lời ngắn, tự luận), điểm cấu hình theo phần.
+                    </p>
+                    <label className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 cursor-pointer shadow-md shadow-blue-500/20">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>Chọn file...</span>
+                      <input
+                        type="file"
+                        accept=".docx,.tex,.txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          setShowUploadPopover(false);
+                          handleUploadDocx(e);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Nút chuyển đổi Chế độ Đề Tương Tác vs Đề PDF */}
             <div className="flex items-center rounded-xl bg-slate-100 p-0.5 text-xs font-bold text-slate-600">
@@ -1158,10 +1276,10 @@ function ExamEditorContent() {
             <button
               type="button"
               onClick={handleSaveExam}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-500 active:scale-95 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition cursor-pointer"
             >
               <Save className="h-3.5 w-3.5" />
-              <span>Lưu đề</span>
+              <span>Cập nhật</span>
             </button>
           </div>
         </div>
@@ -1505,203 +1623,671 @@ function ExamEditorContent() {
           </div>
         </div>
       ) : (
-      <div className="flex-1 flex overflow-hidden">
-        {/* KHUNG SOẠN THẢO TRANG GIẤY A4 Ở TRUNG TÂM */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
-          <div className="w-full max-w-[860px] bg-white rounded-md shadow-xl border border-slate-300 min-h-[1120px] p-8 sm:p-14 relative flex flex-col justify-between">
-            {/* Tít đề chuẩn Bộ GD&ĐT */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-6">
-              <div className="flex justify-between items-start text-xs sm:text-sm font-bold text-slate-900">
-                <div className="text-center">
-                  <div>SỞ GIÁO DỤC VÀ ĐÀO TẠO</div>
-                  <div className="text-blue-700 uppercase">TOÁN THẦY SƠN - THPT</div>
-                  <div className="text-[11px] font-normal text-slate-500 mt-1">MÃ ĐỀ: 101</div>
-                </div>
-                <div className="text-center">
-                  <div className="uppercase">KỲ THI TỐT NGHIỆP THPT NĂM 2025</div>
-                  <div className="text-red-700 font-extrabold text-sm sm:text-base">MÔN TOÁN - LỚP {grade}</div>
-                  <div className="text-[11px] font-normal text-slate-500 mt-1">
-                    Thời gian làm bài: {duration} phút (không kể thời gian phát đề)
-                  </div>
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* ============================================================== */}
+        {/* CỘT 1 (TRÁI): THÔNG TIN ĐỀ THI & CÀI ĐẶT (Ảnh 1, 2, 3, 4 iExam) */}
+        {/* ============================================================== */}
+        {showLeftSettings && (
+          <aside className="w-80 xl:w-88 shrink-0 border-r border-slate-200 bg-white flex flex-col h-full overflow-y-auto p-4 space-y-4 shadow-2xs z-20 text-xs">
+            {/* Header Cột trái */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <span className="font-extrabold text-sm text-slate-900">Thông tin đề</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] font-bold">
+                  {totalQuestions} câu
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowLeftSettings(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  title="Thu gọn bảng cài đặt"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              {totalQuestions} câu trong bộ đang chỉnh. Đề kiểm tra thường, câu xếp theo loại (trắc nghiệm, Đúng/Sai, trả lời ngắn, tự luận), điểm cấu hình theo phần.
+            </p>
+
+            {/* 1. Tiêu đề đề thi */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Tiêu đề đề thi</label>
+              <textarea
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                rows={2}
+                className="w-full rounded-xl border border-slate-200 p-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+
+            {/* 2. Thời gian & Tổng số câu */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Thời gian (phút)</label>
+                <input
+                  type="number"
+                  disabled={noTimeLimit}
+                  value={duration}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-800 disabled:bg-slate-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tổng số câu</label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-800 text-center">
+                  {totalQuestions} câu
                 </div>
               </div>
             </div>
 
-            {/* DANH SÁCH CÁC CÂU HỎI TRÊN TRANG A4 */}
-            <div className="space-y-8 flex-1">
-              {/* PHẦN I: TRẮC NGHIỆM 4 LỰA CHỌN */}
-              <section id="section-part1" className="space-y-4">
-                <div className="flex items-center justify-between border-b border-blue-200 pb-2">
-                  <div>
-                    <h3 className="font-extrabold text-sm text-blue-900 uppercase">
-                      PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn
-                    </h3>
-                    <p className="text-[11px] italic text-slate-500">
-                      Thí sinh trả lời từ câu 1 đến câu {part1Questions.length}. Mỗi câu thí sinh chỉ chọn một phương án.
-                    </p>
-                  </div>
-                  <span className="rounded-md bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-bold">
-                    {part1Questions.length} câu ({(part1Questions.length * 0.25).toFixed(2)}đ)
+            {/* Checkbox Không giới hạn thời gian */}
+            <div className="flex items-start gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="no-time-limit"
+                checked={noTimeLimit}
+                onChange={(e) => setNoTimeLimit(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded text-blue-600"
+              />
+              <label htmlFor="no-time-limit" className="text-[11px] text-slate-600 leading-snug cursor-pointer">
+                <span className="font-bold block text-slate-800">Không giới hạn thời gian</span>
+                Không đếm ngược, không tự nộp. Học sinh tự bấm Nộp bài khi xong.
+              </label>
+            </div>
+
+            {/* 3. Quyền truy cập (Ảnh 1 iExam) */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <label className="block font-bold text-slate-700">Quyền truy cập</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAccessType('public')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    accessType === 'public'
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900 shadow-2xs font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-xs font-bold">Công khai</span>
+                  <span className="text-[10px] text-slate-500 block">Không cần đăng nhập</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAccessType('restricted')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    accessType === 'restricted'
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900 shadow-2xs font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-xs font-bold flex items-center gap-1">
+                    <span>Giới hạn lớp</span>
+                    <Check className="h-3 w-3 text-blue-600" />
                   </span>
+                  <span className="text-[10px] text-slate-500 block">Bắt buộc đăng nhập</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Lớp được phép thi */}
+            {accessType === 'restricted' && (
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600">Lớp được phép thi</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {['11 Anh 1', '11 Sử', '12 Toán 1'].map((cls) => {
+                    const isSelected = assignedClasses.includes(cls);
+                    return (
+                      <button
+                        key={cls}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setAssignedClasses(assignedClasses.filter((c) => c !== cls));
+                          } else {
+                            setAssignedClasses([...assignedClasses, cls]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span>{cls}</span>
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+            )}
 
-                {part1Questions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-blue-200 p-6 text-center text-xs text-slate-400">
-                    Chưa có câu hỏi nào trong Phần I. Bấm "+ Thêm câu hỏi" để bổ sung.
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {part1Questions.map((q, idx) => renderQuestionItem(q, idx + 1))}
-                  </div>
-                )}
-              </section>
+            {/* 4. Cài đặt thêm (Collapsible) - Ảnh 2, 3, 4 iExam */}
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className="w-full flex items-center justify-between text-xs font-extrabold text-slate-800 hover:text-blue-600 cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sliders className="h-3.5 w-3.5 text-blue-600" />
+                  Cài đặt thêm
+                </span>
+                {showAdvancedSettings ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
 
-              {/* PHẦN II: TRẮC NGHIỆM ĐÚNG SAI */}
-              <section id="section-part2" className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+              {showAdvancedSettings && (
+                <div className="space-y-3.5 pt-1 pl-1">
+                  {/* Điểm theo phần (Ảnh 2 iExam) */}
+                  <div className="space-y-1.5">
+                    <span className="font-bold text-slate-700 text-[11px] block">Điểm theo phần</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Phần 1 · Trắc nghiệm</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={partPoints.part1}
+                          onChange={(e) => setPartPoints({ ...partPoints, part1: Number(e.target.value) })}
+                          className="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Phần 2 · Đúng/Sai</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={partPoints.part2}
+                          onChange={(e) => setPartPoints({ ...partPoints, part2: Number(e.target.value) })}
+                          className="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Phần 3 · Trả lời ngắn</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={partPoints.part3}
+                          onChange={(e) => setPartPoints({ ...partPoints, part3: Number(e.target.value) })}
+                          className="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Phần 4 · Tự luận</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={partPoints.part4}
+                          onChange={(e) => setPartPoints({ ...partPoints, part4: Number(e.target.value) })}
+                          className="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cách tính điểm câu Đúng/Sai (Ảnh 2 iExam) */}
                   <div>
-                    <h3 className="font-extrabold text-sm text-amber-900 uppercase">
-                      PHẦN II. Câu trắc nghiệm đúng sai
-                    </h3>
-                    <p className="text-[11px] italic text-slate-500">
-                      Thí sinh trả lời từ câu 1 đến câu {part2Questions.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.
-                    </p>
+                    <span className="font-bold text-slate-700 text-[11px] block mb-1">Cách tính điểm câu Đúng/Sai</span>
+                    <select
+                      value={trueFalseScoring}
+                      onChange={(e) => setTrueFalseScoring(e.target.value as any)}
+                      className="w-full rounded-xl border border-slate-200 p-2 text-xs font-semibold bg-white focus:outline-none"
+                    >
+                      <option value="standard_thpt">Chuẩn THPT - 1 ý 10% · 2 ý 25% · 3 ý 50% · 4 ý 100%</option>
+                      <option value="equal">Chia đều (mỗi ý 0.25đ)</option>
+                    </select>
                   </div>
-                  <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-bold">
-                    {part2Questions.length} câu ({(part2Questions.length * 1.0).toFixed(2)}đ)
-                  </span>
-                </div>
 
-                {part2Questions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-amber-200 p-6 text-center text-xs text-slate-400">
-                    Chưa có câu hỏi nào trong Phần II.
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {part2Questions.map((q, idx) => renderQuestionItem(q, idx + 1))}
-                  </div>
-                )}
-              </section>
+                  {/* Khi học sinh vi phạm (Ảnh 2 iExam) */}
+                  <div className="space-y-1.5">
+                    <span className="font-bold text-slate-700 text-[11px] block">Khi học sinh vi phạm</span>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="violation_act"
+                          checked={violationAction === 'warning_only'}
+                          onChange={() => setViolationAction('warning_only')}
+                          className="mt-0.5 text-blue-600"
+                        />
+                        <span className="text-[11px] text-slate-600 leading-snug">
+                          <strong className="block text-slate-800">Chỉ cảnh báo</strong>
+                          Vi phạm được ghi lại để giáo viên xem, học sinh vẫn làm bài tiếp.
+                        </span>
+                      </label>
 
-              {/* PHẦN III: TRẢ LỜI NGẮN */}
-              <section id="section-part3" className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
-                  <div>
-                    <h3 className="font-extrabold text-sm text-emerald-900 uppercase">
-                      PHẦN III. Câu trắc nghiệm trả lời ngắn (Điền số)
-                    </h3>
-                    <p className="text-[11px] italic text-slate-500">
-                      Thí sinh trả lời từ câu 1 đến câu {part3Questions.length}. Điền kết quả số vào ô trả lời.
-                    </p>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="violation_act"
+                          checked={violationAction === 'lock_exam'}
+                          onChange={() => setViolationAction('lock_exam')}
+                          className="mt-0.5 text-blue-600"
+                        />
+                        <span className="text-[11px] text-slate-600 leading-snug">
+                          <strong className="block text-slate-800">
+                            Khoá bài khi vi phạm quá{' '}
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={maxViolations}
+                              onChange={(e) => setMaxViolations(Number(e.target.value))}
+                              className="w-10 text-center font-bold border border-slate-300 rounded px-1 py-0.5 text-xs inline"
+                            />{' '}
+                            lần
+                          </strong>
+                          Tính chuyển tab, rời cửa sổ thi và sao chép đề. Lần vi phạm tiếp theo bài bị nộp ngay với những câu đã làm.
+                        </span>
+                      </label>
+                    </div>
                   </div>
-                  <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
-                    {part3Questions.length} câu ({(part3Questions.length * 0.5).toFixed(2)}đ)
-                  </span>
-                </div>
 
-                {part3Questions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-emerald-200 p-6 text-center text-xs text-slate-400">
-                    Chưa có câu hỏi nào trong Phần III.
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {part3Questions.map((q, idx) => renderQuestionItem(q, idx + 1))}
-                  </div>
-                )}
-              </section>
+                  {/* Sau khi nộp bài (Ảnh 3 iExam) */}
+                  <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                    <span className="font-bold text-slate-700 text-[11px] block">Sau khi nộp bài</span>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={true}
+                          readOnly
+                          className="mt-0.5 h-3.5 w-3.5 rounded text-blue-600"
+                        />
+                        <div className="text-[11px] text-slate-700">
+                          <span className="font-bold block">Cho phép xem đáp án</span>
+                          <div className="pl-3 mt-1 space-y-1 text-slate-500">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="view_ans_pol"
+                                checked={viewAnswerPolicy === 'immediately'}
+                                onChange={() => setViewAnswerPolicy('immediately')}
+                              />
+                              <span>Ngay sau khi nộp bài</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="view_ans_pol"
+                                checked={viewAnswerPolicy === 'after_closed'}
+                                onChange={() => setViewAnswerPolicy('after_closed')}
+                              />
+                              <span>Sau khi đề đóng</span>
+                            </label>
+                          </div>
+                        </div>
+                      </label>
 
-              {/* PHẦN IV: TỰ LUẬN (CHO ĐỀ ĐỊNH KỲ & HSG) */}
-              {(format === 'periodic_4_parts' || part4Questions.length > 0) && (
-                <section id="section-part4" className="space-y-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={viewScoreAllowed}
+                          onChange={(e) => setViewScoreAllowed(e.target.checked)}
+                          className="h-3.5 w-3.5 rounded text-blue-600"
+                        />
+                        <span className="text-[11px] font-bold text-slate-800">Cho phép xem điểm</span>
+                      </label>
+
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={viewLeaderboardAllowed}
+                          onChange={(e) => setViewLeaderboardAllowed(e.target.checked)}
+                          className="mt-0.5 h-3.5 w-3.5 rounded text-blue-600"
+                        />
+                        <span className="text-[11px] text-slate-600 leading-snug">
+                          <strong className="block text-slate-800">Cho học sinh xem bảng xếp hạng</strong>
+                          Mỗi em xem được thứ hạng của mình và điểm của mọi người sau khi đã nộp bài.
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Xáo trộn (Ảnh 3 iExam) */}
+                  <div className="space-y-1 pt-1 border-t border-slate-100">
+                    <span className="font-bold text-slate-700 text-[11px] block">Xáo trộn</span>
+                    <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={shuffleQuestions}
+                        onChange={(e) => setShuffleQuestions(e.target.checked)}
+                        className="rounded text-blue-600"
+                      />
+                      <span>Xáo trộn thứ tự câu hỏi</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={shuffleOptions}
+                        onChange={(e) => setShuffleOptions(e.target.checked)}
+                        className="rounded text-blue-600"
+                      />
+                      <span>Xáo trộn phương án trắc nghiệm</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={shuffleTrueFalse}
+                        onChange={(e) => setShuffleTrueFalse(e.target.checked)}
+                        className="rounded text-blue-600"
+                      />
+                      <span>Xáo trộn phương án đúng sai</span>
+                    </label>
+                  </div>
+
+                  {/* Lịch thi (Ảnh 4 iExam) */}
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    <span className="font-bold text-slate-700 text-[11px] block">Lịch thi</span>
                     <div>
-                      <h3 className="font-extrabold text-sm text-purple-900 uppercase">
-                        PHẦN IV. Câu hỏi tự luận (Vận dụng cao)
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Mở đề lúc:</span>
+                      <input
+                        type="datetime-local"
+                        value={openTime}
+                        onChange={(e) => setOpenTime(e.target.value)}
+                        className="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block mb-0.5">Khóa đề lúc:</span>
+                      <input
+                        type="datetime-local"
+                        value={closeTime}
+                        onChange={(e) => setCloseTime(e.target.value)}
+                        className="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* ============================================================== */}
+        {/* CỘT 2 (GIỮA): KHUNG CANVAS A4 & TAB BỘ CÂU HỎI (Ảnh 1 iExam)  */}
+        {/* ============================================================== */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100/70">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 flex justify-center">
+            <div className="w-full max-w-[840px] bg-white rounded-xl shadow-md border border-slate-200 min-h-[1120px] p-8 sm:p-12 relative flex flex-col justify-between">
+              {/* Header trang giấy A4 */}
+              <div className="border-b-2 border-slate-900 pb-4 mb-6">
+                <div className="flex justify-between items-start text-xs sm:text-sm font-bold text-slate-900">
+                  <div className="text-center">
+                    <div>SỞ GIÁO DỤC VÀ ĐÀO TẠO</div>
+                    <div className="text-blue-700 uppercase">TOÁN THẦY SƠN - THPT</div>
+                    <div className="text-[11px] font-normal text-slate-500 mt-1">MÃ ĐỀ: {code}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="uppercase">KỲ THI TỐT NGHIỆP THPT NĂM 2025</div>
+                    <div className="text-red-700 font-extrabold text-sm sm:text-base">MÔN TOÁN - LỚP {grade}</div>
+                    <div className="text-[11px] font-normal text-slate-500 mt-1">
+                      Thời gian làm bài: {duration} phút (không kể thời gian phát đề)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Danh sách các phần câu hỏi */}
+              <div className="space-y-8 flex-1">
+                {/* PHẦN I: TRẮC NGHIỆM */}
+                <section id="section-part1" className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-blue-200 pb-2">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-blue-900 uppercase">
+                        PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn.
                       </h3>
                       <p className="text-[11px] italic text-slate-500">
-                        Thí sinh trình bày lời giải chi tiết theo các bước sư phạm.
+                        Thí sinh trả lời từ câu 1 đến câu {part1Questions.length}. Mỗi câu thí sinh chỉ chọn một phương án.
                       </p>
                     </div>
-                    <span className="rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-bold">
-                      {part4Questions.length} câu ({(part4Questions.length * 2.0).toFixed(2)}đ)
+                    <span className="rounded-md bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-bold">
+                      {part1Questions.length} câu ({(part1Questions.length * 0.25).toFixed(2)}đ)
                     </span>
                   </div>
 
-                  {part4Questions.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-purple-200 p-6 text-center text-xs text-slate-400">
-                      Chưa có câu hỏi nào trong Phần IV.
+                  {part1Questions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-blue-200 p-6 text-center text-xs text-slate-400">
+                      Chưa có câu hỏi trong Phần I. Bấm "+ Thêm câu hỏi" để bổ sung.
                     </div>
                   ) : (
                     <div className="space-y-5">
-                      {part4Questions.map((q, idx) => renderQuestionItem(q, idx + 1))}
+                      {part1Questions.map((q, idx) => (
+                        <div id={`q-${q.id}`} key={q.id}>
+                          {renderQuestionItem(q, idx + 1)}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </section>
-              )}
-            </div>
 
-            {/* Chân trang đề thi */}
-            <div className="border-t border-slate-300 pt-4 mt-8 flex justify-between items-center text-[11px] text-slate-500 italic">
-              <span>Đề thi gồm {totalQuestions} câu hỏi • Thầy Sơn Toán THPT</span>
-              <span>----------------- HẾT -----------------</span>
-            </div>
-          </div>
-        </main>
+                {/* PHẦN II: ĐÚNG SAI */}
+                <section id="section-part2" className="space-y-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-amber-900 uppercase">
+                        PHẦN II. Câu trắc nghiệm đúng sai.
+                      </h3>
+                      <p className="text-[11px] italic text-slate-500">
+                        Thí sinh trả lời từ câu 1 đến câu {part2Questions.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-bold">
+                      {part2Questions.length} câu ({(part2Questions.length * 1.0).toFixed(2)}đ)
+                    </span>
+                  </div>
 
-        {/* 4. CỘT ĐIỀU HƯỚNG CẤU TRÚC CÂU HỎI BÊN PHẢI (Right Navigation Panel) */}
-        <aside className="w-80 border-l border-slate-200 bg-white p-4 overflow-y-auto hidden lg:flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Header thống kê */}
-            <div className="border-b border-slate-100 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                  <Layers className="h-4 w-4 text-blue-600" />
-                  Cấu trúc câu hỏi
-                </span>
-                <span className="text-xs font-semibold text-slate-500">
-                  {totalQuestions} câu • {totalScore.toFixed(2)} điểm
-                </span>
+                  {part2Questions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-amber-200 p-6 text-center text-xs text-slate-400">
+                      Chưa có câu hỏi trong Phần II.
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {part2Questions.map((q, idx) => (
+                        <div id={`q-${q.id}`} key={q.id}>
+                          {renderQuestionItem(q, part1Questions.length + idx + 1)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* PHẦN III: TRẢ LỜI NGẮN */}
+                <section id="section-part3" className="space-y-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-emerald-900 uppercase">
+                        PHẦN III. Câu hỏi trả lời ngắn.
+                      </h3>
+                      <p className="text-[11px] italic text-slate-500">
+                        Thí sinh trả lời từ câu 1 đến câu {part3Questions.length}. Điền kết quả số vào ô trả lời.
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
+                      {part3Questions.length} câu ({(part3Questions.length * 0.5).toFixed(2)}đ)
+                    </span>
+                  </div>
+
+                  {part3Questions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-emerald-200 p-6 text-center text-xs text-slate-400">
+                      Chưa có câu hỏi trong Phần III.
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {part3Questions.map((q, idx) => (
+                        <div id={`q-${q.id}`} key={q.id}>
+                          {renderQuestionItem(q, part1Questions.length + part2Questions.length + idx + 1)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* PHẦN IV: TỰ LUẬN (CHO ĐỀ ĐỊNH KỲ) */}
+                {(format === 'periodic_4_parts' || part4Questions.length > 0) && (
+                  <section id="section-part4" className="space-y-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                      <div>
+                        <h3 className="font-extrabold text-sm text-purple-900 uppercase">
+                          PHẦN IV. Câu hỏi tự luận.
+                        </h3>
+                        <p className="text-[11px] italic text-slate-500">
+                          Thí sinh trình bày lời giải chi tiết theo các bước sư phạm.
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-bold">
+                        {part4Questions.length} câu ({(part4Questions.length * 2.0).toFixed(2)}đ)
+                      </span>
+                    </div>
+
+                    <div className="space-y-5">
+                      {part4Questions.map((q, idx) => (
+                        <div id={`q-${q.id}`} key={q.id}>
+                          {renderQuestionItem(q, part1Questions.length + part2Questions.length + part3Questions.length + idx + 1)}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+
+              {/* Chân trang đề thi */}
+              <div className="border-t border-slate-300 pt-4 mt-8 flex justify-between items-center text-[11px] text-slate-500 italic">
+                <span>Đề thi gồm {totalQuestions} câu hỏi • Thầy Sơn Toán THPT</span>
+                <span>----------------- HẾT -----------------</span>
               </div>
             </div>
+          </main>
 
-            {/* Hai nút hành động: Thêm câu hỏi & Ma trận đáp án */}
-            <div className="grid grid-cols-2 gap-2">
+          {/* TAB BAR DƯỚI ĐÁY: BỘ CÂU HỎI (Ảnh 1 & 8 iExam) */}
+          <div className="bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-between text-xs text-slate-600 shadow-xs shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 font-extrabold shadow-2xs"
+              >
+                <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                <span>Bộ câu hỏi 1</span>
+                <span className="rounded-full bg-blue-200/80 px-1.5 py-0.2 text-[10px] text-blue-900">
+                  {totalQuestions}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveToast('Đã tạo thêm bộ câu hỏi mới (mã đề hoán vị)!');
+                  setTimeout(() => setSaveToast(null), 2500);
+                }}
+                className="p-1.5 rounded-xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                title="Thêm bộ câu hỏi hoán vị mới"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 text-slate-500">
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveToast('Đã lưu vào danh sách yêu thích!');
+                  setTimeout(() => setSaveToast(null), 2000);
+                }}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-amber-500"
+                title="Đánh dấu yêu thích"
+              >
+                <Star className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveToast('Đã nhân bản bộ câu hỏi hiện tại!');
+                  setTimeout(() => setSaveToast(null), 2000);
+                }}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600"
+                title="Sao chép bộ câu hỏi"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600">
+                <input type="checkbox" className="rounded text-blue-600" />
+                <span>Nhiều bộ</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================== */}
+        {/* CỘT 3 (PHẢI): CẤU TRÚC CÂU HỎI & CÂY ĐIỀU HƯỚNG (Ảnh 1 iExam) */}
+        {/* ============================================================== */}
+        {showRightStructure && (
+          <aside className="w-72 xl:w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col h-full overflow-hidden shadow-2xs z-20">
+            {/* Header Cột phải */}
+            <div className="p-3.5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-blue-600" />
+                <div>
+                  <span className="font-extrabold text-sm text-slate-900 block leading-tight">Cấu trúc câu hỏi</span>
+                  <span className="text-[10px] text-slate-500">
+                    {totalQuestions} câu · {[part1Questions, part2Questions, part3Questions, part4Questions].filter((p) => p.length > 0).length} phần
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRightStructure(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                title="Thu gọn cây câu hỏi"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Hai nút hành động: + Thêm câu hỏi & Đáp án */}
+            <div className="p-3 grid grid-cols-2 gap-2 border-b border-slate-100">
               <div className="relative group">
                 <button
                   type="button"
-                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-500 transition cursor-pointer"
+                  className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 shadow-sm cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>Thêm câu hỏi</span>
+                  <ChevronDown className="h-3 w-3" />
                 </button>
-                <div className="absolute left-0 top-full mt-1 w-48 rounded-xl bg-white shadow-xl border border-slate-200 p-1.5 hidden group-hover:block z-50 animate-in fade-in zoom-in-95">
+                <div className="absolute left-0 top-full mt-1 w-48 rounded-xl bg-white shadow-xl border border-slate-200 p-1.5 hidden group-hover:block z-50 text-xs">
                   <button
                     type="button"
                     onClick={() => handleAddEmptyQuestion(1)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition"
+                    className="w-full text-left px-2.5 py-1.5 text-slate-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg font-medium"
                   >
-                    + Phần I: Trắc nghiệm 4 lựa chọn
+                    + Phần I: Trắc nghiệm
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAddEmptyQuestion(2)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg transition"
+                    className="w-full text-left px-2.5 py-1.5 text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg font-medium"
                   >
                     + Phần II: Đúng / Sai
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAddEmptyQuestion(3)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition"
+                    className="w-full text-left px-2.5 py-1.5 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg font-medium"
                   >
-                    + Phần III: Điền số ngắn
+                    + Phần III: Điền số
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAddEmptyQuestion(4)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition"
+                    className="w-full text-left px-2.5 py-1.5 text-slate-700 hover:bg-purple-50 hover:text-purple-700 rounded-lg font-medium"
                   >
-                    + Phần IV: Tự luận VDC
+                    + Phần IV: Tự luận
                   </button>
                 </div>
               </div>
@@ -1709,89 +2295,131 @@ function ExamEditorContent() {
               <button
                 type="button"
                 onClick={() => setShowAnswerMatrixModal(true)}
-                className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-bold text-xs hover:bg-slate-100 shadow-2xs cursor-pointer"
               >
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                <span>Ma trận Đáp án</span>
+                <span>Đáp án</span>
               </button>
             </div>
 
-            {/* Các thẻ chỉ mục 4 Phần (Matching screenshot) */}
-            <div className="space-y-3 pt-2">
-              {/* Thẻ Phần I */}
-              <div
-                onClick={() => scrollToSection('section-part1')}
-                className="rounded-2xl border border-blue-200 bg-blue-50/50 p-3.5 cursor-pointer hover:bg-blue-50 transition"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-                    <span className="font-bold text-xs text-blue-900">PHẦN I - Trắc nghiệm</span>
+            {/* Cây danh sách câu hỏi chi tiết (Ảnh 1 iExam) */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
+              {/* PHẦN I */}
+              <div className="space-y-1">
+                <div
+                  onClick={() => scrollToSection('section-part1')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-blue-50/70 border border-blue-200 cursor-pointer hover:bg-blue-100/60"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-blue-600" />
+                    <span className="font-extrabold text-[11px] text-blue-900">PHẦN I (Trắc nghiệm)</span>
                   </div>
-                  <span className="text-[11px] font-bold text-blue-700">{part1Questions.length} câu</span>
+                  <span className="text-[10px] font-bold text-blue-700">{part1Questions.length} câu</span>
                 </div>
-                <div className="text-[10px] text-slate-500">4 lựa chọn • 0.25đ/câu</div>
+
+                <div className="space-y-0.5 pl-1.5 pt-1">
+                  {part1Questions.map((q, idx) => (
+                    <div
+                      key={q.id}
+                      onClick={() => {
+                        setActiveQuestionId(q.id);
+                        const el = document.getElementById(`q-${q.id}`);
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition text-[11px] ${
+                        activeQuestionId === q.id
+                          ? 'bg-blue-100 text-blue-900 font-bold'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Radio className={`h-2.5 w-2.5 shrink-0 ${activeQuestionId === q.id ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <span className="font-bold shrink-0">Câu {idx + 1}:</span>
+                      <span className="truncate text-slate-500">
+                        {q.content.replace(/[\$\\]/g, '').slice(0, 26)}...
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Thẻ Phần II */}
-              <div
-                onClick={() => scrollToSection('section-part2')}
-                className="rounded-2xl border border-amber-200 bg-amber-50/50 p-3.5 cursor-pointer hover:bg-amber-50 transition"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-600" />
-                    <span className="font-bold text-xs text-amber-900">PHẦN II - Đúng / Sai</span>
+              {/* PHẦN II */}
+              <div className="space-y-1">
+                <div
+                  onClick={() => scrollToSection('section-part2')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-amber-50/70 border border-amber-200 cursor-pointer hover:bg-amber-100/60"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-amber-600" />
+                    <span className="font-extrabold text-[11px] text-amber-900">PHẦN II (Đúng/Sai)</span>
                   </div>
-                  <span className="text-[11px] font-bold text-amber-800">{part2Questions.length} câu</span>
+                  <span className="text-[10px] font-bold text-amber-800">{part2Questions.length} câu</span>
                 </div>
-                <div className="text-[10px] text-slate-500">4 ý a, b, c, d • 1.0đ/câu</div>
+
+                <div className="space-y-0.5 pl-1.5 pt-1">
+                  {part2Questions.map((q, idx) => (
+                    <div
+                      key={q.id}
+                      onClick={() => {
+                        setActiveQuestionId(q.id);
+                        const el = document.getElementById(`q-${q.id}`);
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition text-[11px] ${
+                        activeQuestionId === q.id
+                          ? 'bg-amber-100 text-amber-900 font-bold'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Radio className={`h-2.5 w-2.5 shrink-0 ${activeQuestionId === q.id ? 'text-amber-600' : 'text-slate-400'}`} />
+                      <span className="font-bold shrink-0">Câu {part1Questions.length + idx + 1}:</span>
+                      <span className="truncate text-slate-500">
+                        {q.content.replace(/[\$\\]/g, '').slice(0, 26)}...
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Thẻ Phần III */}
-              <div
-                onClick={() => scrollToSection('section-part3')}
-                className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 cursor-pointer hover:bg-emerald-50 transition"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
-                    <span className="font-bold text-xs text-emerald-900">PHẦN III - Trả lời ngắn</span>
+              {/* PHẦN III */}
+              <div className="space-y-1">
+                <div
+                  onClick={() => scrollToSection('section-part3')}
+                  className="flex items-center justify-between p-2 rounded-xl bg-emerald-50/70 border border-emerald-200 cursor-pointer hover:bg-emerald-100/60"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                    <span className="font-extrabold text-[11px] text-emerald-900">PHẦN III (Trả lời ngắn)</span>
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-800">{part3Questions.length} câu</span>
+                  <span className="text-[10px] font-bold text-emerald-800">{part3Questions.length} câu</span>
                 </div>
-                <div className="text-[10px] text-slate-500">Điền số • 0.5đ/câu</div>
-              </div>
 
-              {/* Thẻ Phần IV */}
-              <div
-                onClick={() => scrollToSection('section-part4')}
-                className="rounded-2xl border border-purple-200 bg-purple-50/50 p-3.5 cursor-pointer hover:bg-purple-50 transition"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-purple-600" />
-                    <span className="font-bold text-xs text-purple-900">PHẦN IV - Tự luận</span>
-                  </div>
-                  <span className="text-[11px] font-bold text-purple-800">{part4Questions.length} câu</span>
+                <div className="space-y-0.5 pl-1.5 pt-1">
+                  {part3Questions.map((q, idx) => (
+                    <div
+                      key={q.id}
+                      onClick={() => {
+                        setActiveQuestionId(q.id);
+                        const el = document.getElementById(`q-${q.id}`);
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition text-[11px] ${
+                        activeQuestionId === q.id
+                          ? 'bg-emerald-100 text-emerald-900 font-bold'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <Radio className={`h-2.5 w-2.5 shrink-0 ${activeQuestionId === q.id ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      <span className="font-bold shrink-0">Câu {part1Questions.length + part2Questions.length + idx + 1}:</span>
+                      <span className="truncate text-slate-500">
+                        {q.content.replace(/[\$\\]/g, '').slice(0, 26)}...
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <div className="text-[10px] text-slate-500">Vận dụng cao • 2.0đ/câu</div>
               </div>
             </div>
-          </div>
-
-          {/* Nút lưu đề ở chân aside */}
-          <div className="pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={handleSaveExam}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition cursor-pointer"
-            >
-              <Save className="h-4 w-4" />
-              <span>Lưu Đề Vào Hệ Thống</span>
-            </button>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
       )}
 

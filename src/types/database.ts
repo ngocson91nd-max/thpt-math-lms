@@ -157,6 +157,27 @@ export interface Exam {
     part4_count?: number;
   };
   is_view_answer_allowed: boolean;
+  code?: string;
+  assigned_classes?: string[];
+  access_type?: 'public' | 'restricted';
+  no_time_limit?: boolean;
+  part_points?: {
+    part1?: number;
+    part2?: number;
+    part3?: number;
+    part4?: number;
+  };
+  true_false_scoring?: 'standard_thpt' | 'equal';
+  submission_restriction?: 'anytime' | 'min_time';
+  submission_min_minutes?: number;
+  violation_action?: 'warning_only' | 'lock_exam';
+  max_violations?: number;
+  view_answer_policy?: 'immediately' | 'after_closed' | 'specific_time';
+  view_score_allowed?: boolean;
+  view_leaderboard_allowed?: boolean;
+  shuffle_true_false?: boolean;
+  is_locked?: boolean;
+  submissions_count?: number;
   questions?: (Question & { custom_points?: number; order_index?: number })[];
   created_at?: string;
   updated_at?: string;

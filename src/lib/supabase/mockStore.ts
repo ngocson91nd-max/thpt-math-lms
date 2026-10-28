@@ -9,6 +9,7 @@ import {
   ClassMember,
 } from '@/types/database';
 import { HUE_HSG_QUESTIONS, HUE_HSG_EXAM } from '@/lib/data/hueHsgExam';
+import { IEXAM_EXAMS, TIEM_CAN_QUESTIONS } from '@/lib/data/iexamMockExams';
 
 export const MOCK_USERS: Profile[] = [
   {
@@ -337,11 +338,13 @@ const BASE_MOCK_QUESTIONS: Question[] = [
 ];
 
 export const MOCK_QUESTIONS: Question[] = [
+  ...TIEM_CAN_QUESTIONS,
   ...BASE_MOCK_QUESTIONS,
   ...HUE_HSG_QUESTIONS,
 ];
 
 export const MOCK_EXAMS: Exam[] = [
+  ...IEXAM_EXAMS,
   HUE_HSG_EXAM,
   {
     id: 'e2222222-2222-2222-2222-222222222222',
