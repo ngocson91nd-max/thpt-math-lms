@@ -11,7 +11,7 @@ import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamPars
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import PdfExamViewer from '@/components/exam/PdfExamViewer';
-import { parseQuickAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
+import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount } from '@/lib/pdf/pdfExamHelper';
 import { savePdfToIndexedDb, getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
 import {
   Sparkles,
@@ -52,6 +52,7 @@ import {
   Sigma,
   Image as ImageIcon,
   Wand2,
+  Scissors,
 } from 'lucide-react';
 
 function ExamEditorContent() {
@@ -104,6 +105,8 @@ function ExamEditorContent() {
   const [pdfPart1Count, setPdfPart1Count] = useState(12);
   const [pdfPart2Count, setPdfPart2Count] = useState(4);
   const [pdfPart3Count, setPdfPart3Count] = useState(6);
+  const [pdfTotalPages, setPdfTotalPages] = useState<number>(1);
+  const [cutLastPage, setCutLastPage] = useState<boolean>(true);
 
   // Câu hỏi đang được chọn (focus) trên trang
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -298,11 +301,23 @@ function ExamEditorContent() {
     setPdfFileName(file.name);
     setTitle(file.name.replace(/\.[^/.]+$/, ''));
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const dataUrl = event.target?.result as string;
       setPdfUrl(dataUrl);
+      const pages = await getPdfPageCount(dataUrl);
+      setPdfTotalPages(pages);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Cắt bỏ trang cuối chứa bảng đáp án / lời giải
+  const handleTrimPdfExam = async () => {
+    if (!pdfUrl) return;
+    const res = await trimPdfPages(pdfUrl, { removeLastPage: true });
+    setPdfUrl(res.trimmedDataUrl);
+    setPdfTotalPages(res.totalNew);
+    setSaveToast(`Đã cắt bỏ trang cuối chứa bảng đáp án! Đề thi hiện còn ${res.totalNew} trang.`);
+    setTimeout(() => setSaveToast(null), 3500);
   };
 
   // Xử lý nạp file PDF lời giải
@@ -320,10 +335,24 @@ function ExamEditorContent() {
   };
 
   // Tạo đề thi PDF từ file và chuỗi đáp án
-  const handleApplyPdfExam = () => {
+  const handleApplyPdfExam = async () => {
     if (!pdfUrl) {
       alert('Vui lòng tải lên file PDF đề thi trước khi tạo đề!');
       return;
+    }
+
+    let targetPdf = pdfUrl;
+    let newPages = pdfTotalPages;
+    let trimmedMsg = '';
+
+    // Tự động cắt bỏ trang cuối chứa bảng đáp án nếu người dùng bật và PDF có nhiều hơn 1 trang
+    if (cutLastPage && pdfTotalPages > 1) {
+      const res = await trimPdfPages(pdfUrl, { removeLastPage: true });
+      targetPdf = res.trimmedDataUrl;
+      newPages = res.totalNew;
+      setPdfUrl(targetPdf);
+      setPdfTotalPages(newPages);
+      trimmedMsg = ' (Đã cắt bỏ trang đáp án cuối)';
     }
 
     const parsed = parseQuickAnswerKey(quickAnswerText);
@@ -333,7 +362,7 @@ function ExamEditorContent() {
     setActiveQuestionId(generated[0]?.id);
     setExamMode('pdf_view');
     setShowImportModal(false);
-    setSaveToast(`Đã tạo đề thi PDF thành công với ${generated.length} câu hỏi!`);
+    setSaveToast(`Đã tạo đề thi PDF thành công với ${generated.length} câu hỏi!${trimmedMsg}`);
     setTimeout(() => setSaveToast(null), 3500);
   };
 
@@ -646,6 +675,8 @@ function ExamEditorContent() {
       exam_mode: examMode,
       pdf_url: storedPdfUrl,
       solution_pdf_url: storedSolutionPdfUrl,
+      pdf_total_pages: pdfTotalPages,
+      pdf_cut_last_page: cutLastPage,
       part_structure: {
         part1_count: part1Questions.length,
         part2_count: part2Questions.length,
@@ -1235,6 +1266,17 @@ function ExamEditorContent() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {pdfTotalPages > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleTrimPdfExam}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-bold text-xs hover:bg-amber-100 transition cursor-pointer"
+                    title="Cắt bỏ trang cuối chứa bảng đáp án để học sinh không nhìn thấy"
+                  >
+                    <Scissors className="h-3.5 w-3.5" />
+                    <span>Cắt trang đáp án cuối (Còn {pdfTotalPages - 1} trang)</span>
+                  </button>
+                )}
                 <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-bold text-xs hover:bg-blue-100 transition cursor-pointer">
                   <Upload className="h-3.5 w-3.5" />
                   <span>Đổi file PDF</span>
@@ -1243,7 +1285,13 @@ function ExamEditorContent() {
               </div>
             </div>
             <div className="flex-1 min-h-[500px]">
-              <PdfExamViewer pdfUrl={pdfUrl} title={pdfFileName || title} className="h-full" />
+              <PdfExamViewer
+                pdfUrl={pdfUrl}
+                title={pdfFileName || title}
+                className="h-full"
+                canTrim={pdfTotalPages > 1}
+                onTrimLastPage={handleTrimPdfExam}
+              />
             </div>
           </div>
 
@@ -1938,6 +1986,37 @@ function ExamEditorContent() {
                     </label>
                   </div>
                 </div>
+
+                {/* Hiển thị số trang & Tùy chọn cắt bỏ trang cuối chứa đáp án */}
+                {pdfUrl && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-900">
+                        📄 File PDF gồm: <strong>{pdfTotalPages} trang</strong>
+                      </span>
+                      {pdfTotalPages > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleTrimPdfExam}
+                          className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-500 transition cursor-pointer"
+                        >
+                          Cắt bỏ trang cuối ngay
+                        </button>
+                      )}
+                    </div>
+                    {pdfTotalPages > 1 && (
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-900 select-none">
+                        <input
+                          type="checkbox"
+                          checked={cutLastPage}
+                          onChange={(e) => setCutLastPage(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                        />
+                        <span>✂️ Tự động cắt bỏ trang cuối (chứa bảng đáp án) khi tạo đề</span>
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 {/* Chuỗi Đáp Án Nhanh 1 Chạm */}
                 <div className="space-y-2">

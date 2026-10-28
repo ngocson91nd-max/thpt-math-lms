@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -9,20 +9,61 @@ import {
   Download,
   FileText,
   RotateCcw,
+  Scissors,
 } from 'lucide-react';
 
 interface PdfExamViewerProps {
   pdfUrl: string;
   title?: string;
   className?: string;
+  onTrimLastPage?: () => void;
+  canTrim?: boolean;
 }
 
 export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
   pdfUrl,
   title = 'Đề thi PDF',
   className = '',
+  onTrimLastPage,
+  canTrim = false,
 }) => {
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [blobUrl, setBlobUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!pdfUrl) {
+      setBlobUrl('');
+      return;
+    }
+
+    if (pdfUrl.startsWith('blob:') || pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) {
+      setBlobUrl(pdfUrl);
+      return;
+    }
+
+    if (pdfUrl.startsWith('data:application/pdf;base64,') || pdfUrl.startsWith('data:')) {
+      try {
+        const base64Data = pdfUrl.includes(',') ? pdfUrl.split(',')[1] : pdfUrl;
+        const binary = atob(base64Data);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const objUrl = URL.createObjectURL(blob);
+        setBlobUrl(objUrl);
+        return () => {
+          URL.revokeObjectURL(objUrl);
+        };
+      } catch (e) {
+        console.error('Lỗi chuyển đổi dataUrl sang blobUrl:', e);
+        setBlobUrl(pdfUrl);
+      }
+    } else {
+      setBlobUrl(pdfUrl);
+    }
+  }, [pdfUrl]);
 
   const handleZoomIn = () => {
     setZoomLevel((prev) => Math.min(prev + 25, 200));
@@ -37,8 +78,9 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
   };
 
   const handleOpenNewTab = () => {
-    if (pdfUrl) {
-      window.open(pdfUrl, '_blank');
+    const targetUrl = blobUrl || pdfUrl;
+    if (targetUrl) {
+      window.open(targetUrl, '_blank');
     }
   };
 
@@ -65,7 +107,20 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-1 text-xs">
+        <div className="flex items-center gap-1.5 text-xs">
+          {/* Nút cắt trang đáp án nếu có */}
+          {canTrim && onTrimLastPage && (
+            <button
+              type="button"
+              onClick={onTrimLastPage}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-600 text-white font-semibold text-xs transition cursor-pointer"
+              title="Cắt bỏ trang cuối chứa bảng đáp án để học sinh không nhìn thấy"
+            >
+              <Scissors className="h-3.5 w-3.5" />
+              <span>Cắt trang đáp án cuối</span>
+            </button>
+          )}
+
           {/* Zoom controls */}
           <div className="flex items-center rounded-lg bg-slate-800/80 p-0.5 border border-slate-700">
             <button
@@ -113,21 +168,28 @@ export const PdfExamViewer: React.FC<PdfExamViewerProps> = ({
       </div>
 
       {/* KHUNG HIỂN THỊ FILE PDF TRỰC TIẾP */}
-      <div className="flex-1 w-full h-full bg-slate-800/50 overflow-auto flex justify-center p-1 sm:p-2">
-        <div
-          className="w-full h-full transition-all duration-150 origin-top flex justify-center"
-          style={{
-            transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
-            transformOrigin: 'top center',
-            height: zoomLevel !== 100 ? `${(100 / zoomLevel) * 100}%` : '100%',
-          }}
-        >
-          <iframe
-            src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`}
-            title={title}
-            className="w-full h-full min-h-[580px] rounded-xl border border-slate-700 bg-white shadow-2xl"
-          />
-        </div>
+      <div className="flex-1 w-full h-full bg-slate-800/80 overflow-auto flex justify-center p-1 sm:p-2 min-h-[620px]">
+        {blobUrl ? (
+          <div
+            className="w-full h-full transition-all duration-150 origin-top flex justify-center min-h-[620px]"
+            style={{
+              transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : undefined,
+              transformOrigin: 'top center',
+              height: zoomLevel !== 100 ? `${(100 / zoomLevel) * 100}%` : '100%',
+            }}
+          >
+            <iframe
+              src={`${blobUrl}#toolbar=0&navpanes=0&view=FitH`}
+              title={title}
+              className="w-full h-full min-h-[620px] rounded-xl border border-slate-700 bg-white shadow-2xl"
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-8 text-slate-300">
+            <FileText className="h-10 w-10 text-slate-400 animate-pulse mb-2" />
+            <span className="text-xs">Đang nạp file PDF...</span>
+          </div>
+        )}
       </div>
     </div>
   );

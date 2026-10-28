@@ -12,6 +12,7 @@ import { ExamCalculator } from '@/components/exam/ExamCalculator';
 import { ExamFormulaSheetModal } from '@/components/exam/ExamFormulaSheetModal';
 import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
+import { trimPdfPages } from '@/lib/pdf/pdfExamHelper';
 import {
   Clock,
   Flag,
@@ -93,6 +94,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   // 1. Tải đề thi từ Supabase hoặc localStorage
   useEffect(() => {
     const checkAndLoadPdf = (targetExam: Exam) => {
+      const isPdfMode =
+        targetExam.exam_mode === 'pdf_view' ||
+        Boolean(targetExam.pdf_url) ||
+        (targetExam.questions && targetExam.questions.some((q) => q.content?.includes('file PDF')));
+
+      if (isPdfMode) {
+        setViewMode('pdf');
+      }
+
       if (targetExam.pdf_url) {
         if (targetExam.pdf_url.startsWith('idb:')) {
           const idbKey = targetExam.pdf_url.replace('idb:', '');
@@ -102,9 +112,11 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         } else {
           setLoadedPdfUrl(targetExam.pdf_url);
         }
-      }
-      if (targetExam.exam_mode === 'pdf_view' || targetExam.pdf_url) {
-        setViewMode((curr) => (curr === 'scroll' ? 'pdf' : curr));
+      } else {
+        // Fallback: Thử tìm trong IndexedDB theo id đề thi
+        getPdfFromIndexedDb(`pdf_${targetExam.id}`).then((data) => {
+          if (data) setLoadedPdfUrl(data);
+        });
       }
     };
 
@@ -170,7 +182,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         if (data.answers) setAnswers(data.answers);
         if (data.flagged) setFlagged(data.flagged);
         if (data.essayImages) setEssayImages(data.essayImages);
-        if (data.viewMode) setViewMode(data.viewMode);
+        if (data.viewMode && !isPdfExam) setViewMode(data.viewMode);
+        if (isPdfExam) setViewMode('pdf');
         if (data.fontSize) setFontSize(data.fontSize);
         if (data.tabSwitchCount) setTabSwitchCount(data.tabSwitchCount);
 
@@ -275,6 +288,27 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const part2Questions = questions.filter((q) => q.part === 2 || q.type === 'true_false');
   const part3Questions = questions.filter((q) => q.part === 3 || q.type === 'short_answer');
   const part4Questions = questions.filter((q) => q.part === 4 || q.type === 'essay');
+
+  const isPdfExam =
+    exam?.exam_mode === 'pdf_view' ||
+    Boolean(exam?.pdf_url) ||
+    Boolean(loadedPdfUrl) ||
+    (questions.length > 0 && questions.some((q) => q.content?.includes('file PDF')));
+
+  const handleTrimStudentPdf = async () => {
+    const current = loadedPdfUrl || exam?.pdf_url;
+    if (!current) return;
+    try {
+      const res = await trimPdfPages(current, { removeLastPage: true });
+      setLoadedPdfUrl(res.trimmedDataUrl);
+      if (exam) {
+        setExam({ ...exam, pdf_url: res.trimmedDataUrl });
+      }
+      alert(`Đã cắt bỏ trang cuối chứa bảng đáp án! Đề thi hiện còn ${res.totalNew} trang.`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // 6. BỘ ĐẾM THỜI GIAN THẬT & TỰ ĐỘNG NỘP KHI HẾT GIỜ
   useEffect(() => {
@@ -853,48 +887,40 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
           <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-          {/* Nút chuyển đổi Chế độ làm bài: Đề PDF vs Từng câu vs Cuộn toàn bộ */}
-          <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
-            {(exam.exam_mode === 'pdf_view' || exam.pdf_url || loadedPdfUrl) && (
+          {/* Chế độ làm bài: Đề PDF tự động hoặc Bộ chọn cho đề tương tác */}
+          {isPdfExam ? (
+            <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-200 px-3 py-1 text-xs font-bold text-rose-700 shadow-2xs">
+              <FileText className="h-3.5 w-3.5 text-rose-600" />
+              <span>Chế Độ Thi Đề PDF</span>
+            </div>
+          ) : (
+            <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
               <button
                 type="button"
-                onClick={() => setViewMode('pdf')}
+                onClick={() => setViewMode('scroll')}
                 className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition cursor-pointer ${
-                  viewMode === 'pdf'
-                    ? 'bg-rose-600 text-white shadow-2xs font-extrabold'
+                  viewMode === 'scroll'
+                    ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Đọc đề trực tiếp trên file PDF và tô phiếu đáp án bên cạnh"
               >
                 <FileText className="h-3.5 w-3.5" />
-                <span>Đề PDF</span>
+                <span>Toàn bộ đề</span>
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setViewMode('scroll')}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition cursor-pointer ${
-                viewMode === 'scroll'
-                  ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              <span>Toàn bộ đề</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('focus')}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition cursor-pointer ${
-                viewMode === 'focus'
-                  ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <ListOrdered className="h-3.5 w-3.5" />
-              <span>Từng câu</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('focus')}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                  viewMode === 'focus'
+                    ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ListOrdered className="h-3.5 w-3.5" />
+                <span>Từng câu</span>
+              </button>
+            </div>
+          )}
 
           {/* Bộ chỉnh cỡ chữ A- / A+ */}
           <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
@@ -1002,8 +1028,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         )}
       </div>
 
-      {viewMode === 'pdf' ? (
-        /* CHẾ ĐỘ 3: ĐỀ THI PDF & PHIẾU LÀM BÀI ĐIỆN TỬ (Split-Screen PDF Mode) */
+      {isPdfExam || viewMode === 'pdf' ? (
+        /* CHẾ ĐỘ ĐỀ PDF: PHẦN TO ĐÙNG Ở GIỮA/TRÁI LÀ ĐỀ (67%), PHẦN CHỌN ĐÁP ÁN CHO SANG BÊN PHẢI (33%) */
         <div className="space-y-4">
           {/* Mobile Switcher Tab (Chỉ hiện trên điện thoại / tablet nhỏ) */}
           <div className="lg:hidden flex items-center justify-between rounded-2xl bg-slate-100 p-1.5 text-xs font-bold">
@@ -1029,31 +1055,33 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
               }`}
             >
               <CheckCircle className="h-4 w-4" />
-              <span>Phiếu Làm Bài ({answeredCount}/{questions.length})</span>
+              <span>Phiếu Tô Đáp Án ({answeredCount}/{questions.length})</span>
             </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* CỘT TRÁI: KHUNG ĐỌC ĐỀ PDF (7 Cột) */}
-            <div className={`lg:col-span-7 xl:col-span-7 ${pdfMobileTab === 'pdf' ? 'block' : 'hidden lg:block'}`}>
+            {/* CỘT TRÁI TO ĐÙNG (8 Cột = 66.7%): KHUNG ĐỌC ĐỀ PDF */}
+            <div className={`lg:col-span-8 xl:col-span-8 ${pdfMobileTab === 'pdf' ? 'block' : 'hidden lg:block'}`}>
               <div className="sticky top-20 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden p-2">
                 {loadedPdfUrl || exam.pdf_url ? (
                   <PdfExamViewer
                     pdfUrl={loadedPdfUrl || exam.pdf_url || ''}
                     title={exam.title}
-                    className="h-[calc(100vh-140px)] min-h-[620px]"
+                    className="h-[calc(100vh-140px)] min-h-[640px]"
+                    canTrim={true}
+                    onTrimLastPage={handleTrimStudentPdf}
                   />
                 ) : (
-                  <div className="h-[620px] flex flex-col items-center justify-center text-slate-400 gap-3">
+                  <div className="h-[640px] flex flex-col items-center justify-center text-slate-400 gap-3">
                     <FileText className="h-12 w-12 text-slate-300 animate-pulse" />
-                    <p className="text-sm">Đang tải file đề PDF...</p>
+                    <p className="text-sm font-semibold">Đang nạp file đề PDF...</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* CỘT PHẢI: PHIẾU TÔ ĐÁP ÁN ĐIỆN TỬ OMR SHEET (5 Cột) */}
-            <div className={`lg:col-span-5 xl:col-span-5 ${pdfMobileTab === 'answers' ? 'block' : 'hidden lg:block'}`}>
+            {/* CỘT PHẢI (4 Cột = 33.3%): PHIẾU TÔ / CHỌN ĐÁP ÁN BÊN PHẢI */}
+            <div className={`lg:col-span-4 xl:col-span-4 ${pdfMobileTab === 'answers' ? 'block' : 'hidden lg:block'}`}>
               <div className="sticky top-20 max-h-[calc(100vh-120px)] flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {/* Header Phiếu */}
                 <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/50 p-4 shrink-0">

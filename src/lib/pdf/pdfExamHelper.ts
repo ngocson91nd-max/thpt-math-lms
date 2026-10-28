@@ -1,4 +1,5 @@
 import { Question } from '@/types/database';
+import { PDFDocument } from 'pdf-lib';
 
 export interface ParsedPdfAnswers {
   part1: Record<number, string>; // { 1: 'A', 2: 'B', ... }
@@ -193,4 +194,93 @@ export function buildPdfExamQuestions(
   }
 
   return questions;
+}
+
+/**
+ * Chuyển Base64 / Data URL sang Uint8Array
+ */
+export function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    const binary = window.atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+  return Uint8Array.from(Buffer.from(base64, 'base64'));
+}
+
+/**
+ * Đếm số trang của tài liệu PDF
+ */
+export async function getPdfPageCount(dataUrl: string): Promise<number> {
+  try {
+    const bytes = dataUrlToUint8Array(dataUrl);
+    const pdfDoc = await PDFDocument.load(bytes);
+    return pdfDoc.getPageCount();
+  } catch (err) {
+    console.error('Lỗi khi đếm số trang PDF:', err);
+    return 1;
+  }
+}
+
+/**
+ * Cắt bỏ trang cuối (hoặc các trang chỉ định) khỏi file PDF
+ * Ví dụ: Đề thi có 4 trang, trang 4 là bảng đáp án -> cắt bỏ trang 4, chỉ giữ lại trang 1 đến 3.
+ */
+export async function trimPdfPages(
+  dataUrl: string,
+  options: {
+    removeLastPage?: boolean;
+    pagesToKeep?: number[];
+    startPage?: number;
+    endPage?: number;
+  }
+): Promise<{ trimmedDataUrl: string; totalOriginal: number; totalNew: number }> {
+  try {
+    const bytes = dataUrlToUint8Array(dataUrl);
+    const pdfDoc = await PDFDocument.load(bytes);
+    const totalOriginal = pdfDoc.getPageCount();
+
+    if (totalOriginal <= 1) {
+      return { trimmedDataUrl: dataUrl, totalOriginal, totalNew: totalOriginal };
+    }
+
+    let indicesToKeep: number[] = [];
+
+    if (options.pagesToKeep && options.pagesToKeep.length > 0) {
+      indicesToKeep = options.pagesToKeep.map((p) => p - 1).filter((p) => p >= 0 && p < totalOriginal);
+    } else if (options.startPage && options.endPage) {
+      for (let i = options.startPage - 1; i <= options.endPage - 1 && i < totalOriginal; i++) {
+        if (i >= 0) indicesToKeep.push(i);
+      }
+    } else if (options.removeLastPage) {
+      for (let i = 0; i < totalOriginal - 1; i++) {
+        indicesToKeep.push(i);
+      }
+    } else {
+      return { trimmedDataUrl: dataUrl, totalOriginal, totalNew: totalOriginal };
+    }
+
+    if (indicesToKeep.length === 0) {
+      return { trimmedDataUrl: dataUrl, totalOriginal, totalNew: totalOriginal };
+    }
+
+    const newPdf = await PDFDocument.create();
+    const copiedPages = await newPdf.copyPages(pdfDoc, indicesToKeep);
+    copiedPages.forEach((page) => newPdf.addPage(page));
+
+    const newBase64 = await newPdf.saveAsBase64({ dataUri: true });
+    return {
+      trimmedDataUrl: newBase64,
+      totalOriginal,
+      totalNew: copiedPages.length,
+    };
+  } catch (err) {
+    console.error('Lỗi khi cắt trang PDF:', err);
+    return { trimmedDataUrl: dataUrl, totalOriginal: 1, totalNew: 1 };
+  }
 }

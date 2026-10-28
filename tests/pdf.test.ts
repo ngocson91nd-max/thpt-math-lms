@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseQuickAnswerKey, buildPdfExamQuestions } from '../src/lib/pdf/pdfExamHelper';
+import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount } from '../src/lib/pdf/pdfExamHelper';
+import { PDFDocument } from 'pdf-lib';
 
 describe('Kiểm thử bộ phân tích đáp án đề thi PDF (pdfExamHelper)', () => {
   it('Phân tích đúng chuỗi đáp án Phần I dạng 1A 2B 3C...', () => {
@@ -66,5 +67,28 @@ describe('Kiểm thử bộ phân tích đáp án đề thi PDF (pdfExamHelper)'
     // Câu 17 (Phần III)
     expect(questions[16].type).toBe('short_answer');
     expect(questions[16].correct_answer).toEqual(['1440', '1440']);
+  });
+
+  it('Cắt bỏ trang cuối chứa bảng đáp án bằng pdf-lib (trimPdfPages)', async () => {
+    // Tạo PDF mẫu có 4 trang (3 trang đề + 1 trang đáp án)
+    const doc = await PDFDocument.create();
+    doc.addPage([600, 800]); // Trang 1
+    doc.addPage([600, 800]); // Trang 2
+    doc.addPage([600, 800]); // Trang 3
+    doc.addPage([600, 800]); // Trang 4 (Bảng đáp án)
+    const base64 = await doc.saveAsBase64({ dataUri: true });
+
+    // Kiểm tra số trang ban đầu
+    const originalCount = await getPdfPageCount(base64);
+    expect(originalCount).toBe(4);
+
+    // Cắt bỏ trang cuối chứa bảng đáp án
+    const result = await trimPdfPages(base64, { removeLastPage: true });
+    expect(result.totalOriginal).toBe(4);
+    expect(result.totalNew).toBe(3);
+
+    // Kiểm tra lại file PDF sau khi cắt
+    const newCount = await getPdfPageCount(result.trimmedDataUrl);
+    expect(newCount).toBe(3);
   });
 });

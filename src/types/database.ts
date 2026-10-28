@@ -148,6 +148,8 @@ export interface Exam {
   exam_mode?: 'interactive' | 'pdf_view';
   pdf_url?: string;
   solution_pdf_url?: string;
+  pdf_total_pages?: number;
+  pdf_cut_last_page?: boolean;
   part_structure?: {
     part1_count?: number;
     part2_count?: number;
