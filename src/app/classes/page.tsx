@@ -79,8 +79,20 @@ export default function ClassesPage() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
+          // Gộp các lớp chuẩn từ MOCK_CLASSES nếu chưa có trong parsed (trừ các lớp đã xóa)
+          const existingIds = new Set(parsed.map((c: any) => c.id));
+          const existingCodes = new Set(parsed.map((c: any) => c.code));
+          const missingMocks = MOCK_CLASSES.filter(
+            (m) =>
+              !existingIds.has(m.id) &&
+              !existingCodes.has(m.code) &&
+              !deletedIds.has(m.id) &&
+              !deletedIds.has(m.code)
+          );
+          const combined = [...parsed, ...missingMocks];
+
           // Lọc bỏ triệt để các lớp đã bị xóa vĩnh viễn (kể cả mock class)
-          const filtered = parsed.filter((c: any) => !deletedIds.has(c.id) && !deletedIds.has(c.code));
+          const filtered = combined.filter((c: any) => !deletedIds.has(c.id) && !deletedIds.has(c.code));
           const updatedWithCount = filtered.map((c: any) => ({
             ...c,
             member_count: getRealMemberCount(c.id, c.member_count),
