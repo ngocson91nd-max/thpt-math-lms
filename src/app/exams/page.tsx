@@ -40,6 +40,7 @@ import {
   Unlock,
   BarChart3,
   FileUp,
+  Upload,
   CheckCircle2,
   Grid,
   List,
@@ -300,13 +301,12 @@ export default function ExamsPage() {
     }
     setIsCreatingPdfExam(true);
     try {
-      const arrayBuffer = await pdfFile.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < uint8.byteLength; i++) {
-        binary += String.fromCharCode(uint8[i]);
-      }
-      let dataUrl = `data:application/pdf;base64,${btoa(binary)}`;
+      let dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Không thể đọc file PDF'));
+        reader.readAsDataURL(pdfFile);
+      });
 
       let totalPages = 1;
       if (pdfSmartMask) {
@@ -778,6 +778,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     setSelectedQuestions([]);
     setLatexInput('');
     setLatexParseNotice(null);
+    router.push(`/exams/editor?id=${newId}`);
   };
 
   // Mở modal sửa đề
@@ -975,6 +976,19 @@ Khi đó chiều cao $h = 2\\text{ m}$.
               <List className="h-4 w-4" />
             </button>
           </div>
+
+          {/* NÚT NHẬP FILE WORD / LATEX */}
+          <button
+            type="button"
+            onClick={() => {
+              setCreatorMode('word');
+              setShowCreateModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-indigo-500/20 hover:from-indigo-500 hover:to-purple-500 transition cursor-pointer"
+          >
+            <Upload className="h-4 w-4" />
+            <span>Nhập file (Word / LaTeX)</span>
+          </button>
 
           {/* NÚT TẠO TỪ PDF RIÊNG BIỆT (Ảnh 7 iExam) */}
           <button
@@ -1950,6 +1964,44 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                           Mẫu Tự luận
                         </button>
                       </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <label className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 text-purple-700 px-3 py-1.5 text-xs font-bold hover:bg-purple-100 transition cursor-pointer">
+                        <FileCode className="h-3.5 w-3.5" />
+                        <span>Hoặc chọn file .tex / .txt từ máy</span>
+                        <input
+                          type="file"
+                          accept=".tex,.txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const text = (ev.target?.result as string) || '';
+                              setLatexInput(text);
+                              try {
+                                const { questions, metadata } = parseExamLatex(text);
+                                if (questions.length > 0) {
+                                  if (metadata.title) setNewTitle(metadata.title);
+                                  else setNewTitle(file.name.replace(/\.[^/.]+$/, ''));
+                                  if (metadata.duration) setNewDuration(metadata.duration);
+                                  setSelectedQuestions(questions);
+                                  setLatexParseNotice(`Đã trích xuất thành công ${questions.length} câu hỏi từ file "${file.name}"!`);
+                                } else {
+                                  setLatexParseNotice(`Đã nạp file "${file.name}". Bấm nút "Trích Xuất Câu Hỏi Từ LaTeX" để phân tích.`);
+                                }
+                              } catch (err: any) {
+                                setLatexParseNotice(`Lỗi phân tích cú pháp LaTeX: ${err?.message || 'Không xác định'}`);
+                              }
+                            };
+                            reader.readAsText(file, 'utf-8');
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      <span className="text-[11px] text-slate-500 italic">Hỗ trợ file TeX chứa khối \begin&#123;ex&#125;...\end&#123;ex&#125;</span>
                     </div>
 
                     <textarea

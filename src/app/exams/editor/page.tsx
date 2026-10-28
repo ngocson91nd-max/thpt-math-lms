@@ -63,6 +63,8 @@ import {
   Sliders,
   Settings,
   Radio,
+  Loader2,
+  FileCode,
 } from 'lucide-react';
 
 function ExamEditorContent() {
@@ -285,11 +287,19 @@ function ExamEditorContent() {
 
     // Nếu tạo đề mới và chưa có câu hỏi
     if (questions.length === 0) {
-      const initial = MOCK_QUESTIONS.slice(0, 7);
-      setQuestions(initial);
-      setHistory([initial]);
-      setHistoryIndex(0);
-      setActiveQuestionId(initial[0].id);
+      if (isNewParam === '1') {
+        // Bắt đầu với đề thi mới để giáo viên dễ dàng nhập file Word / LaTeX / PDF
+        setQuestions([]);
+        setHistory([[]]);
+        setHistoryIndex(0);
+        setTitle('Đề Thi Toán THPT Mới Tạo');
+      } else {
+        const initial = MOCK_QUESTIONS.slice(0, 7);
+        setQuestions(initial);
+        setHistory([initial]);
+        setHistoryIndex(0);
+        setActiveQuestionId(initial[0].id);
+      }
     }
   }, [examIdParam]);
 
@@ -615,66 +625,168 @@ function ExamEditorContent() {
     setTimeout(() => setSaveToast(null), 3500);
   };
 
-  // Xử lý nạp file Word (.docx)
-  const handleUploadDocx = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Xử lý nạp file thông minh đa định dạng (Word .docx, LaTeX .tex, PDF .pdf)
+  const handleUniversalFileUpload = async (file: File) => {
     if (!file) return;
+    const name = file.name.toLowerCase();
 
-    setIsParsingWord(true);
-    setWordNotice(null);
-
-    try {
-      let extractedQuestions: Question[] = [];
-
-      // 1. Phân tích trực tiếp phía client (chuyển đổi WMF MathType sang PNG siêu nét trên Canvas)
+    // 1. File Microsoft Word (.docx)
+    if (name.endsWith('.docx')) {
+      setIsParsingWord(true);
+      setWordNotice(null);
       try {
-        const res = await parseWordDocx(file);
-        if (res.questions && res.questions.length > 0) {
-          extractedQuestions = res.questions;
-        }
-      } catch (clientErr) {
-        console.warn('Client parser failed, falling back to API:', clientErr);
-      }
+        let extractedQuestions: Question[] = [];
 
-      // 2. Dự phòng qua API backend nếu client gặp sự cố
-      if (extractedQuestions.length === 0) {
+        // Thử parse bằng bộ parser client (hỗ trợ MathType WMF vector, công thức OMML)
         try {
-          const fd = new FormData();
-          fd.append('file', file);
-          const res = await fetch('/api/upload-docx', { method: 'POST', body: fd });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
-              extractedQuestions = data.questions;
-            }
+          const res = await parseWordDocx(file);
+          if (res.questions && res.questions.length > 0) {
+            extractedQuestions = res.questions;
           }
-        } catch (err) {
-          console.warn('API upload-docx failed:', err);
+        } catch (clientErr) {
+          console.warn('Client parser failed, falling back to API:', clientErr);
         }
-      }
 
-      // Chuyển đổi mọi ảnh WMF sang PNG hiển thị được trên mọi trình duyệt
-      if (extractedQuestions.length > 0) {
-        extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
-      }
+        // Dự phòng API backend nếu client gặp sự cố
+        if (extractedQuestions.length === 0) {
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/api/upload-docx', { method: 'POST', body: fd });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+                extractedQuestions = data.questions;
+              }
+            }
+          } catch (err) {
+            console.warn('API upload-docx failed:', err);
+          }
+        }
 
-      if (extractedQuestions.length === 0) {
-        setWordNotice('Không tìm thấy câu hỏi nào (định dạng "Câu 1:", "Bài 1:", v.v.) trong file Word!');
-      } else {
-        setQuestionsWithHistory(extractedQuestions);
-        setActiveQuestionId(extractedQuestions[0]?.id);
-        setExamMode('interactive');
-        setTitle(file.name.replace(/\.[^/.]+$/, ''));
-        setWordNotice(`Đã trích xuất thành công ${extractedQuestions.length} câu hỏi từ file "${file.name}"!`);
-        setShowImportModal(false);
-        setSaveToast(`Đã nạp ${extractedQuestions.length} câu hỏi từ Word vào trang soạn thảo!`);
-        setTimeout(() => setSaveToast(null), 3500);
+        if (extractedQuestions.length > 0) {
+          extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
+          setQuestionsWithHistory(extractedQuestions);
+          setActiveQuestionId(extractedQuestions[0]?.id);
+          setExamMode('interactive');
+          setTitle(file.name.replace(/\.[^/.]+$/, ''));
+          setWordNotice(`Đã trích xuất thành công ${extractedQuestions.length} câu hỏi từ file "${file.name}"!`);
+          setShowImportModal(false);
+          setShowUploadPopover(false);
+          setSaveToast(`Đã nạp thành công ${extractedQuestions.length} câu hỏi từ file Word "${file.name}"!`);
+          setTimeout(() => setSaveToast(null), 3500);
+        } else {
+          const msg = 'Không tìm thấy câu hỏi nào hợp lệ trong file Word! Hệ thống hỗ trợ định dạng "Câu 1:", "Bài 1:" kèm phương án A, B, C, D hoặc [Đúng]/[Sai].';
+          setWordNotice(msg);
+          alert(msg);
+        }
+      } catch (err: any) {
+        const msg = `Lỗi đọc file Word: ${err?.message || 'Không xác định'}`;
+        setWordNotice(msg);
+        alert(msg);
+      } finally {
+        setIsParsingWord(false);
       }
-    } catch (err: any) {
-      setWordNotice(`Lỗi đọc file Word: ${err?.message || 'Không xác định'}`);
-    } finally {
-      setIsParsingWord(false);
+      return;
     }
+
+    // 2. File LaTeX (.tex hoặc .txt)
+    if (name.endsWith('.tex') || name.endsWith('.txt')) {
+      setIsParsingWord(true);
+      try {
+        const text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.onerror = reject;
+          reader.readAsText(file, 'utf-8');
+        });
+
+        setLatexInput(text);
+        const { questions: parsedQ, metadata } = parseExamLatex(text);
+        if (parsedQ.length > 0) {
+          if (metadata.title) setTitle(metadata.title);
+          else setTitle(file.name.replace(/\.[^/.]+$/, ''));
+          if (metadata.duration) setDuration(metadata.duration);
+
+          setQuestionsWithHistory(parsedQ);
+          setActiveQuestionId(parsedQ[0]?.id);
+          setExamMode('interactive');
+          setShowImportModal(false);
+          setShowUploadPopover(false);
+          setSaveToast(`Đã trích xuất thành công ${parsedQ.length} câu hỏi từ file LaTeX "${file.name}"!`);
+          setTimeout(() => setSaveToast(null), 3500);
+        } else {
+          setImportTab('latex');
+          setShowImportModal(true);
+          setShowUploadPopover(false);
+          setLatexNotice(`Đã nạp file "${file.name}". Không tìm thấy khối \\begin{ex}...\\end{ex}. Thầy/cô vui lòng kiểm tra mã nguồn.`);
+        }
+      } catch (err: any) {
+        alert(`Lỗi đọc file LaTeX: ${err?.message || 'Không xác định'}`);
+      } finally {
+        setIsParsingWord(false);
+      }
+      return;
+    }
+
+    // 3. File PDF (.pdf)
+    if (name.endsWith('.pdf')) {
+      setIsParsingWord(true);
+      try {
+        setPdfFileName(file.name);
+        setTitle(file.name.replace(/\.[^/.]+$/, ''));
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const pages = await getPdfPageCount(dataUrl);
+        setPdfTotalPages(pages);
+
+        let finalUrl = dataUrl;
+        try {
+          const masked = await maskPdfAnswerKey(dataUrl, { bottomRatio: 0.32 });
+          finalUrl = masked.maskedDataUrl;
+        } catch (err) {
+          console.warn('PDF masking skipped:', err);
+        }
+        setPdfUrl(finalUrl);
+
+        // Lưu vào IndexedDB
+        const idbKey = `pdf_${Date.now()}`;
+        savePdfToIndexedDb(idbKey, finalUrl).catch(() => {});
+
+        // Sinh cấu trúc câu hỏi OMR mặc định (12 câu TN, 4 Đ/S, 6 Điền số = 22 câu)
+        if (questions.length === 0 || questions.every((q) => q.id.startsWith('mock-'))) {
+          const parsed = parseQuickAnswerKey(quickAnswerText);
+          const generated = buildPdfExamQuestions(pdfPart1Count, pdfPart2Count, pdfPart3Count, parsed);
+          setQuestionsWithHistory(generated);
+          setActiveQuestionId(generated[0]?.id);
+        }
+
+        setExamMode('pdf_view');
+        setShowImportModal(false);
+        setShowUploadPopover(false);
+        setSaveToast(`Đã nạp file PDF "${file.name}" (${pages} trang) thành công!`);
+        setTimeout(() => setSaveToast(null), 3500);
+      } catch (err: any) {
+        alert(`Lỗi đọc file PDF: ${err?.message || 'Không xác định'}`);
+      } finally {
+        setIsParsingWord(false);
+      }
+      return;
+    }
+
+    alert('Định dạng file không được hỗ trợ! Vui lòng chọn file Word (.docx), LaTeX (.tex) hoặc PDF (.pdf).');
+  };
+
+  // Wrapper cho các input file
+  const handleUploadDocx = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleUniversalFileUpload(file);
+    e.target.value = '';
   };
 
   // Xử lý nạp mã LaTeX
@@ -1241,25 +1353,79 @@ function ExamEditorContent() {
                       onChange={(e) => setPopoverFileMode(e.target.value as any)}
                       className="w-full rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:border-blue-500"
                     >
-                      <option value="thcs_thpt">THCS / THPT</option>
+                      <option value="thcs_thpt">THCS / THPT (3 phần)</option>
                       <option value="dinh_ky">Định kỳ / HSG (4 phần)</option>
                     </select>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Đề kiểm tra thường: câu xếp theo loại (trắc nghiệm, Đúng/Sai, trả lời ngắn, tự luận), điểm cấu hình theo phần.
-                    </p>
-                    <label className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 cursor-pointer shadow-md shadow-blue-500/20">
-                      <Upload className="h-3.5 w-3.5" />
-                      <span>Chọn file...</span>
-                      <input
-                        type="file"
-                        accept=".docx,.tex,.txt"
-                        className="hidden"
-                        onChange={(e) => {
+
+                    <div className="space-y-1.5">
+                      {/* Chọn file tổng hợp */}
+                      <label className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 cursor-pointer shadow-md shadow-blue-500/20 transition">
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>Chọn file từ máy tính...</span>
+                        <input
+                          type="file"
+                          accept=".docx,.tex,.txt,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            setShowUploadPopover(false);
+                            handleUploadDocx(e);
+                          }}
+                        />
+                      </label>
+                      <div className="text-[10.5px] text-slate-500 text-center font-medium">
+                        Hỗ trợ: Word (.docx), LaTeX (.tex) và PDF (.pdf)
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
                           setShowUploadPopover(false);
-                          handleUploadDocx(e);
+                          setImportTab('word');
+                          setShowImportModal(true);
                         }}
-                      />
-                    </label>
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center justify-between transition cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                          Nhập Word có MathType...
+                        </span>
+                        <ChevronRight className="h-3 w-3 text-slate-400" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUploadPopover(false);
+                          setImportTab('latex');
+                          setShowImportModal(true);
+                        }}
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-purple-50 hover:text-purple-700 font-semibold flex items-center justify-between transition cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <FileCode className="h-3.5 w-3.5 text-purple-600" />
+                          Dán / Tải mã LaTeX (.tex)...
+                        </span>
+                        <ChevronRight className="h-3 w-3 text-slate-400" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUploadPopover(false);
+                          setImportTab('pdf');
+                          setShowImportModal(true);
+                        }}
+                        className="w-full text-left px-2 py-1.5 rounded-lg text-slate-700 hover:bg-rose-50 hover:text-rose-700 font-semibold flex items-center justify-between transition cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 text-rose-600" />
+                          Tạo đề từ PDF + Che đáp án...
+                        </span>
+                        <ChevronRight className="h-3 w-3 text-slate-400" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2086,128 +2252,269 @@ function ExamEditorContent() {
                 </div>
               </div>
 
-              {/* Danh sách các phần câu hỏi */}
-              <div className="space-y-8 flex-1">
-                {/* PHẦN I: TRẮC NGHIỆM */}
-                <section id="section-part1" className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-blue-200 pb-2">
-                    <div>
-                      <h3 className="font-extrabold text-sm text-blue-900 uppercase">
-                        PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn.
-                      </h3>
-                      <p className="text-[11px] italic text-slate-500">
-                        Thí sinh trả lời từ câu 1 đến câu {part1Questions.length}. Mỗi câu thí sinh chỉ chọn một phương án.
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-bold">
-                      {part1Questions.length} câu ({(part1Questions.length * 0.25).toFixed(2)}đ)
-                    </span>
+              {/* Thanh nhập file nhanh luôn sẵn sàng */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 mb-6 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <Upload className="h-4 w-4 text-indigo-600" />
+                  <span>Nhập nhanh đề thi từ máy tính:</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 font-bold transition cursor-pointer shadow-2xs">
+                    <BookOpen className="h-3.5 w-3.5" />
+                    <span>Word (.docx)</span>
+                    <input
+                      type="file"
+                      accept=".docx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUniversalFileUpload(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+
+                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 font-bold transition cursor-pointer shadow-2xs">
+                    <FileCode className="h-3.5 w-3.5" />
+                    <span>LaTeX (.tex)</span>
+                    <input
+                      type="file"
+                      accept=".tex,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUniversalFileUpload(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+
+                  <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 font-bold transition cursor-pointer shadow-2xs">
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>PDF (.pdf)</span>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUniversalFileUpload(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {totalQuestions === 0 ? (
+                /* Hero box khi chưa có câu hỏi */
+                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center space-y-6">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-50 text-blue-600 border border-blue-200 shadow-sm">
+                    <Upload className="h-8 w-8" />
+                  </div>
+                  <div className="max-w-md space-y-2">
+                    <h3 className="font-extrabold text-lg text-slate-900">Bắt đầu tạo câu hỏi cho đề thi</h3>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Thầy/cô có thể tải file đề thi từ máy tính (tự động nhận diện công thức MathType, gói ex_test và hình ảnh) hoặc tạo câu hỏi mới.
+                    </p>
                   </div>
 
-                  {part1Questions.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-blue-200 p-6 text-center text-xs text-slate-400">
-                      Chưa có câu hỏi trong Phần I. Bấm "+ Thêm câu hỏi" để bổ sung.
-                    </div>
-                  ) : (
-                    <div className="space-y-5">
-                      {part1Questions.map((q, idx) => (
-                        <div id={`q-${q.id}`} key={q.id}>
-                          {renderQuestionItem(q, idx + 1)}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-lg">
+                    {/* Nạp Word */}
+                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 hover:bg-blue-50 hover:border-blue-400 transition cursor-pointer group">
+                      <BookOpen className="h-6 w-6 text-blue-600 group-hover:scale-110 transition" />
+                      <span className="font-bold text-xs text-slate-800">File Word (.docx)</span>
+                      <span className="text-[10px] text-slate-500">Giữ nguyên công thức MathType</span>
+                      <input
+                        type="file"
+                        accept=".docx"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleUniversalFileUpload(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
 
-                {/* PHẦN II: ĐÚNG SAI */}
-                <section id="section-part2" className="space-y-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between border-b border-amber-200 pb-2">
-                    <div>
-                      <h3 className="font-extrabold text-sm text-amber-900 uppercase">
-                        PHẦN II. Câu trắc nghiệm đúng sai.
-                      </h3>
-                      <p className="text-[11px] italic text-slate-500">
-                        Thí sinh trả lời từ câu 1 đến câu {part2Questions.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-bold">
-                      {part2Questions.length} câu ({(part2Questions.length * 1.0).toFixed(2)}đ)
-                    </span>
+                    {/* Nạp LaTeX */}
+                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/30 hover:bg-purple-50 hover:border-purple-400 transition cursor-pointer group">
+                      <FileCode className="h-6 w-6 text-purple-600 group-hover:scale-110 transition" />
+                      <span className="font-bold text-xs text-slate-800">File LaTeX (.tex)</span>
+                      <span className="text-[10px] text-slate-500">Gói ex_test chuẩn THPT</span>
+                      <input
+                        type="file"
+                        accept=".tex,.txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleUniversalFileUpload(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {/* Nạp PDF */}
+                    <label className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50/30 hover:bg-rose-50 hover:border-rose-400 transition cursor-pointer group">
+                      <FileText className="h-6 w-6 text-rose-600 group-hover:scale-110 transition" />
+                      <span className="font-bold text-xs text-slate-800">File PDF (.pdf)</span>
+                      <span className="text-[10px] text-slate-500">Xem trực tiếp + Phiếu OMR</span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleUniversalFileUpload(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
                   </div>
 
-                  {part2Questions.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-amber-200 p-6 text-center text-xs text-slate-400">
-                      Chưa có câu hỏi trong Phần II.
-                    </div>
-                  ) : (
-                    <div className="space-y-5">
-                      {part2Questions.map((q, idx) => (
-                        <div id={`q-${q.id}`} key={q.id}>
-                          {renderQuestionItem(q, part1Questions.length + idx + 1)}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                {/* PHẦN III: TRẢ LỜI NGẮN */}
-                <section id="section-part3" className="space-y-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
-                    <div>
-                      <h3 className="font-extrabold text-sm text-emerald-900 uppercase">
-                        PHẦN III. Câu hỏi trả lời ngắn.
-                      </h3>
-                      <p className="text-[11px] italic text-slate-500">
-                        Thí sinh trả lời từ câu 1 đến câu {part3Questions.length}. Điền kết quả số vào ô trả lời.
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
-                      {part3Questions.length} câu ({(part3Questions.length * 0.5).toFixed(2)}đ)
-                    </span>
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddEmptyQuestion(1)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 shadow-md shadow-blue-500/20 cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Thêm câu hỏi thủ công</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuestionsWithHistory(MOCK_QUESTIONS.slice(0, 7))}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer"
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-600" />
+                      <span>Tải 7 câu hỏi mẫu</span>
+                    </button>
                   </div>
-
-                  {part3Questions.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-emerald-200 p-6 text-center text-xs text-slate-400">
-                      Chưa có câu hỏi trong Phần III.
-                    </div>
-                  ) : (
-                    <div className="space-y-5">
-                      {part3Questions.map((q, idx) => (
-                        <div id={`q-${q.id}`} key={q.id}>
-                          {renderQuestionItem(q, part1Questions.length + part2Questions.length + idx + 1)}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                {/* PHẦN IV: TỰ LUẬN (CHO ĐỀ ĐỊNH KỲ) */}
-                {(format === 'periodic_4_parts' || part4Questions.length > 0) && (
-                  <section id="section-part4" className="space-y-4 pt-4 border-t border-slate-200">
-                    <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                </div>
+              ) : (
+                /* Danh sách các phần câu hỏi */
+                <div className="space-y-8 flex-1">
+                  {/* PHẦN I: TRẮC NGHIỆM */}
+                  <section id="section-part1" className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-blue-200 pb-2">
                       <div>
-                        <h3 className="font-extrabold text-sm text-purple-900 uppercase">
-                          PHẦN IV. Câu hỏi tự luận.
+                        <h3 className="font-extrabold text-sm text-blue-900 uppercase">
+                          PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn.
                         </h3>
                         <p className="text-[11px] italic text-slate-500">
-                          Thí sinh trình bày lời giải chi tiết theo các bước sư phạm.
+                          Thí sinh trả lời từ câu 1 đến câu {part1Questions.length}. Mỗi câu thí sinh chỉ chọn một phương án.
                         </p>
                       </div>
-                      <span className="rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-bold">
-                        {part4Questions.length} câu ({(part4Questions.length * 2.0).toFixed(2)}đ)
+                      <span className="rounded-md bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-bold">
+                        {part1Questions.length} câu ({(part1Questions.length * 0.25).toFixed(2)}đ)
                       </span>
                     </div>
 
-                    <div className="space-y-5">
-                      {part4Questions.map((q, idx) => (
-                        <div id={`q-${q.id}`} key={q.id}>
-                          {renderQuestionItem(q, part1Questions.length + part2Questions.length + part3Questions.length + idx + 1)}
-                        </div>
-                      ))}
-                    </div>
+                    {part1Questions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-blue-200 p-6 text-center text-xs text-slate-400">
+                        Chưa có câu hỏi trong Phần I. Bấm "+ Thêm câu hỏi" để bổ sung.
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        {part1Questions.map((q, idx) => (
+                          <div id={`q-${q.id}`} key={q.id}>
+                            {renderQuestionItem(q, idx + 1)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
-                )}
-              </div>
+
+                  {/* PHẦN II: ĐÚNG SAI */}
+                  <section id="section-part2" className="space-y-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                      <div>
+                        <h3 className="font-extrabold text-sm text-amber-900 uppercase">
+                          PHẦN II. Câu trắc nghiệm đúng sai.
+                        </h3>
+                        <p className="text-[11px] italic text-slate-500">
+                          Thí sinh trả lời từ câu 1 đến câu {part2Questions.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-bold">
+                        {part2Questions.length} câu ({(part2Questions.length * 1.0).toFixed(2)}đ)
+                      </span>
+                    </div>
+
+                    {part2Questions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-amber-200 p-6 text-center text-xs text-slate-400">
+                        Chưa có câu hỏi trong Phần II.
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        {part2Questions.map((q, idx) => (
+                          <div id={`q-${q.id}`} key={q.id}>
+                            {renderQuestionItem(q, part1Questions.length + idx + 1)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* PHẦN III: TRẢ LỜI NGẮN */}
+                  <section id="section-part3" className="space-y-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                      <div>
+                        <h3 className="font-extrabold text-sm text-emerald-900 uppercase">
+                          PHẦN III. Câu hỏi trả lời ngắn.
+                        </h3>
+                        <p className="text-[11px] italic text-slate-500">
+                          Thí sinh trả lời từ câu 1 đến câu {part3Questions.length}. Điền kết quả số vào ô trả lời.
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-bold">
+                        {part3Questions.length} câu ({(part3Questions.length * 0.5).toFixed(2)}đ)
+                      </span>
+                    </div>
+
+                    {part3Questions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-emerald-200 p-6 text-center text-xs text-slate-400">
+                        Chưa có câu hỏi trong Phần III.
+                      </div>
+                    ) : (
+                      <div className="space-y-5">
+                        {part3Questions.map((q, idx) => (
+                          <div id={`q-${q.id}`} key={q.id}>
+                            {renderQuestionItem(q, part1Questions.length + part2Questions.length + idx + 1)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* PHẦN IV: TỰ LUẬN (CHO ĐỀ ĐỊNH KỲ) */}
+                  {(format === 'periodic_4_parts' || part4Questions.length > 0) && (
+                    <section id="section-part4" className="space-y-4 pt-4 border-t border-slate-200">
+                      <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                        <div>
+                          <h3 className="font-extrabold text-sm text-purple-900 uppercase">
+                            PHẦN IV. Câu hỏi tự luận.
+                          </h3>
+                          <p className="text-[11px] italic text-slate-500">
+                            Thí sinh trình bày lời giải chi tiết theo các bước sư phạm.
+                          </p>
+                        </div>
+                        <span className="rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs font-bold">
+                          {part4Questions.length} câu ({(part4Questions.length * 2.0).toFixed(2)}đ)
+                        </span>
+                      </div>
+
+                      <div className="space-y-5">
+                        {part4Questions.map((q, idx) => (
+                          <div id={`q-${q.id}`} key={q.id}>
+                            {renderQuestionItem(q, part1Questions.length + part2Questions.length + part3Questions.length + idx + 1)}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              )}
 
               {/* Chân trang đề thi */}
               <div className="border-t border-slate-300 pt-4 mt-8 flex justify-between items-center text-[11px] text-slate-500 italic">
@@ -2564,7 +2871,7 @@ function ExamEditorContent() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
                 <Upload className="h-5 w-5 text-indigo-600" />
-                Nhập Đề Thi Từ File Word Hoặc LaTeX
+                Nhập Đề Thi Từ File Word, LaTeX Hoặc PDF
               </h3>
               <button
                 type="button"
@@ -2633,6 +2940,23 @@ function ExamEditorContent() {
               </div>
             ) : importTab === 'latex' ? (
               <div className="space-y-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 text-purple-700 px-3.5 py-1.5 text-xs font-bold hover:bg-purple-100 transition cursor-pointer">
+                    <FileCode className="h-3.5 w-3.5" />
+                    <span>Tải file .tex / .txt từ máy</span>
+                    <input
+                      type="file"
+                      accept=".tex,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUniversalFileUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <span className="text-[11px] text-slate-500 italic">Hoặc dán trực tiếp mã nguồn vào ô bên dưới</span>
+                </div>
                 <p className="text-xs text-slate-600">Dán mã nguồn các câu hỏi gói <code className="bg-slate-100 px-1 py-0.5 rounded text-purple-700 font-mono">ex_test</code> (chứa các khối <code className="bg-slate-100 px-1 py-0.5 rounded text-purple-700 font-mono">\begin&#123;ex&#125;...\end&#123;ex&#125;</code>):</p>
                 <textarea
                   rows={8}
@@ -3009,6 +3333,18 @@ function ExamEditorContent() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* 10. OVERLAY LOADING KHI ĐANG PHÂN TÍCH FILE */}
+      {isParsingWord && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="rounded-3xl bg-white p-6 shadow-2xl flex flex-col items-center gap-3 max-w-sm text-center border border-slate-200">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <h4 className="font-extrabold text-slate-800 text-sm">Đang phân tích & trích xuất câu hỏi...</h4>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Hệ thống đang bóc tách công thức toán, MathType và hình vẽ từ file. Vui lòng đợi trong giây lát.
+            </p>
           </div>
         </div>
       )}
