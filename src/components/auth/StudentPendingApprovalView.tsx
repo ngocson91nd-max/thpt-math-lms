@@ -58,6 +58,20 @@ export const StudentPendingApprovalView: React.FC = () => {
 
       if (user) {
         setPendingRequests(getPendingClassRequestsForUser(user.id));
+
+        // Kiểm tra xem Thầy Sơn đã phê duyệt vào lớp trên Cloud chưa
+        fetch(`/api/cloud-sync?userId=${user.id}`)
+          .then((r) => r.json())
+          .then((res) => {
+            if (res.success && Array.isArray(res.approvedClasses) && res.approvedClasses.length > 0) {
+              const studentClassesKey = `lms_student_classes_${user.id}`;
+              const existing: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
+              const merged = Array.from(new Set([...existing, ...res.approvedClasses]));
+              localStorage.setItem(studentClassesKey, JSON.stringify(merged));
+              window.location.reload();
+            }
+          })
+          .catch(() => {});
       }
     }
   }, [user]);
@@ -95,6 +109,18 @@ export const StudentPendingApprovalView: React.FC = () => {
     if (res.success) {
       setPendingRequests((prev) => [...prev, classId]);
       setRequestNotice(res.message);
+
+      // Đồng bộ ngay lập tức lên Cloud để mọi trình duyệt của Thầy Sơn nhận được
+      fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_join',
+          classId,
+          user,
+        }),
+      }).catch(console.error);
+
       setTimeout(() => setRequestNotice(null), 4000);
     }
   };
