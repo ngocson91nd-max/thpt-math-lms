@@ -830,6 +830,12 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                       <span className="rounded-lg bg-blue-100/80 px-2.5 py-1 text-xs font-bold text-blue-700">
                         Toán Lớp {exam.grade}
                       </span>
+                      {(exam.exam_mode === 'pdf_view' || exam.pdf_url) && (
+                        <span className="rounded-lg bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200 flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          Đề PDF
+                        </span>
+                      )}
                       {exam.format === 'periodic_4_parts' ? (
                         <span className="rounded-lg bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200">
                           Định kỳ / HSG (4 Phần)

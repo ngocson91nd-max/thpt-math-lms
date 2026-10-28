@@ -10,6 +10,8 @@ import { gradeExamSubmission } from '@/lib/grading/grader';
 import { createClient } from '@/lib/supabase/client';
 import { ExamCalculator } from '@/components/exam/ExamCalculator';
 import { ExamFormulaSheetModal } from '@/components/exam/ExamFormulaSheetModal';
+import PdfExamViewer from '@/components/exam/PdfExamViewer';
+import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
 import {
   Clock,
   Flag,
@@ -54,8 +56,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const [essayImages, setEssayImages] = useState<Record<string, string[]>>({});
   const [timeLeft, setTimeLeft] = useState((exam?.duration_minutes || 90) * 60);
 
-  // Chế độ làm bài: 'focus' (từng câu) hoặc 'scroll' (cuộn như đề thi giấy Azota)
-  const [viewMode, setViewMode] = useState<'focus' | 'scroll'>('scroll');
+  // Chế độ làm bài: 'focus' (từng câu), 'scroll' (cuộn như đề thi giấy Azota), hoặc 'pdf' (chia đôi màn hình: file PDF & phiếu tô)
+  const [viewMode, setViewMode] = useState<'focus' | 'scroll' | 'pdf'>('scroll');
+  const [loadedPdfUrl, setLoadedPdfUrl] = useState<string | null>(null);
+  const [pdfMobileTab, setPdfMobileTab] = useState<'pdf' | 'answers'>('pdf');
 
   // Bộ lọc câu hỏi: 'all' | 'unanswered' | 'flagged'
   const [filterMode, setFilterMode] = useState<'all' | 'unanswered' | 'flagged'>('all');
@@ -88,6 +92,22 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   // 1. Tải đề thi từ Supabase hoặc localStorage
   useEffect(() => {
+    const checkAndLoadPdf = (targetExam: Exam) => {
+      if (targetExam.pdf_url) {
+        if (targetExam.pdf_url.startsWith('idb:')) {
+          const idbKey = targetExam.pdf_url.replace('idb:', '');
+          getPdfFromIndexedDb(idbKey).then((data) => {
+            if (data) setLoadedPdfUrl(data);
+          });
+        } else {
+          setLoadedPdfUrl(targetExam.pdf_url);
+        }
+      }
+      if (targetExam.exam_mode === 'pdf_view' || targetExam.pdf_url) {
+        setViewMode((curr) => (curr === 'scroll' ? 'pdf' : curr));
+      }
+    };
+
     const mockExam = MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
 
     if (typeof window !== 'undefined') {
@@ -101,10 +121,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             if (mockExam) {
               setExam(mockExam);
               setTimeLeft(mockExam.duration_minutes * 60);
+              checkAndLoadPdf(mockExam);
               return;
             }
             setExam(found);
             setTimeLeft(found.duration_minutes * 60);
+            checkAndLoadPdf(found);
             return;
           }
         } catch (e) {
@@ -116,6 +138,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     if (mockExam) {
       setExam(mockExam);
       setTimeLeft(mockExam.duration_minutes * 60);
+      checkAndLoadPdf(mockExam);
       return;
     }
 
@@ -128,8 +151,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         .single()
         .then(({ data, error }) => {
           if (!error && data) {
-            setExam(data as any);
-            setTimeLeft(data.duration_minutes * 60);
+            const loaded = data as any;
+            setExam(loaded);
+            setTimeLeft(loaded.duration_minutes * 60);
+            checkAndLoadPdf(loaded);
           }
         });
     }
@@ -246,6 +271,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   }, []);
 
   const questions: Question[] = exam?.questions || [];
+  const part1Questions = questions.filter((q) => q.part === 1 || q.type === 'single_choice' || q.type === 'multiple_choice');
+  const part2Questions = questions.filter((q) => q.part === 2 || q.type === 'true_false');
+  const part3Questions = questions.filter((q) => q.part === 3 || q.type === 'short_answer');
+  const part4Questions = questions.filter((q) => q.part === 4 || q.type === 'essay');
 
   // 6. BỘ ĐẾM THỜI GIAN THẬT & TỰ ĐỘNG NỘP KHI HẾT GIỜ
   useEffect(() => {
@@ -824,8 +853,23 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
           <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-          {/* Nút chuyển đổi Chế độ làm bài: Từng câu vs Cuộn toàn bộ */}
+          {/* Nút chuyển đổi Chế độ làm bài: Đề PDF vs Từng câu vs Cuộn toàn bộ */}
           <div className="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+            {(exam.exam_mode === 'pdf_view' || exam.pdf_url || loadedPdfUrl) && (
+              <button
+                type="button"
+                onClick={() => setViewMode('pdf')}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                  viewMode === 'pdf'
+                    ? 'bg-rose-600 text-white shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Đọc đề trực tiếp trên file PDF và tô phiếu đáp án bên cạnh"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Đề PDF</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setViewMode('scroll')}
@@ -958,7 +1002,388 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      {viewMode === 'pdf' ? (
+        /* CHẾ ĐỘ 3: ĐỀ THI PDF & PHIẾU LÀM BÀI ĐIỆN TỬ (Split-Screen PDF Mode) */
+        <div className="space-y-4">
+          {/* Mobile Switcher Tab (Chỉ hiện trên điện thoại / tablet nhỏ) */}
+          <div className="lg:hidden flex items-center justify-between rounded-2xl bg-slate-100 p-1.5 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setPdfMobileTab('pdf')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition cursor-pointer ${
+                pdfMobileTab === 'pdf'
+                  ? 'bg-rose-600 text-white shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Xem Đề PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPdfMobileTab('answers')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition cursor-pointer ${
+                pdfMobileTab === 'answers'
+                  ? 'bg-blue-600 text-white shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CheckCircle className="h-4 w-4" />
+              <span>Phiếu Làm Bài ({answeredCount}/{questions.length})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* CỘT TRÁI: KHUNG ĐỌC ĐỀ PDF (7 Cột) */}
+            <div className={`lg:col-span-7 xl:col-span-7 ${pdfMobileTab === 'pdf' ? 'block' : 'hidden lg:block'}`}>
+              <div className="sticky top-20 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden p-2">
+                {loadedPdfUrl || exam.pdf_url ? (
+                  <PdfExamViewer
+                    pdfUrl={loadedPdfUrl || exam.pdf_url || ''}
+                    title={exam.title}
+                    className="h-[calc(100vh-140px)] min-h-[620px]"
+                  />
+                ) : (
+                  <div className="h-[620px] flex flex-col items-center justify-center text-slate-400 gap-3">
+                    <FileText className="h-12 w-12 text-slate-300 animate-pulse" />
+                    <p className="text-sm">Đang tải file đề PDF...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CỘT PHẢI: PHIẾU TÔ ĐÁP ÁN ĐIỆN TỬ OMR SHEET (5 Cột) */}
+            <div className={`lg:col-span-5 xl:col-span-5 ${pdfMobileTab === 'answers' ? 'block' : 'hidden lg:block'}`}>
+              <div className="sticky top-20 max-h-[calc(100vh-120px)] flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                {/* Header Phiếu */}
+                <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/50 p-4 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        PHIẾU TRẢ LỜI BÀI THI
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Đọc câu hỏi trên file PDF và chọn / điền đáp án tương ứng
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block rounded-xl bg-blue-600 px-3 py-1 text-xs font-black text-white shadow-2xs">
+                        {answeredCount}/{questions.length} câu
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Thanh Tiến Độ */}
+                  <div className="mt-3 w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${(answeredCount / Math.max(1, questions.length)) * 100}%` }}
+                    />
+                  </div>
+
+                  {/* Quick question pill bar */}
+                  <div className="mt-3 flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                    {questions.map((q, qIdx) => {
+                      const isDone = isQuestionAnswered(q);
+                      const isFlag = flagged[q.id];
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(`omr-q-${q.id}`);
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }}
+                          className={`h-6 min-w-[24px] px-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            isFlag
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : isDone
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                          title={`Câu ${qIdx + 1}: ${isDone ? 'Đã làm' : 'Chưa làm'}`}
+                        >
+                          {qIdx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Danh Sách Các Phần Trong Phiếu */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6">
+                  {/* PHẦN I */}
+                  {part1Questions.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-blue-600 text-white px-2 py-0.5 text-xs font-black">
+                            PHẦN I
+                          </span>
+                          <span className="font-bold text-xs text-slate-800">
+                            TRẮC NGHIỆM ({part1Questions.length} câu • 0.25đ/câu)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {part1Questions.map((q) => {
+                          const globalIdx = questions.findIndex((item) => item.id === q.id) + 1;
+                          const selectedVal = answers[q.id];
+                          const isFlag = flagged[q.id];
+
+                          return (
+                            <div
+                              key={q.id}
+                              id={`omr-q-${q.id}`}
+                              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 hover:border-blue-300 hover:bg-blue-50/20 transition"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-slate-800 w-14">
+                                  Câu {globalIdx}:
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFlag(q.id)}
+                                  className={`p-1 rounded-md transition ${isFlag ? 'text-amber-500' : 'text-slate-300 hover:text-slate-500'}`}
+                                  title="Cắm cờ"
+                                >
+                                  <Flag className="h-3.5 w-3.5 fill-current" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 sm:gap-2">
+                                {['A', 'B', 'C', 'D'].map((opt) => {
+                                  const isChecked = selectedVal === opt;
+                                  return (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => handleSingleChoiceSelect(q.id, opt)}
+                                      className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full text-xs font-bold transition flex items-center justify-center cursor-pointer ${
+                                        isChecked
+                                          ? 'bg-blue-600 text-white ring-2 ring-blue-300 font-black shadow-xs scale-105'
+                                          : 'border border-slate-300 text-slate-700 bg-slate-50 hover:border-blue-400 hover:bg-white'
+                                      }`}
+                                    >
+                                      {opt}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PHẦN II */}
+                  {part2Questions.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-indigo-600 text-white px-2 py-0.5 text-xs font-black">
+                            PHẦN II
+                          </span>
+                          <span className="font-bold text-xs text-slate-800">
+                            TRẮC NGHIỆM ĐÚNG SAI ({part2Questions.length} câu)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {part2Questions.map((q) => {
+                          const globalIdx = questions.findIndex((item) => item.id === q.id) + 1;
+                          const currentTfAnswers = answers[q.id] || {};
+                          const isFlag = flagged[q.id];
+
+                          return (
+                            <div
+                              key={q.id}
+                              id={`omr-q-${q.id}`}
+                              className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2"
+                            >
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                <span className="font-bold text-xs text-slate-900">
+                                  Câu {globalIdx} (Đúng / Sai 4 ý):
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFlag(q.id)}
+                                  className={`p-1 rounded-md transition ${isFlag ? 'text-amber-500' : 'text-slate-300 hover:text-slate-500'}`}
+                                  title="Cắm cờ"
+                                >
+                                  <Flag className="h-3.5 w-3.5 fill-current" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {['a', 'b', 'c', 'd'].map((sub) => {
+                                  const val = currentTfAnswers[sub];
+                                  return (
+                                    <div
+                                      key={sub}
+                                      className="flex items-center justify-between bg-slate-50 rounded-xl px-2.5 py-1.5 border border-slate-200"
+                                    >
+                                      <span className="text-xs font-bold text-slate-700 uppercase">
+                                        Ý {sub})
+                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTrueFalseSelect(q.id, sub, true)}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                                            val === true
+                                              ? 'bg-emerald-600 text-white ring-1 ring-emerald-300 shadow-2xs font-extrabold'
+                                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                                          }`}
+                                        >
+                                          Đúng
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTrueFalseSelect(q.id, sub, false)}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                                            val === false
+                                              ? 'bg-rose-600 text-white ring-1 ring-rose-300 shadow-2xs font-extrabold'
+                                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-700'
+                                          }`}
+                                        >
+                                          Sai
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PHẦN III */}
+                  {part3Questions.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-amber-600 text-white px-2 py-0.5 text-xs font-black">
+                            PHẦN III
+                          </span>
+                          <span className="font-bold text-xs text-slate-800">
+                            TRẢ LỜI NGẮN ({part3Questions.length} câu • 0.5đ/câu)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {part3Questions.map((q) => {
+                          const globalIdx = questions.findIndex((item) => item.id === q.id) + 1;
+                          const currentVal = answers[q.id] || '';
+                          const isFlag = flagged[q.id];
+
+                          return (
+                            <div
+                              key={q.id}
+                              id={`omr-q-${q.id}`}
+                              className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs text-slate-900">
+                                  Câu {globalIdx} (Điền kết quả số):
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFlag(q.id)}
+                                  className={`p-1 rounded-md transition ${isFlag ? 'text-amber-500' : 'text-slate-300 hover:text-slate-500'}`}
+                                  title="Cắm cờ"
+                                >
+                                  <Flag className="h-3.5 w-3.5 fill-current" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={currentVal}
+                                  onChange={(e) => handleShortAnswerChange(q.id, e.target.value)}
+                                  placeholder="Điền đáp số (VD: 1440 hoặc -2.5 hoặc 3/4)..."
+                                  className="flex-1 font-mono font-bold text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (currentVal.startsWith('-')) {
+                                      handleShortAnswerChange(q.id, currentVal.slice(1));
+                                    } else {
+                                      handleShortAnswerChange(q.id, '-' + currentVal);
+                                    }
+                                  }}
+                                  className="rounded-xl border border-slate-300 bg-white px-2.5 py-2 text-xs font-mono font-bold text-slate-700 hover:bg-slate-100"
+                                  title="Thêm/Bỏ dấu trừ (-)"
+                                >
+                                  ±
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PHẦN IV (Tự luận nếu có) */}
+                  {part4Questions.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-emerald-600 text-white px-2 py-0.5 text-xs font-black">
+                            PHẦN IV
+                          </span>
+                          <span className="font-bold text-xs text-slate-800">
+                            TỰ LUẬN ({part4Questions.length} câu)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {part4Questions.map((q) => {
+                          const globalIdx = questions.findIndex((item) => item.id === q.id) + 1;
+                          return (
+                            <div key={q.id} id={`omr-q-${q.id}`} className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                              <span className="font-bold text-xs text-slate-900">Câu {globalIdx} (Tự luận):</span>
+                              {renderAnswerControls(q)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Phiếu: Nút nộp bài trực tiếp */}
+                <div className="border-t border-slate-200 bg-slate-50 p-4 shrink-0 flex items-center justify-between gap-3">
+                  <div className="text-xs text-slate-500">
+                    <span className="font-bold text-slate-900">{answeredCount}/{questions.length}</span> câu đã hoàn thành
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSubmitModal(true)}
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer active:scale-95"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>Nộp Bài Thi Ngay</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         {/* KHU VỰC NỘI DUNG ĐỀ THI (3 Cột) */}
         <div className="lg:col-span-3 space-y-6">
           {/* CHẾ ĐỘ 1: CUỘN TOÀN BỘ ĐỀ (Scroll View - Giống đề thi giấy Azota) */}
@@ -1338,6 +1763,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
       </div>
+      )}
 
       {/* 3. MODAL XÁC NHẬN NỘP BÀI THÔNG MINH */}
       {showSubmitModal && (

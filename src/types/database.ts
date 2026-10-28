@@ -145,6 +145,9 @@ export interface Exam {
   end_time?: string;
   status: ExamStatus;
   format?: 'standard_3_parts' | 'periodic_4_parts' | 'custom';
+  exam_mode?: 'interactive' | 'pdf_view';
+  pdf_url?: string;
+  solution_pdf_url?: string;
   part_structure?: {
     part1_count?: number;
     part2_count?: number;
