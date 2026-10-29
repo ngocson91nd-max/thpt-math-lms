@@ -202,6 +202,9 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         .then((d) => {
           if (d.success && Array.isArray(d.approvedClasses) && typeof window !== 'undefined') {
             localStorage.setItem(`lms_student_classes_${user.id}`, JSON.stringify(d.approvedClasses));
+            if (user.email) {
+              localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(d.approvedClasses));
+            }
             window.dispatchEvent(new Event('lms_enrollment_changed'));
           }
         })
@@ -610,7 +613,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   }
 
   // 2. Kiểm tra quyền vào lớp đối với đề thi giới hạn lớp
-  if (user && isStudent && exam && !isExamPermittedForStudent(exam, user.id, classes)) {
+  if (user && isStudent && exam && !isExamPermittedForStudent(exam, user.id, classes, user.email)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
@@ -1773,107 +1776,150 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
               </label>
             </div>
 
-            {/* Danh sách các nút số câu hỏi */}
-            <div className="max-h-[50vh] overflow-y-auto pr-1 space-y-2">
-              {showOmrQuick ? (
-                /* Chế độ Phiếu Tô Đáp Án Nhanh OMR (Giống Azota) */
-                <div className="space-y-2.5">
-                  {filteredQuestionList.map(({ q, idx }) => {
-                    const isAnswered = isQuestionAnswered(q);
-                    const isFlag = flagged[q.id];
-                    const selectedVal = answers[q.id];
+            {/* Danh sách các nút số câu hỏi chia theo từng phần */}
+            <div className="max-h-[55vh] overflow-y-auto pr-1 space-y-4">
+              {([1, 2, 3, 4] as const).map((partNum) => {
+                const partItems = filteredQuestionList.filter(({ q }) => getPartDetails(q).part === partNum);
+                if (partItems.length === 0) return null;
 
-                    return (
-                      <div
-                        key={q.id}
-                        className={`p-2.5 rounded-2xl border text-xs transition ${
-                          idx === currentIndex
-                            ? 'border-blue-500 bg-blue-50/40 ring-1 ring-blue-400'
-                            : 'border-slate-200 bg-slate-50/50'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <button
-                            type="button"
-                            onClick={() => jumpToQuestion(idx, q.id)}
-                            className="font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
-                          >
-                            Câu {idx + 1}
-                            {isFlag && <span className="text-amber-500 ml-1">🚩</span>}
-                          </button>
-                          <span className="text-[10px] text-slate-400 uppercase">
-                            {q.type === 'single_choice' ? 'TN 1 đáp án' : q.type === 'true_false' ? 'Đúng/Sai' : 'Tự luận/Số'}
-                          </span>
-                        </div>
+                const partHeader =
+                  partNum === 1
+                    ? { badgeColor: 'bg-blue-600', badgeText: 'PHẦN I', sub: 'Trắc nghiệm 4 lựa chọn' }
+                    : partNum === 2
+                    ? { badgeColor: 'bg-indigo-600', badgeText: 'PHẦN II', sub: 'Đúng / Sai' }
+                    : partNum === 3
+                    ? { badgeColor: 'bg-amber-600', badgeText: 'PHẦN III', sub: 'Trả lời ngắn' }
+                    : { badgeColor: 'bg-emerald-600', badgeText: 'PHẦN IV', sub: 'Tự luận' };
 
-                        {/* Nút tô A, B, C, D trực tiếp cho Phần I */}
-                        {q.type === 'single_choice' && (
-                          <div className="flex items-center justify-between gap-1">
-                            {['A', 'B', 'C', 'D'].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => handleSingleChoiceSelect(q.id, opt)}
-                                className={`h-7 w-7 rounded-full text-[11px] font-bold border transition cursor-pointer ${
-                                  selectedVal === opt
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                                    : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {q.type !== 'single_choice' && (
-                          <div
-                            onClick={() => jumpToQuestion(idx, q.id)}
-                            className="text-center py-1 text-[11px] text-blue-600 font-semibold cursor-pointer hover:underline"
-                          >
-                            {isAnswered ? '✓ Đã hoàn thành' : 'Chưa điền đáp án'}
-                          </div>
-                        )}
+                return (
+                  <div key={partNum} className="space-y-2 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                    <div className="flex items-center justify-between px-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`rounded-md ${partHeader.badgeColor} px-1.5 py-0.5 text-[10px] font-black text-white`}>
+                          {partHeader.badgeText}
+                        </span>
+                        <span className="font-bold text-[11px] text-slate-800">
+                          {partHeader.sub}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Chế độ Lưới Ô Vuông Số Câu Hỏi Chuẩn */
-                <div className="grid grid-cols-5 gap-2">
-                  {filteredQuestionList.map(({ q, idx }) => {
-                    const isCurrent = idx === currentIndex;
-                    const isFlag = flagged[q.id];
-                    const isDone = isQuestionAnswered(q);
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {partItems.length} câu
+                      </span>
+                    </div>
 
-                    let btnClass = 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
-                    if (isCurrent) {
-                      btnClass = 'ring-2 ring-blue-600 bg-blue-600 text-white font-bold shadow-xs';
-                    } else if (isFlag) {
-                      btnClass = 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
-                    } else if (isDone) {
-                      btnClass = 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
-                    }
+                    {showOmrQuick ? (
+                      /* Chế độ Phiếu Tô Đáp Án Nhanh OMR theo phần */
+                      <div className="space-y-2">
+                        {partItems.map(({ q, idx }) => {
+                          const isAnswered = isQuestionAnswered(q);
+                          const isFlag = flagged[q.id];
+                          const selectedVal = answers[q.id];
 
-                    return (
-                      <button
-                        key={q.id}
-                        type="button"
-                        onClick={() => jumpToQuestion(idx, q.id)}
-                        className={`relative flex h-9 w-full items-center justify-center rounded-xl border text-xs transition cursor-pointer ${btnClass}`}
-                      >
-                        {idx + 1}
-                        {isFlag && (
-                          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                          return (
+                            <div
+                              key={q.id}
+                              className={`p-2.5 rounded-2xl border text-xs transition ${
+                                idx === currentIndex
+                                  ? 'border-blue-500 bg-blue-50/40 ring-1 ring-blue-400'
+                                  : 'border-slate-200 bg-slate-50/50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => jumpToQuestion(idx, q.id)}
+                                  className="font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
+                                >
+                                  Câu {idx + 1}
+                                  {isFlag && <span className="text-amber-500 ml-1">🚩</span>}
+                                </button>
+                                <span className="text-[10px] text-slate-400">
+                                  {isAnswered ? '✓ Đã làm' : 'Chưa làm'}
+                                </span>
+                              </div>
+
+                              {/* Nút tô A, B, C, D trực tiếp cho Phần I */}
+                              {q.type === 'single_choice' && (
+                                <div className="flex items-center justify-between gap-1">
+                                  {['A', 'B', 'C', 'D'].map((opt) => (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => handleSingleChoiceSelect(q.id, opt)}
+                                      className={`h-7 w-7 rounded-full text-[11px] font-bold border transition cursor-pointer ${
+                                        selectedVal === opt
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                          : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                                      }`}
+                                    >
+                                      {opt}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Đúng / Sai cho Phần II */}
+                              {q.type === 'true_false' && (
+                                <div
+                                  onClick={() => jumpToQuestion(idx, q.id)}
+                                  className="text-center py-1 text-[11px] text-indigo-600 font-semibold cursor-pointer hover:underline"
+                                >
+                                  {isAnswered ? '✓ Đã chọn 4 ý' : 'Bấm để chọn 4 ý Đúng/Sai'}
+                                </div>
+                              )}
+
+                              {/* Trả lời ngắn / Tự luận */}
+                              {q.type !== 'single_choice' && q.type !== 'true_false' && (
+                                <div
+                                  onClick={() => jumpToQuestion(idx, q.id)}
+                                  className="text-center py-1 text-[11px] text-amber-600 font-semibold cursor-pointer hover:underline"
+                                >
+                                  {isAnswered ? '✓ ' + (answers[q.id] || 'Đã điền') : 'Bấm để điền đáp số'}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Chế độ Lưới Ô Vuông theo từng phần */
+                      <div className="grid grid-cols-5 gap-2">
+                        {partItems.map(({ q, idx }) => {
+                          const isCurrent = idx === currentIndex;
+                          const isFlag = flagged[q.id];
+                          const isDone = isQuestionAnswered(q);
+
+                          let btnClass = 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
+                          if (isCurrent) {
+                            btnClass = 'ring-2 ring-blue-600 bg-blue-600 text-white font-bold shadow-xs';
+                          } else if (isFlag) {
+                            btnClass = 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
+                          } else if (isDone) {
+                            btnClass = 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
+                          }
+
+                          return (
+                            <button
+                              key={q.id}
+                              type="button"
+                              onClick={() => jumpToQuestion(idx, q.id)}
+                              className={`relative flex h-9 w-full items-center justify-center rounded-xl border text-xs transition cursor-pointer ${btnClass}`}
+                            >
+                              {idx + 1}
+                              {isFlag && (
+                                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Chú thích màu sắc */}

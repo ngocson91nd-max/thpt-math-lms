@@ -486,21 +486,24 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     e.preventDefault();
     if (!newStudentName.trim() || !newStudentEmail.trim()) return;
 
+    const cleanEm = newStudentEmail.trim().toLowerCase();
     const newId =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `cm-${Date.now()}`;
 
+    const studentUserId = `stu-${Date.now()}`;
+
     const newMember: ClassMember = {
       id: newId,
       class_id: currentClass.id,
-      user_id: `stu-${Date.now()}`,
+      user_id: studentUserId,
       role: 'student',
       status: 'active',
       joined_at: new Date().toISOString(),
       profile: {
-        id: `stu-${Date.now()}`,
-        email: newStudentEmail.trim().toLowerCase(),
+        id: studentUserId,
+        email: cleanEm,
         full_name: newStudentName.trim(),
         role: 'student',
         grade: currentClass.grade,
@@ -511,6 +514,31 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
     const updated = [newMember, ...members];
     saveMembersToStorage(updated);
+
+    // Lưu quyền lớp học cho học sinh theo cả user_id và email
+    if (typeof window !== 'undefined') {
+      const emailClassesKey = `lms_student_classes_${cleanEm}`;
+      try {
+        const enr: string[] = JSON.parse(localStorage.getItem(emailClassesKey) || '[]');
+        if (!enr.includes(currentClass.id)) {
+          enr.push(currentClass.id);
+          localStorage.setItem(emailClassesKey, JSON.stringify(enr));
+        }
+      } catch {}
+    }
+
+    // Đồng bộ lập tức lên Supabase Cloud API
+    fetch('/api/cloud-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve_student',
+        classId: currentClass.id,
+        student: newMember.profile,
+        userId: studentUserId,
+      }),
+    }).catch(console.error);
+
     setShowAddMemberModal(false);
     setNewStudentName('');
     setNewStudentEmail('');
@@ -563,8 +591,23 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     );
     if (!isConfirmed) return;
 
+    const targetMember = members.find((m) => m.id === memberId);
     const updated = members.filter((m) => m.id !== memberId);
     saveMembersToStorage(updated);
+
+    // Xóa quyền trên Cloud
+    if (targetMember) {
+      fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'remove_student',
+          classId: currentClass.id,
+          userId: targetMember.user_id,
+          student: targetMember.profile,
+        }),
+      }).catch(console.error);
+    }
   };
 
   return (

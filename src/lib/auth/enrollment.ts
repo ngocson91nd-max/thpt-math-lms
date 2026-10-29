@@ -4,9 +4,10 @@ import { MOCK_CLASSES, MOCK_CLASS_MEMBERS } from '../supabase/mockStore';
 /**
  * Lấy danh sách ID các lớp học mà học sinh đã tham gia chính thức
  * CHỈ CHẤP NHẬN các lớp học HIỆN HỮU và ĐANG HOẠT ĐỘNG trên hệ thống
+ * Hỗ trợ nhận diện qua cả ID học sinh và Email đăng nhập
  */
-export const getEnrolledClassIdsForUser = (userId: string): string[] => {
-  if (!userId) {
+export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): string[] => {
+  if (!userId && !userEmail) {
     return [];
   }
 
@@ -15,42 +16,52 @@ export const getEnrolledClassIdsForUser = (userId: string): string[] => {
     return [];
   }
 
+  const cleanEmail = (userEmail || '').trim().toLowerCase();
+
   // 1. Lấy danh sách các lớp học hiện có thực tế trên hệ thống (từ lms_classes)
   const classesRaw = storage.getItem('lms_classes');
   const activeClasses: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : [];
   const activeClassIdSet = new Set<string>(activeClasses.map((c) => c.id));
   const enrolledSet = new Set<string>();
 
-  // 2. Kiểm tra bộ nhớ cache riêng của học sinh
-  try {
-    const cached = storage.getItem(`lms_student_classes_${userId}`);
-    if (cached) {
-      const parsed: string[] = JSON.parse(cached);
-      if (Array.isArray(parsed)) {
-        if (activeClasses.length > 0) {
-          // Lọc bỏ toàn bộ các lớp đã bị xóa trên Cloud nếu activeClasses đã nạp xong
-          const validParsed = parsed.filter((id) => activeClassIdSet.has(id));
-          validParsed.forEach((id) => enrolledSet.add(id));
-          if (validParsed.length !== parsed.length) {
-            storage.setItem(`lms_student_classes_${userId}`, JSON.stringify(validParsed));
+  // 2. Kiểm tra bộ nhớ cache riêng của học sinh (theo cả userId và email)
+  const checkCachedKeys = [
+    userId ? `lms_student_classes_${userId}` : null,
+    cleanEmail ? `lms_student_classes_${cleanEmail}` : null,
+  ].filter(Boolean) as string[];
+
+  checkCachedKeys.forEach((key) => {
+    try {
+      const cached = storage.getItem(key);
+      if (cached) {
+        const parsed: string[] = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          if (activeClasses.length > 0) {
+            const validParsed = parsed.filter((id) => activeClassIdSet.has(id));
+            validParsed.forEach((id) => enrolledSet.add(id));
+          } else {
+            parsed.forEach((id) => enrolledSet.add(id));
           }
-        } else {
-          // Khi activeClasses chưa kịp nạp vào localStorage, vẫn bảo lưu các lớp của học sinh để tránh bị đá văng
-          parsed.forEach((id) => enrolledSet.add(id));
         }
       }
+    } catch (e) {
+      console.error(e);
     }
-  } catch (e) {
-    console.error(e);
-  }
+  });
 
-  // 3. Kiểm tra danh sách thành viên trong từng lớp hiện hữu
+  // 3. Kiểm tra danh sách thành viên trong từng lớp hiện hữu (đối chiếu cả userId và email)
   try {
     activeClasses.forEach((c) => {
       const memRaw = storage.getItem(`lms_class_members_${c.id}`);
       if (memRaw) {
         const mems: ClassMember[] = JSON.parse(memRaw);
-        if (mems.some((m) => m.user_id === userId && m.status === 'active')) {
+        const isMember = mems.some((m) => {
+          if (m.status !== 'active') return false;
+          if (userId && m.user_id === userId) return true;
+          if (cleanEmail && m.profile?.email && m.profile.email.trim().toLowerCase() === cleanEmail) return true;
+          return false;
+        });
+        if (isMember) {
           enrolledSet.add(c.id);
         }
       }
@@ -70,7 +81,7 @@ export const getEnrolledClassIdsForUser = (userId: string): string[] => {
 export const isUserEnrolledInAnyClass = (user: Profile | null): boolean => {
   if (!user) return false;
   if (user.role === 'admin' || user.role === 'teacher') return true;
-  const enrolledIds = getEnrolledClassIdsForUser(user.id);
+  const enrolledIds = getEnrolledClassIdsForUser(user.id, user.email);
   return enrolledIds.length > 0;
 };
 
@@ -334,12 +345,13 @@ export const rejectStudentJoinRequest = (classId: string, studentId: string): { 
 export const isExamPermittedForStudent = (
   exam: Exam,
   studentId?: string,
-  allClasses: ClassItem[] = []
+  allClasses: ClassItem[] = [],
+  studentEmail?: string
 ): boolean => {
-  if (!studentId) return false;
+  if (!studentId && !studentEmail) return false;
 
   // BƯỚC 1: Kiểm tra học sinh đã vào lớp nào chưa
-  const enrolledIds = getEnrolledClassIdsForUser(studentId);
+  const enrolledIds = getEnrolledClassIdsForUser(studentId || '', studentEmail);
   if (enrolledIds.length === 0) {
     // CHƯA VÀO LỚP -> CHẶN 100%!
     return false;

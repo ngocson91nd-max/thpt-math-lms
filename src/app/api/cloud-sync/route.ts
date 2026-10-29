@@ -297,6 +297,25 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
       }
 
+      // Đảm bảo Profile đã tồn tại trong Supabase trước khi ghi vào class_members
+      if (studentProfile) {
+        try {
+          await supabase.from('profiles').upsert([
+            {
+              id: targetUserId,
+              email: (studentProfile.email || '').trim().toLowerCase() || `${targetUserId}@lms.vn`,
+              full_name: studentProfile.full_name || 'Học sinh',
+              role: 'student',
+              grade: Number(studentProfile.grade) || 12,
+              school_name: studentProfile.school_name || 'THPT Chuyên',
+              phone: studentProfile.phone || '',
+            },
+          ]);
+        } catch (e) {
+          console.warn('Upsert profile notice:', e);
+        }
+      }
+
       const { data: existing } = await supabase
         .from('class_members')
         .select('id')

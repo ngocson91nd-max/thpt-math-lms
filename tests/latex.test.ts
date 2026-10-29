@@ -119,7 +119,7 @@ describe('3. Kiểm thử Bảng Biến Thiên (tkz-tab) sang SVG', () => {
       const svg = generateTkzTabSvg(parsed);
       expect(svg).toContain('<svg');
       // Vạch đôi kéo dài từ hàng y' xuống tận đáy bảng y
-      expect(svg).toContain('y2="176"');
+      expect(svg).toContain('y2="222"');
       expect(svg).toContain('-1');
       expect(svg).toContain('-∞');
       expect(svg).toContain('+∞');

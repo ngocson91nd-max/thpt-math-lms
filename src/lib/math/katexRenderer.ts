@@ -329,7 +329,7 @@ export function renderMathToHtml(content: string): string {
     // Render công thức toán, macros và định dạng bên trong mainText & sideContent
     const renderedMain = renderMathToHtml(mainText);
     const renderedSide = renderMathToHtml(sideContent);
-    const imminiHtml = `<div class="immini-block flex flex-col md:flex-row items-center md:items-start justify-between gap-5 my-3"><div class="immini-content flex-1 min-w-0 leading-relaxed">${renderedMain}</div><div class="immini-figure shrink-0 w-full md:w-auto md:max-w-[42%] flex flex-col items-center justify-center p-2 bg-slate-50/60 rounded-xl border border-slate-200/70 overflow-hidden">${renderedSide}</div></div>`;
+    const imminiHtml = `<div class="immini-block flex flex-col md:flex-row items-center md:items-start justify-between gap-5 my-3"><div class="immini-content flex-1 min-w-0 leading-relaxed">${renderedMain}</div><div class="immini-figure shrink-0 w-full md:w-auto md:max-w-[48%] flex flex-col items-center justify-center p-2.5 bg-white/80 rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">${renderedSide}</div></div>`;
     const token = savePlaceholder(imminiHtml);
 
     text = text.substring(0, imminiIdx) + token + text.substring(g2.nextPos);

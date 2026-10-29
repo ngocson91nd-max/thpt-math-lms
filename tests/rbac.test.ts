@@ -130,5 +130,30 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
     expect(isExamPermittedForStudent(publicExam, enrolledStudentId, classes)).toBe(true);
     expect(isExamPermittedForStudent(myClassExam, enrolledStudentId, classes)).toBe(true);
     expect(isExamPermittedForStudent(otherClassExam, enrolledStudentId, classes)).toBe(false);
+
+    // HỌC SINH VÀO LỚP THEO EMAIL (VD: an.toan12@gmail.com với lớp "1")
+    const class1: any = { id: 'cls-1', name: '1', code: 'TOAN12-6084' };
+    const examClass1: any = {
+      id: 'exam-12-1',
+      title: 'Đề 12-1',
+      access_type: 'restricted',
+      assigned_classes: ['1'],
+    };
+    // Mock localStorage thành viên lớp 1 có email an.toan12@gmail.com
+    localStorage.setItem(
+      'lms_class_members_cls-1',
+      JSON.stringify([
+        {
+          id: 'cm-an',
+          class_id: 'cls-1',
+          user_id: 'stu-random-id',
+          status: 'active',
+          profile: { email: 'an.toan12@gmail.com', full_name: 'Nguyễn Văn An (12 Toán)' },
+        },
+      ])
+    );
+    localStorage.setItem('lms_classes', JSON.stringify([class1]));
+
+    expect(isExamPermittedForStudent(examClass1, 'user-an-diff-id', [class1], 'an.toan12@gmail.com')).toBe(true);
   });
 });
