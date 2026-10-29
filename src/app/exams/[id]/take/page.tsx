@@ -629,11 +629,11 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
     // 1. Đồng bộ lên Supabase Cloud API qua /api/submissions (đảm bảo 100% giáo viên nhận được)
     try {
-      fetch('/api/submissions', {
+      await fetch('/api/submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSubmission),
-      }).catch(console.error);
+      });
     } catch (err) {
       console.warn('API submission save error:', err);
     }

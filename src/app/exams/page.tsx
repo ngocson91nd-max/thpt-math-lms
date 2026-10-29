@@ -239,19 +239,24 @@ export default function ExamsPage() {
       fetchExams();
 
       // 4. Tải danh sách bài nộp để đếm số HS đã thi và hiển thị bài chờ chấm
-      fetch('/api/submissions')
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.success && Array.isArray(d.submissions)) {
-            setAllSubmissions(d.submissions);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_all_submissions', JSON.stringify(d.submissions));
-            }
-          }
-        })
-        .catch(() => {});
+      fetchSubmissions();
     }
   }, []);
+
+  const fetchSubmissions = async () => {
+    try {
+      const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
+      const d = await res.json();
+      if (d.success && Array.isArray(d.submissions)) {
+        setAllSubmissions(d.submissions);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_all_submissions', JSON.stringify(d.submissions));
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi tải danh sách bài nộp:', e);
+    }
+  };
 
   const fetchExams = async () => {
     try {
@@ -292,10 +297,7 @@ export default function ExamsPage() {
     // Đồng bộ tức thì 0ms giữa tất cả các tab trình duyệt
     let bc: BroadcastChannel | null = null;
     const handleSubmissionsSync = () => {
-      try {
-        const raw = localStorage.getItem('lms_all_submissions');
-        if (raw) setAllSubmissions(JSON.parse(raw));
-      } catch {}
+      fetchSubmissions();
       fetchExams();
     };
 
@@ -313,10 +315,17 @@ export default function ExamsPage() {
       };
     }
 
+    // Polling thông minh định kỳ 2.5s để cập nhật kết quả thi thời gian thực từ Cloud
+    // Đảm bảo học sinh nộp bài trên điện thoại/máy tính khác thì màn hình Thầy Sơn cập nhật ngay!
+    const pollInterval = setInterval(() => {
+      fetchSubmissions();
+    }, 2500);
+
     return () => {
       window.removeEventListener('lms_exams_updated', handleSync);
       window.removeEventListener('lms_submissions_updated', handleSubmissionsSync);
       if (bc) bc.close();
+      clearInterval(pollInterval);
     };
   }, []);
 

@@ -150,9 +150,15 @@ export default function GradebookPage() {
       };
     }
 
+    // Polling định kỳ 3s từ Supabase Cloud
+    const pollInterval = setInterval(() => {
+      fetchSubmissions();
+    }, 3000);
+
     return () => {
       window.removeEventListener('lms_submissions_updated', fetchSubmissions);
       if (bc) bc.close();
+      clearInterval(pollInterval);
     };
   }, [user, isTeacher]);
 
