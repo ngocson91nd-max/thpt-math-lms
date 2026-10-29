@@ -56,8 +56,44 @@ import {
 export default function ExamsPage() {
   const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
-  const [exams, setExams] = useState<Exam[]>(MOCK_EXAMS);
-  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
+  
+  // Nạp tức thì danh sách đề thi từ cache trình duyệt (0ms) để không bị chớp màn hình trống
+  const [exams, setExams] = useState<Exam[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedDeleted = localStorage.getItem('lms_deleted_exam_ids');
+      const deletedIds = new Set<string>(savedDeleted ? JSON.parse(savedDeleted) : []);
+      const savedExams = localStorage.getItem('lms_exams');
+      if (savedExams) {
+        const parsed = JSON.parse(savedExams);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((e: any) => !deletedIds.has(e.id) && !deletedIds.has(e.code));
+        }
+      }
+    } catch {}
+    return [];
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const savedExams = localStorage.getItem('lms_exams');
+      if (savedExams && JSON.parse(savedExams).length > 0) return false;
+    } catch {}
+    return true;
+  });
+
+  const [classes, setClasses] = useState<ClassItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('lms_classes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [questionsPool, setQuestionsPool] = useState<Question[]>(MOCK_QUESTIONS);
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
@@ -186,7 +222,7 @@ export default function ExamsPage() {
 
   const fetchExams = async () => {
     try {
-      const res = await fetch(`/api/exams?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`/api/exams?t=${Date.now()}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.exams)) {
         setExams(data.exams);
@@ -198,6 +234,8 @@ export default function ExamsPage() {
       }
     } catch (e) {
       console.error('Fetch exams error:', e);
+    } finally {
+      setIsLoading(false);
     }
 
     // Fallback nếu mất kết nối mạng
@@ -209,12 +247,8 @@ export default function ExamsPage() {
           if (Array.isArray(parsed)) {
             setExams(parsed);
           }
-        } else {
-          setExams([]);
         }
-      } catch {
-        setExams([]);
-      }
+      } catch {}
     }
   };
 
@@ -1210,7 +1244,28 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
         {/* Cột phải: Lưới đề thi */}
         <main className="flex-1 w-full">
-          {filteredExams.length === 0 ? (
+          {isLoading && exams.length === 0 ? (
+            <div className={`grid gap-4 sm:gap-5 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'} animate-pulse`}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                    <div className="h-5 w-16 bg-slate-200 rounded-md"></div>
+                    <div className="h-4 w-20 bg-slate-100 rounded"></div>
+                  </div>
+                  <div className="h-6 w-3/4 bg-slate-200 rounded-lg"></div>
+                  <div className="h-4 w-full bg-slate-100 rounded"></div>
+                  <div className="flex gap-2 pt-2">
+                    <div className="h-6 w-16 bg-slate-100 rounded-md"></div>
+                    <div className="h-6 w-20 bg-slate-100 rounded-md"></div>
+                  </div>
+                  <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
+                    <div className="h-4 w-24 bg-slate-100 rounded"></div>
+                    <div className="h-8 w-24 bg-blue-100 rounded-xl"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredExams.length === 0 ? (
             <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xs">
               <ClipboardList className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-slate-800">Không tìm thấy đề thi phù hợp</h3>

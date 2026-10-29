@@ -25,7 +25,17 @@ import {
 
 export default function GradebookPage() {
   const { user, isTeacher, isStudent } = useAuth();
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const globalSaved = localStorage.getItem('lms_all_submissions');
+      if (globalSaved) {
+        const parsed = JSON.parse(globalSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [search, setSearch] = useState('');
 
   // Modals

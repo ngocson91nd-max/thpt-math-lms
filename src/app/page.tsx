@@ -47,6 +47,7 @@ export default function HomePage() {
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
               href="/exams"
+              prefetch={true}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500 transition active:scale-95"
             >
               <ClipboardList className="h-4 w-4" />
@@ -56,6 +57,7 @@ export default function HomePage() {
 
             <Link
               href="/courses"
+              prefetch={true}
               className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-md hover:bg-white/20 transition active:scale-95"
             >
               <BookOpen className="h-4 w-4" />
@@ -65,6 +67,7 @@ export default function HomePage() {
             {isTeacher && (
               <Link
                 href="/questions"
+                prefetch={true}
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-400/30 px-5 py-3.5 text-sm font-semibold text-amber-200 hover:bg-amber-500/30 transition"
               >
                 <Calculator className="h-4 w-4" />
@@ -112,6 +115,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/classes"
+            prefetch={true}
             className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
           >
             Vào danh sách lớp <ArrowRight className="h-3.5 w-3.5" />
@@ -128,6 +132,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/questions"
+            prefetch={true}
             className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
           >
             Khám phá ngân hàng đề <ArrowRight className="h-3.5 w-3.5" />
@@ -144,6 +149,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/gradebook"
+            prefetch={true}
             className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
           >
             Mở sổ điểm <ArrowRight className="h-3.5 w-3.5" />

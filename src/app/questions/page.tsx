@@ -25,7 +25,21 @@ import {
 
 export default function QuestionsPage() {
   const { isTeacher } = useAuth();
-  const [questions, setQuestions] = useState<Question[]>(MOCK_QUESTIONS);
+  const [questions, setQuestions] = useState<Question[]>(() => {
+    if (typeof window === 'undefined') return MOCK_QUESTIONS;
+    try {
+      const saved = localStorage.getItem('lms_questions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((q: any) => q.id));
+          const missing = MOCK_QUESTIONS.filter((q) => !existingIds.has(q.id));
+          return [...parsed, ...missing];
+        }
+      }
+    } catch {}
+    return MOCK_QUESTIONS;
+  });
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');

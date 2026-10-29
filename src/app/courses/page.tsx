@@ -21,7 +21,17 @@ import {
 
 export default function CoursesPage() {
   const { user, isTeacher, isStudent } = useAuth();
-  const [courses, setCourses] = useState<Course[]>(MOCK_COURSES);
+  const [courses, setCourses] = useState<Course[]>(() => {
+    if (typeof window === 'undefined') return MOCK_COURSES;
+    try {
+      const saved = localStorage.getItem('lms_courses');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return MOCK_COURSES;
+  });
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
 
   // Modal States

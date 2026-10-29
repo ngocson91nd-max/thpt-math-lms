@@ -20,7 +20,17 @@ import {
 
 export default function MaterialsPage() {
   const { isTeacher } = useAuth();
-  const [materials, setMaterials] = useState<Material[]>(MOCK_MATERIALS);
+  const [materials, setMaterials] = useState<Material[]>(() => {
+    if (typeof window === 'undefined') return MOCK_MATERIALS;
+    try {
+      const saved = localStorage.getItem('lms_materials');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return MOCK_MATERIALS;
+  });
   const [filterType, setFilterType] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
