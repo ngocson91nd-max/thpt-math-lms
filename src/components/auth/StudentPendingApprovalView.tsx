@@ -79,21 +79,32 @@ export const StudentPendingApprovalView: React.FC = () => {
       localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(approvedList));
     }
 
-    // Xóa các lớp đã được duyệt khỏi danh sách chờ
+    // Xóa triệt để các lớp đã được duyệt khỏi danh sách chờ của học sinh
     const uPendKey = `lms_user_pending_requests_${user.id}`;
     const uPend: string[] = JSON.parse(localStorage.getItem(uPendKey) || '[]');
     const remainingPend = uPend.filter((id) => !approvedList.includes(id));
     localStorage.setItem(uPendKey, JSON.stringify(remainingPend));
+
+    // Dọn sạch luôn danh sách pending trong từng lớp để không bị kẹt cache
+    approvedList.forEach((cId) => {
+      const cpKey = `lms_class_pending_requests_${cId}`;
+      try {
+        const cpArr = JSON.parse(localStorage.getItem(cpKey) || '[]');
+        if (Array.isArray(cpArr)) {
+          const cleaned = cpArr.filter((p: any) => p.user_id !== user.id && p.user?.email !== user.email);
+          localStorage.setItem(cpKey, JSON.stringify(cleaned));
+        }
+      } catch {}
+    });
+
     setPendingClasses([]);
 
+    // Bắn event để AppLayout mở khóa phòng thi ngay tức thì mà KHÔNG CẦN reload trang
     window.dispatchEvent(new Event('lms_enrollment_changed'));
-    setTimeout(() => {
-      window.location.href = '/exams';
-    }, 400);
   };
 
   const triggerCheckApproval = async (manual = false) => {
-    if (!user) return;
+    if (!user || isApprovedSuccess) return;
     if (manual) setIsCheckingNow(true);
     try {
       const r = await fetch(
@@ -112,6 +123,9 @@ export const StudentPendingApprovalView: React.FC = () => {
   };
 
   useEffect(() => {
+    // Nếu đã được duyệt thành công thì dừng toàn bộ polling để chống nháy màn hình
+    if (isApprovedSuccess) return;
+
     // 1. Tải danh sách lớp thực tế âm thầm từ Supabase Cloud để cập nhật cache mã lớp
     fetch('/api/classes')
       .then((res) => res.json())
@@ -128,13 +142,15 @@ export const StudentPendingApprovalView: React.FC = () => {
 
     loadPendingClasses();
 
-    // 2. Định kỳ kiểm tra (polling 2.5s/lần) xem Thầy Sơn đã duyệt học sinh chưa
+    // 2. Định kỳ kiểm tra (polling 3s/lần) xem Thầy Sơn đã duyệt học sinh chưa
     if (!user) return;
 
     triggerCheckApproval(false);
-    const interval = setInterval(() => triggerCheckApproval(false), 2500);
+    const interval = setInterval(() => {
+      triggerCheckApproval(false);
+    }, 3000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, isApprovedSuccess]);
 
   const handleJoinWithCode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,7 +215,8 @@ export const StudentPendingApprovalView: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                window.location.href = '/exams';
+                window.dispatchEvent(new Event('lms_enrollment_changed'));
+                router.replace('/exams');
               }}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition shadow-sm cursor-pointer"
             >

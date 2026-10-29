@@ -24,17 +24,55 @@ export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): 
   const activeClassIdSet = new Set<string>(activeClasses.map((c) => c.id));
   const enrolledSet = new Set<string>();
 
-  // Danh sách các lớp học sinh đang CHỜ DUYỆT (bắt buộc phải loại trừ, tuyệt đối không cho phép active)
+  // 1.1 Lấy danh sách các lớp ĐÃ ĐƯỢC DUYỆT CHÍNH THỨC từ Cloud / Thầy Sơn
+  const approvedCacheKeys = [
+    userId ? `lms_student_classes_${userId}` : null,
+    cleanEmail ? `lms_student_classes_${cleanEmail}` : null,
+  ].filter(Boolean) as string[];
+
+  const explicitlyApprovedIds = new Set<string>();
+  approvedCacheKeys.forEach((key) => {
+    try {
+      const raw = storage.getItem(key);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          arr.forEach((id: string) => {
+            if (id) explicitlyApprovedIds.add(id);
+          });
+        }
+      }
+    } catch {}
+  });
+
+  // Nếu đã được duyệt bất kỳ lớp nào -> Thêm ngay vào enrolledSet
+  explicitlyApprovedIds.forEach((id) => {
+    enrolledSet.add(id);
+  });
+
+  // Danh sách các lớp học sinh đang CHỜ DUYỆT (bắt buộc phải loại trừ các lớp ĐÃ ĐƯỢC DUYỆT)
   const pendingClassIds = new Set<string>();
   try {
     if (userId) {
       const userPendingRaw = storage.getItem(`lms_user_pending_requests_${userId}`);
       if (userPendingRaw) {
         const uPend: string[] = JSON.parse(userPendingRaw);
-        if (Array.isArray(uPend)) uPend.forEach((id) => pendingClassIds.add(id));
+        if (Array.isArray(uPend)) {
+          uPend.forEach((id) => {
+            // Nếu lớp này đã được duyệt -> Bỏ qua, không coi là pending nữa
+            if (!explicitlyApprovedIds.has(id)) {
+              pendingClassIds.add(id);
+            }
+          });
+        }
       }
     }
     activeClasses.forEach((c) => {
+      // Nếu lớp đã được duyệt thì dọn sạch pending rác cũ
+      if (explicitlyApprovedIds.has(c.id) || explicitlyApprovedIds.has(c.code)) {
+        return;
+      }
+
       const classPendingRaw = storage.getItem(`lms_class_pending_requests_${c.id}`);
       if (classPendingRaw) {
         const cPend: any[] = JSON.parse(classPendingRaw);
@@ -122,8 +160,12 @@ export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): 
     }
   });
 
-  // 4. Loại bỏ tuyệt đối mọi lớp đang chờ duyệt
-  pendingClassIds.forEach((id) => enrolledSet.delete(id));
+  // 4. Loại bỏ các lớp thực sự đang chờ duyệt (nếu lớp đã được Thầy duyệt thì giữ nguyên)
+  pendingClassIds.forEach((id) => {
+    if (!explicitlyApprovedIds.has(id)) {
+      enrolledSet.delete(id);
+    }
+  });
 
   return Array.from(enrolledSet);
 };

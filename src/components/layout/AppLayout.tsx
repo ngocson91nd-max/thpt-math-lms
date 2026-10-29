@@ -174,6 +174,18 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
             const cleanedPending = pendingArr.filter((id) => !cloudApproved.includes(id));
             localStorage.setItem(userPendingKey, JSON.stringify(cleanedPending));
 
+            // Dọn sạch luôn danh sách pending trong từng lớp
+            cloudApproved.forEach((cId: string) => {
+              const cpKey = `lms_class_pending_requests_${cId}`;
+              try {
+                const cpArr = JSON.parse(localStorage.getItem(cpKey) || '[]');
+                if (Array.isArray(cpArr)) {
+                  const cleanedCp = cpArr.filter((p: any) => p.user_id !== user.id && p.user?.email !== user.email);
+                  localStorage.setItem(cpKey, JSON.stringify(cleanedCp));
+                }
+              } catch {}
+            });
+
             if (isMounted) {
               setIsEnrolled(true);
             }

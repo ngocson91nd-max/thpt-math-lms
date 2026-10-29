@@ -1091,7 +1091,14 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
   // Phân quyền Học sinh: Nếu học sinh chưa vào bất kỳ lớp học nào, chặn hoàn toàn và hiện phòng chờ nhập mã
   if (user && !isTeacher && !isUserEnrolledInAnyClass(user)) {
-    return <StudentPendingApprovalView />;
+    let isApprovedInCache = false;
+    try {
+      const cached = localStorage.getItem(`lms_student_classes_${user.id}`);
+      isApprovedInCache = Boolean(cached && JSON.parse(cached).length > 0);
+    } catch {}
+    if (!isApprovedInCache) {
+      return <StudentPendingApprovalView />;
+    }
   }
 
   return (
