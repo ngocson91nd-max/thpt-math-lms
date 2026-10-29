@@ -137,6 +137,19 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       scriptTag.textContent = rawTikz;
       target.appendChild(scriptTag);
 
+      // Kích hoạt TikzJax WebAssembly quét và render thẻ script mới vừa chèn
+      if (typeof window !== 'undefined') {
+        try {
+          if (typeof (window as any).tikzjax === 'function') {
+            (window as any).tikzjax();
+          } else if (typeof (window as any).tikzjax?.process === 'function') {
+            (window as any).tikzjax.process();
+          } else {
+            window.dispatchEvent(new Event('DOMContentLoaded'));
+          }
+        } catch {}
+      }
+
       // E. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
       let isRendered = false;
       const observer = new MutationObserver((_mutations, obs) => {

@@ -217,13 +217,23 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
 
   // 0b. KIỂM TRA NGHIÊM NGẶT HÌNH HỌC KHÔNG GIAN 3D VÀ TIKZ NÂNG CAO:
-  // Nếu là hình 3D (lập phương, chóp, nón, trụ, lăng trụ, cáp treo, đèn chùm, đỉnh có dấu phẩy A' B' C' D', đỉnh S chóp...)
+  // Nếu là hình 3D (lập phương, 10 khối lập phương xếp khít, chóp, nón, trụ, lăng trụ, cáp treo, đèn chùm, đỉnh có dấu phẩy A' B' C' D', đỉnh S chóp...)
   // TUYỆT ĐỐI TỪ CHỐI (trả về null) để nhường quyền biên dịch 100% cho TikzJax (WebAssembly TeX Engine) hoặc ảnh chụp!
+  const hasPlot = rawTikz.includes('plot');
+
   const has3DKeywords =
     /\\(?:draw|node|coordinate)[^;]*(?:[A-D]'\b|\b[SABCD]'\b)/.test(rawTikz) || // Đỉnh A', B', C', D'
-    /\b(?:cube|cone|cylinder|sphere|prism|pyramid|3d|plane|view)\b/i.test(rawTikz) ||
+    /\b(?:cube|cone|cylinder|sphere|prism|pyramid|3d|plane|view|polyhedron|solid|hop|khoi|lap_phuong|khoi_hop)\b/i.test(rawTikz) ||
     /(\([A-Z]'\))/i.test(rawTikz) || // Tọa độ (A'), (B')
-    /\([0-9.-]+,[0-9.-]+,[0-9.-]+\)/.test(rawTikz); // Tọa độ 3D (x, y, z)
+    /\([0-9.-]+,[0-9.-]+,[0-9.-]+\)/.test(rawTikz) || // Tọa độ 3D (x, y, z)
+    /\bz\s*=\s*/.test(rawTikz) || // Trục z không gian
+    /\b[xyz]\s*=\s*\{/.test(rawTikz); // Hệ trục affine 3D
+
+  const hasMacroOrLoop3D =
+    /#\d/.test(rawTikz) || // Macro có tham số định nghĩa khối như \def\cube(#1,#2,#3)
+    /\\newcommand/.test(rawTikz) ||
+    /\\begin\{scope\}\[[^\]]*shift/i.test(rawTikz) || // Scope dời hình xếp khối
+    (rawTikz.match(/shift\s*=/g) || []).length >= 1;
 
   const hasComplexLoopOrShapes =
     rawTikz.includes('ellipse') ||
@@ -233,15 +243,33 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     /node[^}]*\\(?:p|pos)\b/i.test(rawTikz) ||
     /\\shade\b/.test(rawTikz);
 
-  // Nhận diện hình đa diện không gian: Có nhiều nét đứt dashed (>= 2) nhưng KHÔNG có plot đồ thị
+  // Nhận diện khối đa diện / hình học không gian khi KHÔNG CÓ plot đồ thị:
+  // - Chứa chu trình mặt phẳng 'cycle'
+  // - Chứa tọa độ tương đối ++(
+  // - Chứa tọa độ góc phối cảnh 30: hoặc 150:
+  // - Chứa tô màu mặt khối che khuất fill=... từ 2 lần trở lên
+  const hasPolyhedronGeometry =
+    !hasPlot &&
+    (rawTikz.includes('cycle') ||
+      /\+\+\s*\(/.test(rawTikz) ||
+      /\([0-9.-]+:[0-9.-]+\)/.test(rawTikz) ||
+      (rawTikz.match(/fill\s*=/g) || []).length >= 2);
+
+  // Nhận diện hình đa diện nét đứt
   const dashedMatches = rawTikz.match(/dashed/g) || [];
-  const hasPlot = rawTikz.includes('plot');
   const isPolyhedronWithoutPlot = !hasPlot && dashedMatches.length >= 2;
 
   // Nhận diện hình chóp S.ABCD (đỉnh S kết hợp A, B, C, D)
   const isPyramidShape = !hasPlot && /\(S\)/.test(rawTikz) && (/\(A\)/.test(rawTikz) || /\(B\)/.test(rawTikz));
 
-  if (has3DKeywords || hasComplexLoopOrShapes || isPolyhedronWithoutPlot || isPyramidShape) {
+  if (
+    has3DKeywords ||
+    hasMacroOrLoop3D ||
+    hasComplexLoopOrShapes ||
+    hasPolyhedronGeometry ||
+    isPolyhedronWithoutPlot ||
+    isPyramidShape
+  ) {
     return null;
   }
 
