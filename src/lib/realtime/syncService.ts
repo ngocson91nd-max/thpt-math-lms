@@ -156,3 +156,79 @@ export function setupRealtimeSync(callbacks: {
     }
   };
 }
+
+/**
+ * Tự động quét và gom toàn bộ bài thi của học sinh trên trình duyệt
+ * (kể cả khi học sinh nộp ở phiên bản cũ hoặc tài khoản khác) đưa vào Sổ điểm chung và đẩy lên Cloud
+ */
+export function autoRecoverAllSubmissionsFromBrowser(): any[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const rawAll = localStorage.getItem('lms_all_submissions');
+    const allSubs: any[] = rawAll ? JSON.parse(rawAll) : [];
+    const existingIds = new Set(allSubs.map((s) => s.id));
+    let hasNew = false;
+
+    // Duyệt qua toàn bộ localStorage để tìm bài thi của học sinh
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+
+      // 1. Quét key dạng submission_...
+      if (key.startsWith('submission_') && key !== 'submission_') {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const sub = JSON.parse(raw);
+            if (sub && sub.id && !existingIds.has(sub.id)) {
+              allSubs.push(sub);
+              existingIds.add(sub.id);
+              hasNew = true;
+              fetch('/api/submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sub),
+              }).catch(() => {});
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Quét key dạng my_submissions_...
+      if (key.startsWith('my_submissions_')) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              list.forEach((sub: any) => {
+                if (sub && sub.id && !existingIds.has(sub.id)) {
+                  allSubs.push(sub);
+                  existingIds.add(sub.id);
+                  hasNew = true;
+                  fetch('/api/submissions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sub),
+                  }).catch(() => {});
+                }
+              });
+            }
+          }
+        } catch {}
+      }
+    }
+
+    if (hasNew) {
+      localStorage.setItem('lms_all_submissions', JSON.stringify(allSubs));
+      window.dispatchEvent(new CustomEvent('lms_submissions_updated'));
+      broadcastDataChange('SUBMISSIONS_UPDATED');
+    }
+
+    return allSubs;
+  } catch {
+    return [];
+  }
+}
+

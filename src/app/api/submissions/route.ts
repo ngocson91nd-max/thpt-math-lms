@@ -4,6 +4,44 @@ import { getSupabaseAdmin } from '@/lib/supabase/adminClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Giải mã answers và tab_switch_count từ cột teacher_feedback
+function unpackSubmission(sub: any) {
+  if (!sub) return sub;
+  let answers = Array.isArray(sub.answers) ? sub.answers : [];
+  let feedback = sub.teacher_feedback || '';
+  let tabSwitch = sub.tab_switch_count || 0;
+
+  if (typeof feedback === 'string' && feedback.startsWith('{"__meta__":true')) {
+    try {
+      const parsed = JSON.parse(feedback);
+      answers = Array.isArray(parsed.answers) ? parsed.answers : answers;
+      feedback = parsed.feedback || '';
+      tabSwitch = parsed.tab_switch_count ?? tabSwitch;
+    } catch {}
+  }
+
+  // Đảm bảo exam object có title
+  let examObj = sub.exam;
+  if (examObj && typeof examObj.description === 'string' && examObj.description.startsWith('{"__lms_meta__":true')) {
+    try {
+      const meta = JSON.parse(examObj.description);
+      examObj = {
+        ...examObj,
+        code: meta.code || examObj.code,
+        assigned_classes: meta.assigned_classes || [],
+      };
+    } catch {}
+  }
+
+  return {
+    ...sub,
+    exam: examObj,
+    answers,
+    tab_switch_count: tabSwitch,
+    teacher_feedback: feedback,
+  };
+}
+
 // GET: Lấy danh sách kết quả bài thi từ Supabase Cloud
 export async function GET(req: NextRequest) {
   try {
@@ -27,13 +65,13 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, submission: data });
+      return NextResponse.json({ success: true, submission: unpackSubmission(data) });
     }
 
     // 2. Lấy danh sách bài nộp có lọc
     let query = supabase
       .from('submissions')
-      .select('*, exam:exams(id, title, code, grade, duration_minutes), student:profiles(id, full_name, email, role, candidate_number, school_name)')
+      .select('*, exam:exams(id, title, code, grade, duration_minutes, description), student:profiles(id, full_name, email, role, candidate_number, school_name)')
       .order('submitted_at', { ascending: false });
 
     if (examId) {
@@ -50,8 +88,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    const formattedSubs = (data || []).map(unpackSubmission);
+
     return NextResponse.json(
-      { success: true, submissions: data || [] },
+      { success: true, submissions: formattedSubs },
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -114,7 +154,15 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    // 2. Lưu bản ghi submission
+    // 2. Đóng gói answers và tab_switch_count vào teacher_feedback an toàn
+    const feedbackMeta = {
+      __meta__: true,
+      feedback: typeof teacher_feedback === 'string' ? teacher_feedback : '',
+      tab_switch_count: tab_switch_count || 0,
+      answers: Array.isArray(answers) ? answers : [],
+    };
+
+    // 3. Chỉ gửi các cột chuẩn tồn tại trong bảng submissions của Supabase
     const submissionPayload = {
       id: subUuid,
       exam_id,
@@ -124,9 +172,7 @@ export async function POST(req: NextRequest) {
       score: Number(score) || 0,
       max_score: Number(max_score) || 10,
       status: status || 'graded',
-      tab_switch_count: tab_switch_count || 0,
-      teacher_feedback: teacher_feedback || null,
-      answers: Array.isArray(answers) ? answers : [],
+      teacher_feedback: JSON.stringify(feedbackMeta),
       updated_at: new Date().toISOString(),
     };
 
@@ -138,19 +184,18 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('Error inserting submission in /api/submissions:', error);
-      // Fallback: nếu lỗi bảng submissions, trả về payload thành công để client lưu localStorage
       return NextResponse.json({
         success: true,
         submission: {
           ...submissionPayload,
+          answers: Array.isArray(answers) ? answers : [],
           student: student || null,
           exam: exam || null,
         },
-        notice: 'Lưu cục bộ và Cloud sync',
       });
     }
 
-    return NextResponse.json({ success: true, submission: data });
+    return NextResponse.json({ success: true, submission: unpackSubmission(data) });
   } catch (err: any) {
     console.error('API /api/submissions POST error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -174,8 +219,15 @@ export async function PUT(req: NextRequest) {
     };
     if (score !== undefined) updatePayload.score = Number(score);
     if (status !== undefined) updatePayload.status = status;
-    if (teacher_feedback !== undefined) updatePayload.teacher_feedback = teacher_feedback;
-    if (answers !== undefined) updatePayload.answers = answers;
+
+    if (answers !== undefined || teacher_feedback !== undefined) {
+      const feedbackMeta = {
+        __meta__: true,
+        feedback: typeof teacher_feedback === 'string' ? teacher_feedback : '',
+        answers: Array.isArray(answers) ? answers : [],
+      };
+      updatePayload.teacher_feedback = JSON.stringify(feedbackMeta);
+    }
 
     const { data, error } = await supabase
       .from('submissions')
@@ -189,7 +241,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, submission: data });
+    return NextResponse.json({ success: true, submission: unpackSubmission(data) });
   } catch (err: any) {
     console.error('API /api/submissions PUT error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

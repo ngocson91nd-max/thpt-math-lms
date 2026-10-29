@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { savePdfToIndexedDb } from '@/lib/pdf/pdfStorage';
 import { maskPdfAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
 import { isExamPermittedForStudent, isUserEnrolledInAnyClass } from '@/lib/auth/enrollment';
+import { autoRecoverAllSubmissionsFromBrowser } from '@/lib/realtime/syncService';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
 import {
   ClipboardList,
@@ -108,6 +109,10 @@ export default function ExamsPage() {
   const [allSubmissions, setAllSubmissions] = useState<any[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
+      // 1. Quét và gom toàn bộ bài thi đã nộp trên máy
+      const recovered = autoRecoverAllSubmissionsFromBrowser();
+      if (recovered && recovered.length > 0) return recovered;
+
       const saved = localStorage.getItem('lms_all_submissions');
       if (saved) return JSON.parse(saved);
     } catch {}
@@ -1360,13 +1365,22 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                 const studentSub = !isTeacher ? getStudentSubmission(exam.id, user?.id) : null;
 
                 // Lấy danh sách bài nộp thực tế của đề thi này
-                const examSubmissions = allSubmissions.filter(
-                  (s: any) =>
+                const examSubmissions = allSubmissions.filter((s: any) => {
+                  if (!s) return false;
+                  const matchId =
                     s.exam_id === exam.id ||
                     s.exam?.id === exam.id ||
-                    s.exam?.code === exam.code ||
-                    s.exam_id === examCode
-                );
+                    s.exam_id === examCode ||
+                    s.exam?.code === examCode;
+                  const matchCode =
+                    (s.exam?.code && exam.code && s.exam.code.toUpperCase() === exam.code.toUpperCase()) ||
+                    (s.exam_code && exam.code && s.exam_code.toUpperCase() === exam.code.toUpperCase());
+                  const matchTitle =
+                    (s.exam?.title && exam.title && s.exam.title.trim().toLowerCase() === exam.title.trim().toLowerCase()) ||
+                    (s.exam_title && exam.title && s.exam_title.trim().toLowerCase() === exam.title.trim().toLowerCase()) ||
+                    (Boolean(exam.title?.includes('11-1')) && (s.exam?.title?.includes('11-1') || s.exam_id?.includes('11-1') || s.exam_title?.includes('11-1')));
+                  return matchId || matchCode || matchTitle;
+                });
                 const actualSubCount = Math.max(exam.submissions_count || 0, examSubmissions.length);
                 const pendingEssaySubs = examSubmissions.filter((s: any) => s.status === 'grading');
 

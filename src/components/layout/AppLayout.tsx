@@ -8,7 +8,7 @@ import { Footer } from './Footer';
 import { GuestAuthWall } from '@/components/auth/GuestAuthWall';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
 import { isUserEnrolledInAnyClass, getEnrolledClassIdsForUser } from '@/lib/auth/enrollment';
-import { setupRealtimeSync } from '@/lib/realtime/syncService';
+import { setupRealtimeSync, autoRecoverAllSubmissionsFromBrowser } from '@/lib/realtime/syncService';
 import { MOCK_USERS } from '@/lib/supabase/mockStore';
 import { PanelLeftOpen, Loader2 } from 'lucide-react';
 
@@ -89,6 +89,9 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         localStorage.setItem('lms_questions', '[]');
         localStorage.setItem(QB_CLEAN_VERSION, 'true');
       }
+
+      // Tự động quét và gom toàn bộ bài thi của học sinh trên máy vào Sổ điểm chung
+      autoRecoverAllSubmissionsFromBrowser();
     }
   }, []);
 
