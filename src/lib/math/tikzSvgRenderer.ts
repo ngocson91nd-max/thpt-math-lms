@@ -19,13 +19,19 @@ interface CoordMap {
 }
 
 interface DrawItem {
-  type: 'line' | 'grid' | 'plot' | 'point' | 'node';
+  type: 'line' | 'grid' | 'plot' | 'point' | 'node' | 'ellipse' | 'arc' | 'arc_sector';
   p1?: Point2D;
   p2?: Point2D;
   pt?: Point2D;
   text?: string;
   pos?: string;
   radius?: number;
+  rx?: number;
+  ry?: number;
+  startPt?: Point2D;
+  origin?: Point2D;
+  startAngle?: number;
+  endAngle?: number;
   isArrow?: boolean;
   isDashed?: boolean;
   isThick?: boolean;
@@ -33,6 +39,21 @@ interface DrawItem {
   startX?: number;
   endX?: number;
   color?: string;
+  fill?: string;
+  stroke?: string;
+}
+
+function parseTikzColor(col: string): string {
+  const c = (col || '').trim().toLowerCase();
+  if (c.includes('cyan!20') || c.includes('cyan')) return '#cffafe';
+  if (c.includes('green!20') || c.includes('green')) return '#dcfce7';
+  if (c.includes('orange!20') || c.includes('orange')) return '#ffedd5';
+  if (c.includes('blue!20') || c.includes('blue')) return '#dbeafe';
+  if (c.includes('gray!15') || c.includes('gray!20')) return '#f1f5f9';
+  if (c.includes('gray!35') || c.includes('gray!40')) return '#e2e8f0';
+  if (c.includes('gray!55') || c.includes('gray!60')) return '#cbd5e1';
+  if (c.includes('red')) return '#fee2e2';
+  return '#f8fafc';
 }
 
 function parseNumber(str: string, defs: DefMap = {}): number {
@@ -173,7 +194,9 @@ function cleanTikzNodeText(raw: string): string {
       .replace(/\\mathrm\{([^}]*)\}/g, '$1')
       .replace(/\\text(?:rm|bf|it)?\{([^}]*)\}/g, '$1')
       .replace(/\\mathbf\{([^}]*)\}/g, '$1')
-      .replace(/\\mathit\{([^}]*)\}/g, '$1');
+      .replace(/\\mathit\{([^}]*)\}/g, '$1')
+      .replace(/\\mathscr\{([^}]*)\}/g, '$1')
+      .replace(/\\mathcal\{([^}]*)\}/g, '$1');
   }
 
   // Số mũ và chỉ số dưới thường gặp trong toán học
@@ -182,10 +205,20 @@ function cleanTikzNodeText(raw: string): string {
     .replace(/\^2/g, '²')
     .replace(/\^4/g, '⁴')
     .replace(/\^0/g, '⁰')
+    .replace(/\^\{3\}/g, '³')
+    .replace(/\^\{2\}/g, '²')
+    .replace(/\^\{4\}/g, '⁴')
+    .replace(/\^\{0\}/g, '⁰')
+    .replace(/\^\{\\circ\}/g, '°')
+    .replace(/\^\\circ/g, '°')
     .replace(/_0/g, '₀')
     .replace(/_1/g, '₁')
     .replace(/_2/g, '₂')
     .replace(/_3/g, '₃')
+    .replace(/_\{0\}/g, '₀')
+    .replace(/_\{1\}/g, '₁')
+    .replace(/_\{2\}/g, '₂')
+    .replace(/_\{3\}/g, '₃')
     .replace(/_x/g, 'ₓ')
     .replace(/_y/g, 'ᵧ');
 
@@ -197,66 +230,109 @@ function cleanTikzNodeText(raw: string): string {
     .replace(/\\pi/g, 'π')
     .replace(/\\infty/g, '∞')
     .replace(/\\Delta/g, 'Δ')
-    .replace(/\\theta/g, 'θ');
+    .replace(/\\theta/g, 'θ')
+    .replace(/\\circ/g, '°');
 
-  // Xóa khoảng trắng LaTeX "\ " và dấu gạch chéo TeX đơn độc
-  text = text.replace(/\\\s+/g, ' ').replace(/\\/g, '');
+  // Xóa khoảng trắng LaTeX "\ ", "\," và dấu gạch chéo TeX đơn độc
+  text = text.replace(/\\\s+/g, ' ').replace(/\\,/g, ' ').replace(/\\/g, '');
 
   return text.trim();
 }
 
 /**
- * Phân tích và tạo SVG hoàn chỉnh từ mã TikZ (cho đồ thị và hình phẳng 2D Oxy)
+ * Mở rộng tự động các macro \newcommand có tham số (như \drawcube{4}{0}{0} cho bài toán khối lập phương)
+ */
+function expandMacros(tikz: string): string {
+  let res = tikz;
+  let newcmdIdx = res.indexOf('\\newcommand');
+  let safetyLoop = 0;
+  while (newcmdIdx !== -1 && safetyLoop < 10) {
+    safetyLoop++;
+    const g1 = extractBracedContent(res, newcmdIdx + 11);
+    if (!g1) break;
+    const macroName = g1.content.replace(/\\/g, '').trim();
+
+    let pos = g1.endIndex + 1;
+    let paramCount = 0;
+    while (pos < res.length && /\s/.test(res[pos])) pos++;
+    if (res[pos] === '[') {
+      const closeBracket = res.indexOf(']', pos);
+      paramCount = parseInt(res.substring(pos + 1, closeBracket), 10) || 0;
+      pos = closeBracket + 1;
+    }
+
+    const g2 = extractBracedContent(res, pos);
+    if (!g2) break;
+    const template = g2.content;
+
+    res = res.substring(0, newcmdIdx) + res.substring(g2.endIndex + 1);
+
+    const callRegex = new RegExp(`\\\\${macroName}((?:\\s*\\{[^}]*\\}){${paramCount}})`, 'g');
+    res = res.replace(callRegex, (_m, argsBlock) => {
+      const args = Array.from(argsBlock.matchAll(/\{([^}]*)\}/g)).map((match: any) => match[1]);
+      let instance = template;
+      for (let i = 0; i < args.length; i++) {
+        instance = instance.replace(new RegExp(`#${i + 1}`, 'g'), args[i]);
+      }
+      return instance;
+    });
+
+    newcmdIdx = res.indexOf('\\newcommand');
+  }
+  return res;
+}
+
+/**
+ * Phân tích và tạo SVG hoàn chỉnh từ mã TikZ (cho đồ thị hàm số và hình phẳng 2D Oxy)
  */
 export function renderTikzToSvg(rawTikz: string): string | null {
   if (!rawTikz || !rawTikz.includes('\\begin{tikzpicture}')) {
     return null;
   }
 
-  // 0. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
+  // 0a. Mở rộng tự động các macro \newcommand nếu có
+  rawTikz = expandMacros(rawTikz);
+
+  // 0b. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
   rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
 
-  // 0b. KIỂM TRA NGHIÊM NGẶT HÌNH HỌC KHÔNG GIAN 3D VÀ TIKZ NÂNG CAO:
-  // Nếu là hình 3D (lập phương, 10 khối lập phương xếp khít, chóp, nón, trụ, lăng trụ, cáp treo, đèn chùm, đỉnh có dấu phẩy A' B' C' D', đỉnh S chóp...)
-  // TUYỆT ĐỐI TỪ CHỐI (trả về null) để nhường quyền biên dịch 100% cho TikzJax (WebAssembly TeX Engine) hoặc ảnh chụp!
+  // 0c. KIỂM TRA NGHIÊM NGẶT HÌNH HỌC KHÔNG GIAN 3D:
+  // Nếu là hình 3D (lập phương, chóp, nón, trụ, lăng trụ, cáp treo, đèn chùm, đỉnh có dấu phẩy A' B' C' D', đỉnh S chóp...)
+  // TUYỆT ĐỐI TỪ CHỐI (trả về null) để nhường quyền biên dịch cho TikzJax (WebAssembly TeX Engine) hoặc ảnh chụp!
   const hasPlot = rawTikz.includes('plot');
 
   const has3DKeywords =
     /\\(?:draw|node|coordinate)[^;]*(?:[A-D]'\b|\b[SABCD]'\b)/.test(rawTikz) || // Đỉnh A', B', C', D'
-    /\b(?:cube|cone|cylinder|sphere|prism|pyramid|3d|plane|view|polyhedron|solid|hop|khoi|lap_phuong|khoi_hop)\b/i.test(rawTikz) ||
+    /\b(?:cube|cone|cylinder|sphere|prism|pyramid|3d|plane|view|polyhedron|solid|hop|khoi|lap_phuong|khoi_hop|cáp\s*treo|đèn\s*chùm)\b/i.test(rawTikz) ||
     /(\([A-Z]'\))/i.test(rawTikz) || // Tọa độ (A'), (B')
     /\([0-9.-]+,[0-9.-]+,[0-9.-]+\)/.test(rawTikz) || // Tọa độ 3D (x, y, z)
     /\bz\s*=\s*/.test(rawTikz) || // Trục z không gian
     /\b[xyz]\s*=\s*\{/.test(rawTikz); // Hệ trục affine 3D
 
   const hasMacroOrLoop3D =
-    /#\d/.test(rawTikz) || // Macro có tham số định nghĩa khối như \def\cube(#1,#2,#3)
-    /\\newcommand/.test(rawTikz) ||
-    /\\begin\{scope\}\[[^\]]*shift/i.test(rawTikz) || // Scope dời hình xếp khối
-    (rawTikz.match(/shift\s*=/g) || []).length >= 1;
+    /#\d/.test(rawTikz) ||
+    /\\begin\{scope\}\[[^\]]*shift/i.test(rawTikz);
 
   const hasComplexLoopOrShapes =
-    rawTikz.includes('ellipse') ||
-    rawTikz.includes('arc') ||
     /\\foreach\s*\\(?:p|pos|i|pt|name|u|v|k)\b/i.test(rawTikz) ||
     /\\foreach[^{]*\/[^{]*in/i.test(rawTikz) ||
     /node[^}]*\\(?:p|pos)\b/i.test(rawTikz) ||
     /\\shade\b/.test(rawTikz);
 
   // Nhận diện khối đa diện / hình học không gian 3D phức tạp khi KHÔNG CÓ plot đồ thị:
-  // - Chứa từ 3 chu trình 'cycle' trở lên (vẽ nhiều mặt của khối hộp / đa diện 3D)
+  // - Chứa từ 4 chu trình 'cycle' trở lên
   // - Chứa tọa độ tương đối ++( lặp lại
-  // - Chứa tô màu mặt khối che khuất fill=... từ 3 lần trở lên
+  // - Chứa tô màu mặt khối che khuất fill=... từ 4 lần trở lên
   const cycleCount = (rawTikz.match(/cycle/g) || []).length;
   const hasPolyhedronGeometry =
     !hasPlot &&
-    (cycleCount >= 3 ||
+    (cycleCount >= 4 ||
       (rawTikz.match(/\+\+\s*\(/g) || []).length >= 2 ||
-      (rawTikz.match(/fill\s*=/g) || []).length >= 3);
+      (rawTikz.match(/fill\s*=/g) || []).length >= 4);
 
-  // Nhận diện hình đa diện nét đứt
+  // Nhận diện hình đa diện nét đứt (hình lập phương, chóp có >= 3 nét đứt)
   const dashedMatches = rawTikz.match(/dashed/g) || [];
-  const isPolyhedronWithoutPlot = !hasPlot && dashedMatches.length >= 2;
+  const isPolyhedronWithoutPlot = !hasPlot && dashedMatches.length >= 3;
 
   // Nhận diện hình chóp S.ABCD (đỉnh S kết hợp A, B, C, D)
   const isPyramidShape = !hasPlot && /\(S\)/.test(rawTikz) && (/\(A\)/.test(rawTikz) || /\(B\)/.test(rawTikz));
@@ -401,35 +477,46 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     cleanLines = cleanLines.substring(0, start) + cleanLines.substring(end);
   }
 
-  // 6. PHÂN TÍCH NHÃN VĂN BẢN \node (QUÉT CÂN BẰNG NGOẶC ĐỂ TRÁNH CỤT CHỮ \mathrm)
+  // 6. PHÂN TÍCH NHÃN VĂN BẢN (CẢ \node VÀ INLINE node TRONG \draw)
   let nodeSearchIdx = 0;
-  while (true) {
-    const nodeIdx = cleanLines.indexOf('\\node', nodeSearchIdx);
-    if (nodeIdx === -1) break;
+  while (nodeSearchIdx < cleanLines.length) {
+    const match = cleanLines.substring(nodeSearchIdx).match(/(?:\\node|(?<=[^a-zA-Z0-9_\\])node)\s*(?:\[([^\]]*)\])?\s*(?:at\s*(\([^)]+\)))?\s*\{/);
+    if (!match || match.index === undefined) break;
 
-    // Tìm điểm kết thúc bằng dấu chấm phẩy ;
-    const semiIdx = cleanLines.indexOf(';', nodeIdx);
-    if (semiIdx === -1) {
-      nodeSearchIdx = nodeIdx + 5;
+    const absoluteStart = nodeSearchIdx + match.index;
+    const pos = match[1] || '';
+    let coordStr = match[2] || null;
+
+    const openBraceIdx = absoluteStart + match[0].length - 1;
+    const braced = extractBracedContent(cleanLines, openBraceIdx);
+    if (!braced) {
+      nodeSearchIdx = absoluteStart + match[0].length;
       continue;
     }
 
-    const nodeStmt = cleanLines.substring(nodeIdx, semiIdx + 1);
-    nodeSearchIdx = semiIdx + 1;
+    nodeSearchIdx = braced.endIndex + 1;
 
-    // Trích xuất tọa độ (...)
-    const atMatch = nodeStmt.match(/at\s*(\([^)]+\))/);
-    const ptCoordStr = atMatch ? atMatch[1] : (nodeStmt.match(/\([^)]+\)/)?.[0] || null);
-    if (!ptCoordStr) continue;
+    // Nếu không có "at (x,y)", tìm tọa độ trong câu lệnh hiện tại
+    if (!coordStr) {
+      const beforeStr = cleanLines.substring(Math.max(0, absoluteStart - 120), absoluteStart);
+      const pts = Array.from(beforeStr.matchAll(/\(([^)]+)\)/g));
+      if (pos.includes('midway') && pts.length >= 2) {
+        const pt1 = parsePoint(pts[pts.length - 2][1], coords, defs);
+        const pt2 = parsePoint(pts[pts.length - 1][1], coords, defs);
+        const midPt = { x: (pt1.x + pt2.x) / 2, y: (pt1.y + pt2.y) / 2 };
+        const text = cleanTikzNodeText(braced.content);
+        if (text) {
+          drawItems.push({ type: 'node', pt: midPt, text, pos });
+          updateBounds(midPt.x, midPt.y);
+        }
+        continue;
+      } else if (pts.length > 0) {
+        coordStr = pts[pts.length - 1][1];
+      }
+    }
 
-    // Trích xuất vị trí [below, above, right...]
-    const optMatches = Array.from(nodeStmt.matchAll(/\[([^\]]*)\]/g)).map((m) => m[1]);
-    const pos = optMatches.join(' ');
-
-    // Trích xuất nội dung { ... } cân bằng ngoặc
-    const braced = extractBracedContent(nodeStmt, 0);
-    if (braced) {
-      const pt = parsePoint(ptCoordStr, coords, defs);
+    if (coordStr) {
+      const pt = parsePoint(coordStr, coords, defs);
       const text = cleanTikzNodeText(braced.content);
       if (text) {
         drawItems.push({ type: 'node', pt, text, pos });
@@ -444,28 +531,125 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     const opts = m[1] || '';
     const body = m[2];
 
-    // Bỏ qua nếu là câu lệnh chứa node riêng đã được quét
-    if (body.includes('node') && !body.includes('--')) continue;
+    // Loại bỏ các khối node{...} khỏi body để không nhận nhầm ngoặc đơn trong công thức làm tọa độ
+    const bodyWithoutNodes = body.replace(/node\s*(?:\[[^\]]*\])?\s*\{[\s\S]*?\}/g, '');
 
     const isArrow = opts.includes('->') || opts.includes('>=stealth') || opts.includes('[-stealth]');
     const isDashed = opts.includes('dashed');
     const isThick = opts.includes('thick');
 
-    const ptMatches = body.match(/\([^)]+\)/g) || [];
-    for (let i = 0; i < ptMatches.length - 1; i++) {
-      const p1 = parsePoint(ptMatches[i], coords, defs);
-      const p2 = parsePoint(ptMatches[i + 1], coords, defs);
-      drawItems.push({
-        type: 'line',
-        p1,
-        p2,
-        isArrow: isArrow && (i === ptMatches.length - 2),
-        isDashed,
-        isThick,
-      });
-      updateBounds(p1.x, p1.y);
-      updateBounds(p2.x, p2.y);
+    // Tách các cặp đoạn thẳng: "(C) -- (A)" hoặc "(B) -- (A)"
+    const segMatches = Array.from(bodyWithoutNodes.matchAll(/\(([^)]+)\)\s*--\s*\(([^)]+)\)/g));
+    if (segMatches.length > 0) {
+      for (const sm of segMatches) {
+        const p1 = parsePoint(sm[1], coords, defs);
+        const p2 = parsePoint(sm[2], coords, defs);
+        drawItems.push({
+          type: 'line',
+          p1,
+          p2,
+          isArrow,
+          isDashed,
+          isThick,
+        });
+        updateBounds(p1.x, p1.y);
+        updateBounds(p2.x, p2.y);
+      }
+    } else {
+      const ptMatches = bodyWithoutNodes.match(/\(([^)]+)\)/g) || [];
+      for (let i = 0; i < ptMatches.length - 1; i++) {
+        const p1 = parsePoint(ptMatches[i], coords, defs);
+        const p2 = parsePoint(ptMatches[i + 1], coords, defs);
+        drawItems.push({
+          type: 'line',
+          p1,
+          p2,
+          isArrow: isArrow && (i === ptMatches.length - 2),
+          isDashed,
+          isThick,
+        });
+        updateBounds(p1.x, p1.y);
+        updateBounds(p2.x, p2.y);
+      }
     }
+  }
+
+  // 7b. Phân tích hình elip: \filldraw[...] (cx, cy) ellipse (rx and ry); hoặc \draw (cx, cy) ellipse (...);
+  const ellipseRegex = /\\(?:filldraw|fill|draw)(\[[^\]]*\])?\s*(\([^)]+\))\s*ellipse\s*\(([^)]+)\)/g;
+  while ((m = ellipseRegex.exec(cleanLines)) !== null) {
+    const opts = m[1] || '';
+    const centerPt = parsePoint(m[2], coords, defs);
+    const radiiStr = m[3];
+    const [rxStr, ryStr] = radiiStr.split('and').map((s) => s.trim().replace(/cm|pt|mm/g, ''));
+    const rx = parseFloat(rxStr) || 1;
+    const ry = parseFloat(ryStr || rxStr) || 1;
+
+    let fill = 'none';
+    if (opts.includes('fill=')) {
+      const fillMatch = opts.match(/fill=([a-zA-Z0-9!]+)/);
+      if (fillMatch) {
+        fill = parseTikzColor(fillMatch[1]);
+      }
+    }
+    const stroke = opts.includes('draw=black') || opts.includes('draw') ? '#0f172a' : '#334155';
+
+    drawItems.push({
+      type: 'ellipse',
+      pt: centerPt,
+      rx,
+      ry,
+      fill,
+      stroke,
+    });
+
+    updateBounds(centerPt.x - rx, centerPt.y - ry);
+    updateBounds(centerPt.x + rx, centerPt.y + ry);
+  }
+
+  // 7c. Phân tích cung tròn và hình quạt góc: \fill[...] (C) -- (x,y) arc (start:end:r) -- cycle;
+  const arcFillRegex = /\\fill(\[[^\]]*\])?\s*(\([^)]+\))\s*--\s*(\([^)]+\))\s*arc\s*\(([0-9.-]+):([0-9.-]+):([0-9.-]+)\)\s*--\s*cycle/g;
+  while ((m = arcFillRegex.exec(cleanLines)) !== null) {
+    const opts = m[1] || '';
+    const origin = parsePoint(m[2], coords, defs);
+    const startPt = parsePoint(m[3], coords, defs);
+    const startAngle = parseFloat(m[4]);
+    const endAngle = parseFloat(m[5]);
+    const radius = parseFloat(m[6]);
+
+    let fill = '#dcfce7'; // green!20
+    if (opts.includes('orange')) fill = '#ffedd5';
+    else if (opts.includes('cyan')) fill = '#cffafe';
+    else if (opts.includes('fill=')) {
+      const fillMatch = opts.match(/fill=([a-zA-Z0-9!]+)/);
+      if (fillMatch) fill = parseTikzColor(fillMatch[1]);
+    }
+
+    drawItems.push({
+      type: 'arc_sector',
+      origin,
+      startPt,
+      startAngle,
+      endAngle,
+      radius,
+      fill,
+    });
+  }
+
+  const arcDrawRegex = /\\draw(\[[^\]]*\])?\s*(\([^)]+\))\s*arc\s*\(([0-9.-]+):([0-9.-]+):([0-9.-]+)\)/g;
+  while ((m = arcDrawRegex.exec(cleanLines)) !== null) {
+    const startPt = parsePoint(m[2], coords, defs);
+    const startAngle = parseFloat(m[3]);
+    const endAngle = parseFloat(m[4]);
+    const radius = parseFloat(m[5]);
+
+    drawItems.push({
+      type: 'arc',
+      startPt,
+      startAngle,
+      endAngle,
+      radius,
+      stroke: '#334155',
+    });
   }
 
   // 8. Phân tích điểm chấm đặc biệt: \fill (x,y) circle (r); hoặc \draw (x,y) circle (r);
@@ -598,6 +782,50 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const cx = toSvgX(item.pt.x).toFixed(1);
       const cy = toSvgY(item.pt.y).toFixed(1);
       svgElements.push(`<circle cx="${cx}" cy="${cy}" r="${item.radius || 2.8}" fill="#0f172a" />`);
+    } else if (item.type === 'ellipse' && item.pt && item.rx && item.ry) {
+      const cx = toSvgX(item.pt.x).toFixed(1);
+      const cy = toSvgY(item.pt.y).toFixed(1);
+      const rx = (item.rx * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
+      const ry = (item.ry * ((height - 2 * pad) / (boundMaxY - boundMinY))).toFixed(1);
+      svgElements.push(`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${item.fill || '#cffafe'}" stroke="${item.stroke || '#0f172a'}" stroke-width="1.8" />`);
+    } else if (item.type === 'arc_sector' && item.origin && item.startPt && item.startAngle !== undefined && item.endAngle !== undefined && item.radius !== undefined) {
+      const r = item.radius;
+      const startRad = (item.startAngle * Math.PI) / 180;
+      const endRad = (item.endAngle * Math.PI) / 180;
+      const centerX = item.startPt.x - r * Math.cos(startRad);
+      const centerY = item.startPt.y - r * Math.sin(startRad);
+      const endPtX = centerX + r * Math.cos(endRad);
+      const endPtY = centerY + r * Math.sin(endRad);
+
+      const ox = toSvgX(item.origin.x).toFixed(1);
+      const oy = toSvgY(item.origin.y).toFixed(1);
+      const sx = toSvgX(item.startPt.x).toFixed(1);
+      const sy = toSvgY(item.startPt.y).toFixed(1);
+      const ex = toSvgX(endPtX).toFixed(1);
+      const ey = toSvgY(endPtY).toFixed(1);
+      const rSvg = (r * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
+
+      const sweep = item.endAngle > item.startAngle ? 0 : 1;
+      const pathD = `M ${ox} ${oy} L ${sx} ${sy} A ${rSvg} ${rSvg} 0 0 ${sweep} ${ex} ${ey} Z`;
+      svgElements.push(`<path d="${pathD}" fill="${item.fill || '#dcfce7'}" stroke="none" />`);
+    } else if (item.type === 'arc' && item.startPt && item.startAngle !== undefined && item.endAngle !== undefined && item.radius !== undefined) {
+      const r = item.radius;
+      const startRad = (item.startAngle * Math.PI) / 180;
+      const endRad = (item.endAngle * Math.PI) / 180;
+      const centerX = item.startPt.x - r * Math.cos(startRad);
+      const centerY = item.startPt.y - r * Math.sin(startRad);
+      const endPtX = centerX + r * Math.cos(endRad);
+      const endPtY = centerY + r * Math.sin(endRad);
+
+      const sx = toSvgX(item.startPt.x).toFixed(1);
+      const sy = toSvgY(item.startPt.y).toFixed(1);
+      const ex = toSvgX(endPtX).toFixed(1);
+      const ey = toSvgY(endPtY).toFixed(1);
+      const rSvg = (r * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
+
+      const sweep = item.endAngle > item.startAngle ? 0 : 1;
+      const pathD = `M ${sx} ${sy} A ${rSvg} ${rSvg} 0 0 ${sweep} ${ex} ${ey}`;
+      svgElements.push(`<path d="${pathD}" fill="none" stroke="${item.stroke || '#0f172a'}" stroke-width="1.6" />`);
     } else if (item.type === 'node' && item.pt && item.text) {
       const cx = toSvgX(item.pt.x);
       const cy = toSvgY(item.pt.y);
@@ -630,10 +858,10 @@ export function renderTikzToSvg(rawTikz: string): string | null {
         dy = 5; anchor = 'middle';
       }
 
-      // Font size to rõ (14.5px) kèm viền stroke trắng chống đè nét
-      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14.5" font-style="italic" font-weight="bold" fill="#0f172a" paint-order="stroke fill" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" text-anchor="${anchor}">${item.text}</text>`);
+      // Font size to rõ (15.5px) kèm viền stroke trắng chống đè nét
+      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15.5" font-style="italic" font-weight="bold" fill="#0f172a" paint-order="stroke fill" stroke="#ffffff" stroke-width="4.2" stroke-linejoin="round" text-anchor="${anchor}">${item.text}</text>`);
     }
   }
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="tikz-svg-pure mx-auto block select-none my-2" style="max-width: 100%; height: auto; min-width: 280px; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="tikz-svg-pure mx-auto block select-none my-2" style="max-width: 100%; height: auto; min-width: 320px; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
 }

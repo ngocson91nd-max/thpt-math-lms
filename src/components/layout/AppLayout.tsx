@@ -7,7 +7,7 @@ import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
 import { GuestAuthWall } from '@/components/auth/GuestAuthWall';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
-import { isUserEnrolledInAnyClass } from '@/lib/auth/enrollment';
+import { isUserEnrolledInAnyClass, getEnrolledClassIdsForUser } from '@/lib/auth/enrollment';
 import { MOCK_USERS } from '@/lib/supabase/mockStore';
 import { PanelLeftOpen, Loader2 } from 'lucide-react';
 
@@ -153,16 +153,47 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         const syncData = await syncRes.json();
         if (syncData.success) {
           const key = `lms_student_classes_${user.id}`;
-          const cloudApproved = Array.isArray(syncData.approvedClasses)
-            ? (activeIds.size > 0
-                ? syncData.approvedClasses.filter((id: string) => activeIds.has(id))
-                : syncData.approvedClasses)
-            : [];
+          const cloudApproved = Array.isArray(syncData.approvedClasses) ? syncData.approvedClasses : [];
+
           if (cloudApproved.length > 0) {
             localStorage.setItem(key, JSON.stringify(cloudApproved));
-          } else if (syncData.approvedClasses && syncData.approvedClasses.length === 0) {
-            // Thầy đã thực sự xóa/từ chối học sinh khỏi lớp trên Cloud
-            localStorage.setItem(key, JSON.stringify([]));
+            if (user.email) {
+              localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(cloudApproved));
+            }
+            if (user.username) {
+              localStorage.setItem(`lms_student_classes_${user.username.toLowerCase()}`, JSON.stringify(cloudApproved));
+            }
+
+            // Xóa mọi request pending cũ của các lớp đã được duyệt
+            const userPendingKey = `lms_user_pending_requests_${user.id}`;
+            const pendingArr: string[] = JSON.parse(localStorage.getItem(userPendingKey) || '[]');
+            const cleanedPending = pendingArr.filter((id) => !cloudApproved.includes(id));
+            localStorage.setItem(userPendingKey, JSON.stringify(cleanedPending));
+
+            if (isMounted) {
+              setIsEnrolled(true);
+            }
+          } else {
+            // Kiểm tra xem máy cục bộ có xác nhận học sinh đã được duyệt bởi giáo viên không
+            const localEnrolled = getEnrolledClassIdsForUser(user.id, user.email);
+            if (localEnrolled.length === 0) {
+              localStorage.setItem(key, JSON.stringify([]));
+              if (user.email) {
+                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify([]));
+              }
+              if (user.username) {
+                localStorage.setItem(`lms_student_classes_${user.username.toLowerCase()}`, JSON.stringify([]));
+              }
+              if (isMounted) {
+                setIsEnrolled(false);
+              }
+            } else if (isMounted) {
+              setIsEnrolled(true);
+            }
+          }
+
+          if (Array.isArray(syncData.pendingClasses)) {
+            localStorage.setItem(`lms_user_pending_requests_${user.id}`, JSON.stringify(syncData.pendingClasses));
           }
         }
       } catch (e) {

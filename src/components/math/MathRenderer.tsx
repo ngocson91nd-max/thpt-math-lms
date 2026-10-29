@@ -80,7 +80,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = hashTikz(rawTikz);
+      const cacheKey = `tikz_v4_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {
@@ -91,13 +91,15 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       // B. KIỂM TRA LOCALSTORAGE -> HIỂN THỊ TỨC THÌ 0ms!
       try {
         const cachedSvg = localStorage.getItem(cacheKey);
-        // Loại bỏ ngay lập tức bất kỳ bản cache nào bị lỗi trước đây (chứa chữ \p, \pos hoặc spinner rác)
+        // Loại bỏ ngay lập tức bất kỳ bản cache nào bị lỗi trước đây (chứa chữ \p, \pos, \mathrm cụt, hoặc spinner)
         if (
           cachedSvg &&
           (cachedSvg.includes('animate-spin') ||
-            cachedSvg.includes('>\\p<') ||
-            cachedSvg.includes('>\\pos<') ||
-            cachedSvg.includes('>\\x<'))
+            cachedSvg.includes('\\p') ||
+            cachedSvg.includes('\\pos') ||
+            cachedSvg.includes('\\x') ||
+            cachedSvg.includes('\\mathrm') ||
+            cachedSvg.includes('\\text'))
         ) {
           localStorage.removeItem(cacheKey);
         } else if (cachedSvg && cachedSvg.includes('<svg') && cachedSvg.length > 200) {

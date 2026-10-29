@@ -125,15 +125,15 @@ export function parseTkzTabCode(code: string): TkzTabParsed | null {
 export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   const { rows, xVals, signs, variations } = parsed;
 
-  const headerW = 95;
+  const headerW = 105;
   const colCount = Math.max(xVals.length - 1, 1);
-  const colW = Math.max(120, Math.floor(540 / colCount));
+  const colW = Math.max(140, Math.floor(660 / colCount));
   const totalW = headerW + colCount * colW + 40;
 
-  // Nâng chiều cao các hàng để bảng to rõ, thoáng đạt
-  const row1H = 46;
-  const row2H = 46;
-  const row3H = 130;
+  // Nâng chiều cao các hàng để bảng to rõ, thoáng đạt, font lớn
+  const row1H = 50;
+  const row2H = 50;
+  const row3H = 150;
   const totalH = row1H + row2H + row3H;
 
   const row1Y = 0;
@@ -215,16 +215,16 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
       // Bên trái vạch đôi
       const leftY = (item.leftPos || item.pos).includes('+') ? highY : lowY;
       const leftText = item.leftVal || item.val || '-\\infty';
-      variationElements += `<text x="${x - 22}" y="${leftY + 5}" fill="#0f172a" font-size="15.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(leftText)}</text>`;
+      variationElements += `<text x="${x - 24}" y="${leftY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(leftText)}</text>`;
 
       // Bên phải vạch đôi
       const rightY = (item.rightPos || '+').includes('+') ? highY : lowY;
       const rightText = item.rightVal || '+\\infty';
-      variationElements += `<text x="${x + 22}" y="${rightY + 5}" fill="#0f172a" font-size="15.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(rightText)}</text>`;
+      variationElements += `<text x="${x + 24}" y="${rightY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(rightText)}</text>`;
     } else {
       // ĐIỂM CỰC TRỊ / ĐIỂM BÌNH THƯỜNG
       const y = item.pos.includes('+') ? highY : lowY;
-      variationElements += `<text x="${x}" y="${y + 5}" fill="#0f172a" font-size="15.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(item.val)}</text>`;
+      variationElements += `<text x="${x}" y="${y + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(item.val)}</text>`;
     }
   }
 
@@ -241,7 +241,7 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     let startX = xCoords[col];
     let startY = lowY;
     if (curIsDouble) {
-      startX = xCoords[col] + 22;
+      startX = xCoords[col] + 24;
       startY = (cur.rightPos || '+').includes('+') ? highY : lowY;
     } else {
       startY = cur.pos.includes('+') ? highY : lowY;
@@ -251,7 +251,7 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     let endX = xCoords[col + 1];
     let endY = lowY;
     if (nextIsDouble) {
-      endX = xCoords[col + 1] - 22;
+      endX = xCoords[col + 1] - 24;
       endY = (next.leftPos || next.pos).includes('+') ? highY : lowY;
     } else {
       endY = next.pos.includes('+') ? highY : lowY;
@@ -261,20 +261,20 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     const isEndHigh = endY === highY;
 
     // Khoảng cách an toàn để mũi tên không đè lên chữ số
-    const arrowStartX = startX + 18;
-    const arrowEndX = endX - 18;
-    const arrowStartY = isStartHigh ? startY + 10 : startY - 10;
-    const arrowEndY = isEndHigh ? endY + 10 : endY - 10;
+    const arrowStartX = startX + 20;
+    const arrowEndX = endX - 20;
+    const arrowStartY = isStartHigh ? startY + 12 : startY - 12;
+    const arrowEndY = isEndHigh ? endY + 12 : endY - 12;
 
-    variationElements += `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="2.5" marker-end="url(#${markerId})" stroke-linecap="round" />`;
+    variationElements += `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="2.8" marker-end="url(#${markerId})" stroke-linecap="round" />`;
   }
 
   // Các điểm trên hàng x
   let xPointsElements = '';
   for (let i = 0; i < xVals.length; i++) {
     const xPos = xCoords[i];
-    xPointsElements += `<text x="${xPos}" y="${row1Y + 28}" fill="#0f172a" font-size="15.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>`;
+    xPointsElements += `<text x="${xPos}" y="${row1Y + 31}" fill="#0f172a" font-size="17" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>`;
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-2xl mx-auto my-4 bg-white rounded-2xl shadow-sm border border-slate-200 select-none"><defs><marker id="${markerId}" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 29}" fill="#1e293b" font-size="16" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 29}" fill="#1e293b" font-size="16" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 6}" fill="#1e293b" font-size="16" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-4 bg-white rounded-2xl shadow-sm border border-slate-200 select-none" style="min-width: 480px; max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
 }

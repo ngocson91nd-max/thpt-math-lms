@@ -651,9 +651,26 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   const isLowTime = timeLeft < 300; // Dưới 5 phút
 
-  // Thông tin từng Phần
-  const getPartDetails = (q: Question) => {
-    const p = q.part || (q.type === 'essay' ? 4 : q.type === 'short_answer' ? 3 : q.type === 'true_false' ? 2 : 1);
+  // Thông tin từng Phần (Tự động nhận diện chuẩn Bộ GD&ĐT 2025 kể cả khi đề nhập thô)
+  const getPartDetails = (q: Question, idx?: number) => {
+    let p = q.part;
+    if (!p) {
+      if (q.type === 'true_false') {
+        p = 2;
+      } else if (q.type === 'short_answer') {
+        p = 3;
+      } else if (q.type === 'essay') {
+        p = 4;
+      } else if (typeof idx === 'number') {
+        // Tự động phân phần chuẩn THPT 2025: Câu 1-12 là Phần I, 13-16 là Phần II, 17-22 là Phần III
+        if (idx < 12) p = 1;
+        else if (idx < 16) p = 2;
+        else if (idx < 22) p = 3;
+        else p = 4;
+      } else {
+        p = 1;
+      }
+    }
     if (p === 1) {
       return {
         part: 1,
@@ -1539,11 +1556,11 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           {viewMode === 'scroll' ? (
             <div className="space-y-6">
               {questions.map((q, idx) => {
-                const partInfo = getPartDetails(q);
+                const partInfo = getPartDetails(q, idx);
                 // Hiển thị banner đầu Phần nếu là câu đầu tiên của Phần đó
                 const isFirstOfPart =
                   idx === 0 ||
-                  (getPartDetails(questions[idx - 1]).part !== partInfo.part);
+                  (getPartDetails(questions[idx - 1], idx - 1).part !== partInfo.part);
 
                 return (
                   <div key={q.id} id={`q-card-${q.id}`} className="space-y-4">
@@ -1625,7 +1642,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             <div className="space-y-6">
               {/* Section Indicator Banner */}
               {(() => {
-                const partInfo = getPartDetails(currentQ);
+                const partInfo = getPartDetails(currentQ, currentIndex);
                 return (
                   <div
                     className={`rounded-2xl border p-4 shadow-2xs ${
@@ -1790,7 +1807,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             {/* Danh sách các nút số câu hỏi chia theo từng phần */}
             <div className="max-h-[55vh] overflow-y-auto pr-1 space-y-4">
               {([1, 2, 3, 4] as const).map((partNum) => {
-                const partItems = filteredQuestionList.filter(({ q }) => getPartDetails(q).part === partNum);
+                const partItems = filteredQuestionList.filter(({ q, idx }) => getPartDetails(q, idx).part === partNum);
                 if (partItems.length === 0) return null;
 
                 const partHeader =

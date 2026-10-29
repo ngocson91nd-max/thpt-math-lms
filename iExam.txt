@@ -1,0 +1,1780 @@
+Nhật ký cập nhật
+Mọi bản phát hành của iExam theo ngày, mới nhất ở trên.
+
+Phiên bản đang dùng
+
+v2.29.0
+Phát hành 28/10/2026
+Bản phát hành
+
+160
+Từ 19/07/2026
+Tính năng mới
+
+230
+Tính từ bản đầu tiên
+Tính năng hiện có
+
+190
+Trong 12 nhóm
+Dòng thời gian
+Tất cả tính năng
+Tất cả
+573
+Tính năng mới
+230
+Cải tiến
+126
+Sửa lỗi
+217
+Tháng 10 năm 2026
+68 bản
+28/10
+
+Thứ Tư
+
+v2.29.0
+Bản tính năng
+Đang dùng
+Mới
+Trộn đề mở công khai
+Mới
+PDF tổng hợp để in
+Mới
+Nhập file LaTeX (.tex)
+27/10
+
+Thứ Ba
+
+v2.28.0
+Bản tính năng
+Mới
+Tạo đề từ PDF
+Mới
+Xuất đề PDF (2 file)
+Mới
+Thông tin chi tiết học sinh ở trang quản trị
+26/10
+
+Thứ Hai
+
+v2.27.19
+Bản vá
+Sửa
+Đề cũ có giờ đóng không hiển thị điểm sau khi nộp bài
+v2.27.18
+Bản vá
+Sửa
+Học sinh không xem được điểm khi chưa được phép hoặc chưa đến giờ công bố
+Sửa
+Trang kết quả thông báo rõ thời điểm mở điểm
+v2.27.17
+Bản vá
+Đổi
+Khóa toàn bộ tính năng giáo viên khi gói sử dụng hết hạn
+Đổi
+Hiển thị thông tin Zalo hỗ trợ ngay trên trang gia hạn
+Sửa
+Gói Không giới hạn đã hết hạn có thể thanh toán gia hạn ngay
+25/10
+
+Chủ nhật
+
+v2.27.16
+Bản vá
+Sửa
+Dựng được hình TikZ có đường gợn sóng khi nhập đề LaTeX
+v2.27.15
+Bản vá
+Sửa
+Tự điền mã đề trên trang chuyển đổi Word
+24/10
+
+Thứ Bảy
+
+v2.27.14
+Bản vá
+Sửa
+Hiển thị đúng công thức tập hợp khi nhập đề Word
+Sửa
+Tách lời giải đúng/sai thành dòng riêng khi nhập Word
+v2.27.13
+Bản vá
+Mới
+Nhập mã đề thủ công trên trang Trộn đề
+v2.27.12
+Bản vá
+Sửa
+Nhận đúng phương án và đáp án gạch chân khi nhập đề Word tiếng Anh
+Sửa
+Nhận đầy đủ nhóm bài đọc và câu sắp xếp tiếng Anh
+v2.27.11
+Bản vá
+Sửa
+Giữ gạch chân phần phát âm khi tự định dạng đề sau khi nhập Word
+23/10
+
+Thứ Sáu
+
+v2.27.10
+Bản vá
+Sửa
+Giữ in đậm và gạch chân phần phát âm trong phương án khi nhập Word
+v2.27.9
+Bản vá
+Sửa
+Giữ in đậm trong bài đọc khi nhập đề Word
+v2.27.8
+Bản vá
+Mới
+Hướng dẫn riêng cách nhập đề Word tiếng Anh trong THCS / THPT
+v2.27.7
+Bản vá
+Mới
+Nhập đề Word tiếng Anh trực tiếp trong THCS / THPT
+Mới
+Giữ ngữ liệu và liên kết ô trống khi trộn, sửa và xuất lại đề tiếng Anh
+22/10
+
+Thứ Năm
+
+v2.27.6
+Bản vá
+Đổi
+Bổ sung hướng dẫn đặt tiêu đề phần trong file Word
+Sửa
+Import Word: dòng hướng dẫn sau tiêu đề phần không còn bị nhận thành câu hỏi
+v2.27.5
+Bản vá
+Sửa
+Import Word: hệ phương trình MathType có dạng ma trận chứa chồng dòng bị mất nội dung
+Sửa
+Import Word: mệnh đề Đúng/Sai bị ngắt đoạn trong Word bị cắt cụt
+v2.27.4
+Bản vá
+Sửa
+Import Word: hệ phương trình \begin{cases} hiện ra dạng chữ thay vì công thức
+21/10
+
+Thứ Tư
+
+v2.27.3
+Bản vá
+Sửa
+Import Word: phương án chứa °C bị cắt mất đơn vị
+v2.27.2
+Bản vá
+Sửa
+Sidebar cấu trúc đề THCS/THPT không hiện nhóm câu
+v2.27.1
+Bản vá
+Sửa
+Mã QR chấm thi (TNMaker) mất ký tự Đ ở phần Đúng/Sai
+v2.27.0
+Bản tính năng
+Mới
+Chèn thông tin đề thi vào file Word ở trang Convert
+v2.26.0
+Bản tính năng
+Mới
+Nhận diện công thức Equation Editor 3.0 khi nhập file Word
+20/10
+
+Thứ Ba
+
+v2.25.0
+Bản tính năng
+Mới
+QR chung khi tải hàng loạt ở trang Convert
+Mới
+Thông tin đề thi và mã đề ở trang Convert
+v2.24.0
+Bản tính năng
+Mới
+Đồng hồ đếm ngược dạng thanh ở Chiếu ôn tập
+19/10
+
+Thứ Hai
+
+v2.23.0
+Bản tính năng
+Mới
+Nút sao chép mã TikZ khi hình vẽ dựng lỗi
+Mới
+Lỗi "Undefined control sequence" nay nói rõ lệnh nào hỏng
+18/10
+
+Chủ nhật
+
+v2.22.0
+Bản tính năng
+Sửa
+File đáp án TNMaker chỉ có một sheet
+v2.21.0
+Bản tính năng
+Mới
+File đáp án Excel và mã QR cho TNMaker và QM Chấm thi
+17/10
+
+Thứ Bảy
+
+v2.20.0
+Bản tính năng
+Mới
+Hướng dẫn chấm bài tự luận trong cẩm nang giáo viên
+Sửa
+Nhãn "Chờ chấm" ở bảng kết quả không còn bị xuống dòng
+16/10
+
+Thứ Sáu
+
+v2.19.0
+Bản tính năng
+Mới
+Bảng chọn công thức có thêm nhóm Mũi tên có nhãn
+Sửa
+Mũi tên phản ứng hoá học xuất ra Word thành công thức sửa được
+Sửa
+Nhập đề từ Word không còn làm rụng cận dưới của giới hạn
+v2.18.0
+Bản tính năng
+Mới
+Tự nộp bài khi đề đóng
+Mới
+Đề không giới hạn thời gian nhưng có giờ khoá cũng đếm ngược
+13/10
+
+Thứ Ba
+
+v2.17.0
+Bản tính năng
+Mới
+Tải bài làm của cả lớp về dạng PDF
+Mới
+File PDF kèm lịch sử làm bài của từng em
+Đổi
+Lịch sử làm bài ghi rõ em sửa bài tự luận từ gì sang gì
+Đổi
+Mỗi lượt viết liền mạch một câu tự luận gọn thành một dòng lịch sử
+11/10
+
+Chủ nhật
+
+v2.16.0
+Bản tính năng
+Mới
+Thầy cô nhận xét được bài làm của từng em
+Mới
+Nhận xét hàng loạt cả lớp trong một lượt
+Mới
+Học sinh và phụ huynh thấy lời nhận xét của giáo viên
+Mới
+Thầy cô và quản trị viên tự đổi được tên hiển thị
+Mới
+Bấm vào email ở trang quản lý Giáo viên là sao chép email đó
+Mới
+Hình không gian: đỉnh đáy của khối mẫu chỉ trượt trong mặt đáy khi kéo
+Đổi
+Nút Format đề chuẩn hoá nhãn ý Đúng/Sai thành "a)"
+Sửa
+Vectơ nhiều chữ viết bằng \vec không còn ra mũi tên cụt trong file Word xuất dạng MathType
+10/10
+
+Thứ Bảy
+
+v2.15.0
+Bản tính năng
+Đổi
+Chơi trực tiếp: câu trắc nghiệm giờ chọn lại được trước khi nộp
+v2.14.0
+Bản tính năng
+Mới
+Convert iMath-Tex to Word: chọn được công thức xuất dạng MathType hay Equation
+Sửa
+Trang "Đề của tôi" mở nhẹ hơn một chút
+09/10
+
+Thứ Sáu
+
+v2.13.0
+Bản tính năng
+Mới
+Cho điểm câu sai đề: thầy cô đánh dấu một câu trắc nghiệm là "câu cho điểm", mọi bài có câu đó được trọn điểm của câu
+Mới
+Câu Đúng/Sai cho điểm theo từng ý
+Mới
+Sửa đề giữa giờ giờ dùng đúng trình soạn của trang sửa đề
+Mới
+Tải trò chơi về một file HTML để chơi khi lớp không có mạng
+Sửa
+Đề đã có bài làm không còn đổi được thứ tự câu, loại câu hay số phương án
+Sửa
+Đề cũ lưu câu xen kẽ loại hoặc có câu Đúng/Sai khác 4 ý không còn bị xếp lại mỗi lần lưu
+Sửa
+Chấm lại cả đề ghép đúng câu học sinh đã làm
+v2.12.0
+Bản tính năng
+Mới
+Rút câu tự động: thầy cô soạn nhiều câu trong một phần, mỗi lượt làm bài chỉ gồm số câu thầy cô đặt, rút ngẫu nhiên
+Mới
+Đề rút câu: mọi em cùng thang điểm dù gặp câu khác nhau
+Mới
+Đề rút câu: học sinh chỉ thấy và chỉ xem lại các câu mình được rút
+Mới
+Đề rút câu: học sinh đã đăng nhập phải làm xong lượt đang dở mới được rút bộ câu khác
+Mới
+Cài đặt đề có thêm ô "Xáo trộn phương án đúng sai"
+Sửa
+Đổi tổng điểm một phần sau khi đã có bài nộp: điểm từng câu và mức điểm tối đa khi chấm tự luận giờ theo đúng thang mới
+Sửa
+Điểm tự luận đã chấm cao hơn mức tối đa mới thì hiển thị đúng bằng mức tối đa
+Sửa
+Thông báo "Câu N vừa được giáo viên cập nhật" trên trang thi dùng đúng số câu em đang thấy
+v2.11.0
+Bản tính năng
+Mới
+Quản trị viên tạo tài khoản học sinh hàng loạt từ file Excel ở trang Quản lý Học sinh
+Mới
+File nhập học sinh có cột Mã lớp: em nào có mã thì được thêm thẳng vào lớp đó
+Đổi
+Trang Quản lý Học sinh: nút Xuất Excel chuyển vào menu Nhập / Xuất
+08/10
+
+Thứ Năm
+
+v2.10.0
+Bản tính năng
+Mới
+Convert iMath-Tex to Word: đề .tex và đề Word có lời giải giờ tải về bộ ba như Trộn đề — file đề, file đề kèm lời giải và bảng đáp án Excel
+Mới
+Menu Công cụ có thêm mục Hình không gian
+Đổi
+Convert iMath-Tex to Word: file tải về của đề .tex đổi tên
+v2.9.1
+Bản vá
+Đổi
+Convert iMath-Tex to Word: đề không có phần lời giải thì không gạch chân đáp án
+Đổi
+Convert iMath-Tex to Word: dòng "--- HẾT ---" được căn giữa và in đậm
+Đổi
+Mô phỏng hình học không gian: điểm thêm trên cạnh, trung điểm và trọng tâm bám theo hình khi kéo đỉnh; mỗi cạnh tự chia thành đoạn thấy và đoạn khuất theo góc nhìn
+Sửa
+Convert iMath-Tex to Word: đề iMath gõ thẳng trong Word giờ ra đúng công thức MathType
+Sửa
+Menu bên trái rộng hơn một chút để hiện đủ tên Convert iMath-Tex to Word
+v2.9.0
+Bản tính năng
+Mới
+Công cụ mới Convert iMath-Tex to Word: chuyển nhiều đề Word hoặc đề .tex của iMath thành file Word có công thức MathType trong một lượt
+Mới
+Mô phỏng hình học không gian có bảng Thuộc tính và nhóm Đặc biệt
+Mới
+Thêm video hướng dẫn Mô phỏng hình học không gian
+Đổi
+Menu giáo viên có nhóm Công cụ, gồm Trộn đề và Convert iMath-Tex to Word
+Sửa
+Mã TikZ xuất từ Mô phỏng hình học không gian không còn bị bóp ngang theo bề rộng màn hình
+Sửa
+Mô phỏng hình học không gian trên điện thoại: menu Thuộc tính / Đặc biệt hiện được, ô chọn khối mẫu không còn bị co lại
+Sửa
+Xoá một đỉnh của khối mẫu thì mặt chứa đỉnh đó cũng mất, không còn lơ lửng
+07/10
+
+Thứ Tư
+
+v2.8.1
+Bản vá
+Đổi
+Cập nhật iExam nhanh hơn: trình duyệt chỉ tải lại những phần vừa thay đổi
+v2.8.0
+Bản tính năng
+Mới
+Trang Giáo viên của khu quản trị có thêm ba cột Đề, Lớp, HS — bấm tiêu đề cột để sắp xếp
+Mới
+Trang xem đề của khu quản trị có cột thông tin đề ở bên phải
+v2.7.0
+Bản tính năng
+Mới
+Mô phỏng hình học không gian có công cụ phóng to / thu nhỏ cả hình mà giữ nguyên hình dáng
+Mới
+Mô phỏng hình học không gian xoá nhanh được đối tượng đang chọn
+Đổi
+Các công cụ vẽ trong Mô phỏng hình học không gian giữ nguyên sau mỗi lần vẽ
+Đổi
+Mặt phẳng qua ba điểm nay vẽ rộng ra ngoài khối, có viền nét đứt
+Đổi
+Đường thẳng kéo dài hết khung nhìn
+Sửa
+Bấm vào một đỉnh mà không kéo thì đỉnh đó được chọn
+Sửa
+Lời nhắc trên điện thoại không còn nói "Nhả chuột" và "nhấn Esc"
+v2.6.1
+Bản vá
+Đổi
+Tiện ích Mô phỏng hình học không gian dùng được trên điện thoại
+Đổi
+Mô phỏng hình học không gian: kéo đỉnh và chọn cạnh bằng ngón tay dễ trúng hơn, nhấn giữ một đỉnh để đổi tên
+v2.6.0
+Bản tính năng
+Mới
+Trang chủ có thêm phần "Tiện ích" với công cụ đầu tiên là Mô phỏng hình học không gian
+v2.5.0
+Bản tính năng
+Mới
+Chơi trực tiếp: đặt thời gian riêng cho từng phần của đề
+Mới
+Chơi trực tiếp: nút "Lựa chọn của học sinh" sau mỗi câu
+Mới
+Chơi trực tiếp: nút "Bảng tổng hợp lựa chọn" khi kết thúc
+Mới
+Đề THCS / THPT thêm được nhóm câu ngay trong trình soạn
+Đổi
+Trang Tổng quan của giáo viên có màu trở lại
+Đổi
+Màn chiếu của Chơi trực tiếp dành nhiều chỗ hơn cho câu hỏi
+Sửa
+Chơi trực tiếp: thanh nút của thầy cô không còn rớt xuống dòng thứ hai khi trình duyệt phóng to
+Sửa
+Chơi trực tiếp: màn chữa bài không còn tràn
+v2.4.0
+Bản tính năng
+Mới
+iExam Editor có nút "Chèn hình nhanh" để chèn hình không gian vào đề
+06/10
+
+Thứ Ba
+
+v2.3.4
+Bản vá
+Sửa
+Kho đề của tôi: bấm "Dùng đề này" không còn báo "Lấy đề thất bại" khi đề có câu trắc nghiệm chưa đánh dấu đáp án
+v2.3.3
+Bản vá
+Sửa
+Nhập đề Word có công thức MathType không còn ra chữ Hán và mất công thức
+Sửa
+Trò chơi trực tiếp: iPhone gõ được dấu trừ và dấu / ở câu trả lời ngắn
+05/10
+
+Thứ Hai
+
+v2.3.2
+Bản vá
+Mới
+Tải lên được ảnh HEIC của iPhone trên mọi trình duyệt
+Đổi
+Màn chiếu trò chơi trực tiếp: chữ câu hỏi và đáp án tự to lên cho kín màn hình
+Sửa
+Ảnh bài tự luận bị máy chủ từ chối không còn báo "kiểm tra mạng"
+v2.3.1
+Bản vá
+Sửa
+Xuất Word dạng Equation: mũi tên có chữ ở trên / dưới và công thức đóng khung không còn ra chữ thô
+v2.3.0
+Bản tính năng
+Mới
+Cửa sổ soạn công thức có hai hàng bảng chọn như MathType: ký hiệu ở trên, mẫu ở dưới
+Mới
+Dùng được phím tắt của MathType
+Mới
+Thanh mẫu nhanh theo chủ đề
+Mới
+Bôi đen một phần công thức rồi bấm một mẫu là mẫu bọc lấy phần đó
+Đổi
+Bấm Chèn công thức là mở ngay cửa sổ soạn
+Đổi
+Enter đưa công thức vào đề, Esc huỷ; Tab nhảy sang ô trống kế tiếp và ra khỏi mẫu khi hết ô
+Đổi
+Bàn phím toán ảo không còn tự trồi lên trên máy tính
+Đổi
+Mở một công thức ra xem rồi bấm Cập nhật mà không sửa thì công thức giữ nguyên từng ký tự
+v2.2.0
+Bản tính năng
+Mới
+Thầy cô chọn được cách học sinh vào lớp: vào tự do hoặc duyệt mới vào
+Mới
+Duyệt từng em hoặc cả lớp một lần ngay trong Danh sách học sinh
+Mới
+Trang Tổng quan nhắc thầy cô khi có học sinh chờ duyệt
+Mới
+Học sinh thấy lớp mình đang chờ duyệt và tự huỷ yêu cầu được
+v2.1.3
+Bản vá
+Sửa
+Học sinh vào lại bài đang làm dở không còn bị báo "hết lượt làm bài"
+Sửa
+Vào trang làm bài sớm vài giây trước giờ mở đề không còn ra màn hình trắng và mất một lượt
+Sửa
+Giờ mở đề tính theo đồng hồ máy chủ, không theo đồng hồ máy học sinh
+04/10
+
+Chủ nhật
+
+v2.1.2
+Bản vá
+Sửa
+Câu trắc nghiệm kiểu "Số phát biểu đúng là" không còn bị trình soạn đổi thành câu Đúng/Sai
+Sửa
+Áp dụng cho cả nhập đề từ Word / LaTeX lẫn mở đề có sẵn trong trình soạn
+v2.1.1
+Bản vá
+Mới
+Bấm Lưu đề mà có câu Đúng/Sai đáp án toàn Đúng hoặc toàn Sai thì được nhắc kiểm lại
+Mới
+Khi đề còn lỗi phải sửa, các cảnh báo này hiện kèm trong cùng danh sách để thầy cô xử lý một lượt
+v2.1.0
+Bản tính năng
+Mới
+Nhập đề đánh giá năng lực từ file LaTeX (.tex) giữ được tiêu đề phần và ngữ liệu chung của nhóm câu
+Mới
+File .tex vừa có tiêu đề phần đánh số vừa có lời dẫn nhóm câu được tự nhận là đề ĐGNL khi thầy cô không chọn dạng đề; chọn THCS / THPT thì vẫn giữ nhóm câu, không gắn tiêu đề phần
+03/10
+
+Thứ Bảy
+
+v2.0.1
+Bản vá
+Mới
+Giáo viên gỡ được vi phạm của bài đã nộp
+Mới
+Trang Chi tiết bài làm hiện loại máy học sinh dùng
+Mới
+Lịch sử thao tác hiện thời gian vắng cho mọi lần rời trang
+Đổi
+Bảng xếp hạng không còn dùng số vi phạm để phân hạng
+Đổi
+Hộp cảnh báo khi làm bài đổi lời
+Đổi
+Bài bị khoá vì vi phạm nói rõ lần vi phạm cuối là gì
+Đổi
+Màn Sẵn sàng làm bài luôn báo trước việc rời trang được ghi lại
+Đổi
+Trang phụ huynh ghi "Hệ thống ghi nhận N lần rời trang thi hoặc sao chép đề" thay cho "N lần rời khỏi trang thi", màu trung tính
+Đổi
+Rời trang thi dưới 3 giây không còn bị tính vi phạm (trước là 1,5 giây)
+Đổi
+Thanh Chọn câu / Nộp bài ở đáy trang thi trên điện thoại cao thêm một chút để ngón tay xa mép dưới màn hình hơn
+Sửa
+Học sinh không còn bị tính hai vi phạm cho một lần rời trang
+Sửa
+Giữ phím Ctrl+C không còn làm khoá bài
+Sửa
+Chụp ảnh bài làm tự luận không còn bị tính là rời trang
+Sửa
+Chia đôi màn hình không còn bị tính đi tính lại
+Sửa
+Đang gõ câu trả lời mà vuốt nhầm không còn bị coi là chia đôi màn hình
+Sửa
+Máy tính Windows có màn cảm ứng và Chromebook không còn bị che đề
+Sửa
+iPad vừa xoay máy không còn bị che đề nhầm
+Sửa
+Giáo viên hạ ngưỡng khoá bài giữa giờ không còn làm bài bị chốt oan
+Sửa
+Mở đề khác ở tab mới rồi tab cũ ghi nhầm vi phạm của nó sang bài mới: đã chặn
+v2.0.0
+Bản lớn
+Mới
+Nhật ký cập nhật theo dòng thời gian
+Đổi
+Nhận diện mới: logo "bé Sét"
+Đổi
+Trang chủ thiết kế lại
+Đổi
+Thanh menu và phần đầu trang của khu giáo viên / quản trị thiết kế lại
+Đổi
+Trang Tổng quan của giáo viên thiết kế lại
+Đổi
+Trang làm bài thiết kế lại
+Đổi
+Trang vào thi, đăng nhập, đăng ký có nền bong bóng bay nhẹ
+Đổi
+Các trang dạng một thẻ giữa màn hình (vào thi, đăng nhập, đăng ký, quên mật khẩu, chờ mở đề, đề đã khoá, sẵn sàng làm bài, các màn báo lỗi) dùng chung một khung nên cùng nền, cùng bo góc
+Đổi
+Màn chờ "Đang tải" dùng logo mới: bé Sét nhảy tưng tưng
+Đổi
+Màn chiếu Chơi trực tiếp của giáo viên dùng logo mới
+Đổi
+Ảnh xem trước khi chia sẻ link thiết kế lại
+Đổi
+Ảnh giao diện ở trang chủ chuyển sang định dạng WebP, nhẹ hơn khoảng 30%
+Đổi
+Thu gọn / mở rộng thanh menu không còn giật: chữ không xuống dòng, biểu tượng đứng yên tại chỗ
+Đổi
+Trang Trộn đề dùng cùng lề và cỡ tiêu đề với các trang khác
+Đổi
+Ảnh minh hoạ ở trang chủ và trang Hướng dẫn được chụp lại theo giao diện mới
+02/10
+
+Thứ Sáu
+
+v1.49.4
+Bản vá
+Sửa
+Bảng biến thiên có tiệm cận đứng không còn hỏng sau khi nhập đề
+Sửa
+Công thức viết \left [ … \right ] (có dấu cách) không còn bị chèn thêm ngoặc tròn thành \left( [ … \right) ]; \left\lbrace … \right\rbrace giữ nguyên
+Sửa
+Nhập đề .tex: dấu \ ở cuối dòng sau hình vẽ không còn thành một dòng riêng chỉ có dấu \ giữa đề bài
+v1.49.3
+Bản vá
+Sửa
+Xuất Word dạng Equation: A ∩ B không còn ra chữ A\capB
+Sửa
+Đề .tex từ ngân hàng đề: thêm hai kiểu hình dựng được
+Sửa
+Trang soạn đề / nhập đề chạy lại trên Safari dưới 16.4 (iPad, iPhone đời cũ)
+v1.49.2
+Bản vá
+Sửa
+Đề .tex xuất từ ngân hàng đề không còn hỏng toàn bộ hình vẽ
+Sửa
+Chữ đậm trong hình (font=\LARGE\bfseries) không còn bị cắt thành lệnh sai lúc nhập đề .tex
+Sửa
+Đề đã nhập trước bản này vẫn giữ khung báo lỗi cũ — nhập lại file .tex thì hình mới lên
+01/10
+
+Thứ Năm
+
+v1.49.1
+Bản vá
+Sửa
+Nút quay lại của trình duyệt về đúng thư mục kho đề vừa đứng
+Sửa
+Trang sửa đề trong kho (admin): nút ← và Huỷ về danh mục chứa đề thay vì gốc kho
+v1.49.0
+Bản tính năng
+Mới
+Tải nhiều đề lên kho: mỗi đề một ô mô tả riêng
+Mới
+Ô Mô tả chung vẫn còn: đề nào để trống mô tả riêng thì nhận mô tả chung, và ô trống hiện sẵn "Dùng mô tả chung: …" để biết đề đó sẽ nhận gì
+Mới
+Có ở cả kho dùng chung (admin) lẫn Ngân hàng của tôi (giáo viên)
+v1.48.1
+Bản vá
+Sửa
+Đề lấy từ Kho đề về, lưu ở trang soạn đề xong công thức không còn vỡ thành mã LaTeX
+Sửa
+Dãy biến đổi \begin{align*} … \end{align*} trong lời giải không còn hiện nguyên mã đỏ
+v1.48.0
+Bản tính năng
+Mới
+Lịch sử thao tác của từng bài làm
+Mới
+Việc ghi do máy chủ làm từ chính các lần tự lưu, nên đầy đủ kể cả khi máy học sinh chạy bản cũ, và học sinh không tự ghi hay sửa được
+Mới
+Chỉ giáo viên chủ đề xem được. Lịch sử giữ 90 ngày kể từ lúc nộp bài; điểm, đáp án và tổng số vi phạm thì vẫn giữ như cũ
+v1.47.1
+Bản vá
+Sửa
+iPhone/iPad: gõ xong câu trả lời ngắn, bàn phím đóng lại không còn bị tính vi phạm "rời khỏi cửa sổ thi"
+Sửa
+Chụp ảnh bài làm tự luận không còn bị tính vi phạm
+Sửa
+Đang bị che vì chia đôi màn hình mà ra đa nhiệm để đóng ứng dụng kia (đúng như lớp che hướng dẫn) không còn bị tính thêm một lần "chuyển tab"
+Sửa
+Mất focus báo về sau khi trang đã ẩn, rồi trang hiện lại nhanh (vuốt nhầm) mà không kèm sự kiện lấy lại focus: không còn bị tính
+Sửa
+Giữ màn hình sáng bền hơn: khoá giữ màn hình bị hệ thống nhả khi trang vẫn hiện (tiết kiệm pin), hoặc lần xin đầu bị từ chối, trước đây không bao giờ được xin lại — màn hình tự tắt sau đó bị…
+Sửa
+Trang nhập tên không còn tự tải lại và xoá tên em đang gõ
+Tháng 9 năm 2026
+36 bản
+30/09
+
+Thứ Tư
+
+v1.47.0
+Bản tính năng
+Đổi
+Phát hiện trang thi trong cửa sổ nổi: Redmi/HyperOS vuốt từ thanh home lên góc thu cả trình duyệt thành cửa sổ nhỏ, học sinh xem app phía sau mà không chạm vào trang — trước đây không bị…
+Sửa
+Cảnh báo vi phạm oan khi vuốt chuyển câu
+Sửa
+Màn hình Bắt đầu trên máy cảm ứng nhắc học sinh vuốt ở giữa màn hình
+v1.46.0
+Bản tính năng
+Mới
+Link phụ huynh — bài chưa làm: ngoài các bài đã nộp, trang phụ huynh liệt kê mọi đề giáo viên đã giao cho lớp mà em chưa nộp, với nhãn Chưa làm (kèm hạn nộp), Đang làm dở, Sắp mở (kèm…
+Sửa
+Ai là triệu phú — ảnh trong đề chìm vào nền tối
+v1.45.5
+Bản vá
+Sửa
+Đề nhiều bộ — học sinh làm bộ này nhưng bị chấm theo bộ khác
+29/09
+
+Thứ Ba
+
+v1.45.4
+Bản vá
+Mới
+Danh sách học sinh của lớp: ô tìm kiếm (không phân biệt dấu, theo họ tên / email / SBD) và bấm tiêu đề cột để sắp xếp (SBD theo số, tên theo thứ tự tiếng Việt, ô trống luôn xuống cuối; bấm…
+Sửa
+Trò chơi trực tiếp — câu Đúng/Sai lộ đáp án trên màn chiếu
+Sửa
+Trò chơi trực tiếp — các ý/phương án chữ quá bé so với đề
+28/09
+
+Thứ Hai
+
+v1.45.3
+Bản vá
+Mới
+Tải đề về LaTeX ở trang "Tất cả đề": nút tải của mỗi đề thành menu chọn loại file — LaTeX hoặc JSON (như cũ)
+27/09
+
+Chủ nhật
+
+v1.45.2
+Bản vá
+Sửa
+Trình soạn đề trên iexam.vn nhanh hơn hàng chục lần
+v1.45.1
+Bản vá
+Sửa
+Mở đề dài (đề ĐGNL 120 câu, vài trăm công thức) không còn đứng hình
+v1.45.0
+Bản tính năng
+Mới
+Nhân bản đề
+Đổi
+Cột Hành động ở chế độ bảng rộng thêm để chứa nút mới (Tên đề 19% → 17%, Mã đề 9% → 8%)
+v1.44.4
+Bản vá
+Đổi
+Tạo đề mới mở sẵn thiết lập của đề vừa tạo lần trước
+v1.44.3
+Bản vá
+Đổi
+Trình soạn đề mượt hơn hẳn với đề dài (đề ĐGNL 120–150 câu)
+Đổi
+Mở đề trong Kho đề là đã "Format đề" sẵn
+Sửa
+Câu có phương án chỉ là một chữ cái ("A. A B. B C. C D. D", kiểu "bà đã nói ý nào?") không còn bị đọc thành 8 đáp án sau khi nhập/Format đề
+26/09
+
+Thứ Bảy
+
+v1.44.2
+Bản vá
+Sửa
+iPhone: đóng bàn phím sau khi gõ câu trả lời ngắn không còn bị tính vi phạm
+v1.44.1
+Bản vá
+Đổi
+Tạo tài khoản giáo viên không còn gửi email
+v1.44.0
+Bản tính năng
+Mới
+Dạng đề: THCS / THPT (như cũ), ĐGNL Hà Nội (HSA), ĐGNL TP.HCM (V-ACT)
+Mới
+Loại câu theo chuẩn kỳ thi: đề V-ACT chỉ có câu trắc nghiệm; đề HSA có trắc nghiệm và câu điền đáp án (trả lời ngắn); không có Đúng/Sai hay tự luận
+Mới
+Nhóm câu: nhiều câu dùng chung một ngữ liệu (đoạn văn, bảng số liệu, hình, lời dặn)
+Mới
+Trang thi trên máy tính (≥ 1024px): cột chọn câu cố định bên phải
+Mới
+Trang thi: trên máy tính ngữ liệu đứng yên ở cột trái trong lúc làm các câu của nhóm; trên điện thoại ngữ liệu thu gọn được, câu sau có nút "Xem ngữ liệu"
+Mới
+Chọn loại đề khi nhập file: bấm "Nhập file" (trang soạn đề, sửa đề trong kho) hoặc mở hộp tải đề lên kho là có ô "Loại đề của file" — mặc định THCS / THPT, chọn ĐGNL Hà Nội / TP.HCM để file…
+Mới
+Nhập đề ĐGNL từ Word: đáp án + lời giải lấy từ khối "LỜI GIẢI CHI TIẾT" cuối đề (bảng đáp án là dự phòng), nhận lời dẫn "Dựa vào…
+Mới
+Trình soạn: mục "Nhóm câu" và "Tiêu đề phần" (đề ĐGNL); chèn/xoá câu thì dải số trong lời dẫn tự sửa; khung cấu trúc theo phần của đề
+Mới
+Xuất Word, trộn đề giấy, xem lại bài, trang admin, kho đề
+Mới
+Sửa danh mục kho đề khi lỡ tạo sai (kho dùng chung + Ngân hàng của tôi): hộp "Chỉnh sửa" đổi tên, chuyển sang danh mục cha khác (kể cả nâng Chương lên Môn, hạ Môn xuống Chương — tầng cả…
+Mới
+Kho đề lọc theo loại ngân hàng (Tiểu học, THCS, Thi vào 10, THPT, Tốt nghiệp THPT, ĐGNL HN, ĐGNL TP.HCM, TSA, Khác) ở cây thư mục; loại gắn vào Môn
+Mới
+Quản lý loại ngân hàng (admin, nút bánh răng cạnh ô lọc ở Kho đề): thêm loại mới, đổi tên, sắp thứ tự, xoá
+Sửa
+Nhập Word giữ nguyên chữ tiếng Anh: "cost", "cosmetics", "maximum" không còn bị đổi thành hàm lượng giác / max (\cos t) — lỗi có ở mọi đề nhập từ Word
+Sửa
+Giữ gạch chân trong đề bài khi nhập Word và khi lưu từ trình soạn (câu tiếng Anh "tìm lỗi sai" gạch chân từ A/B/C/D — trước đây mất hết)
+Sửa
+"$" tiền tệ trong đề ("100.000$") không còn làm mất các phương án phía sau; "(A)", "(B)" trong đề bài không còn bị tách thành phương án
+Sửa
+Nhập đề ĐGNL TP.HCM luyện thi: hiểu khối lời giải chép lại nguyên đề + bảng đáp án, lời dẫn "Question 36 – 40", bài đọc không ghi dải câu, ngữ liệu viết liền dòng lời dẫn
+Sửa
+Xuất Word bản không đáp án không còn xoá mất lời dẫn nhóm / tiêu đề phần con đứng ngay sau lời giải
+Sửa
+Trò chơi và chơi trực tiếp bỏ qua câu thuộc nhóm (câu tách khỏi ngữ liệu không trả lời được) và báo số câu bị bỏ
+25/09
+
+Thứ Sáu
+
+v1.43.1
+Bản vá
+Đổi
+Mọi bảng có danh sách học sinh tách hai cột "Họ và đệm" | "Tên"
+Đổi
+File Excel danh sách lớp, link phụ huynh và học sinh (admin)
+v1.43.0
+Bản tính năng
+Đổi
+Tách "Họ và đệm" và "Tên"
+Đổi
+Xếp theo tên như sổ điểm
+Đổi
+Excel có hai cột "Họ và đệm" | "Tên" ở file điểm từng đề (cả sheet chi tiết đáp án) và bảng điểm cả lớp
+Đổi
+Tên cũ được tách tự động: chữ cuối là tên, sau khi bỏ dấu câu và các chữ có chứa số
+24/09
+
+Thứ Năm
+
+v1.42.0
+Bản tính năng
+Đổi
+Sinh đề AI: gửi cả yêu cầu lẫn file cùng lúc
+Đổi
+Thêm model gemini-3.8-flash vào danh sách chọn
+v1.41.0
+Bản tính năng
+Đổi
+Chống chia đôi màn hình trên điện thoại và máy tính bảng
+Đổi
+Mở đề trong Zalo, Messenger, Facebook…
+Đổi
+Android: cửa sổ nổi
+Đổi
+Giữ màn hình sáng suốt lúc làm bài: máy (nhất là khi bật tiết kiệm pin) tự tắt màn hình lúc em ngồi nghĩ lâu từng bị tính một lần "chuyển tab" oan
+Đổi
+Một thao tác rời trang chỉ tính một vi phạm, kể cả khi nó bắn nhiều tín hiệu nối nhau (chuyển app rồi quay về ở nửa màn hình, mất focus rồi mới ẩn trang trên máy yếu)
+Sửa
+Chạm vào ảnh bài làm tự luận mở ảnh ngay trong trang thi (phóng to, xoay được) thay vì mở tab mới — tab mới bị tính một lần chuyển tab
+Sửa
+Đường link trong nội dung đề (đề nhập từ Word hay kèm "Nguồn: …") và cử chỉ kéo trang xuống để tải lại không còn đưa em ra khỏi trang thi
+23/09
+
+Thứ Tư
+
+v1.40.1
+Bản vá
+Đổi
+Chiếu ôn tập mở ra ở cỡ chữ 32px thay vì 20px
+v1.40.0
+Bản tính năng
+Đổi
+Bảng xếp hạng hiện thời gian làm bài và bẻ hoà bằng tốc độ, rồi bằng số vi phạm
+Đổi
+Số vi phạm chỉ hiện ở dòng của chính em
+Đổi
+Bỏ nhãn "Thi bằng mã đề, tên tự nhập" dưới tên người thi không tài khoản — đề công khai thì gần như dòng nào cũng mang nhãn này, bảng rối mà không thêm thông tin
+Đổi
+Đề không giới hạn thời gian thì không xét thời gian làm
+Sửa
+Thẻ Chơi trực tiếp vẫn ghi "Chỉ câu trắc nghiệm" và chỉ đếm câu trắc nghiệm
+Sửa
+Bảng Phân tích từng câu của đề nhiều bộ in id nội bộ của bộ đề
+Sửa
+Xuất Word in nguyên chữ \colon, \iff, \implies
+Sửa
+Mũi tên ⇔ / ⇒ trong file Word xuất kiểu MathType dài hơn bình thường, kèm khoảng trống hai bên
+v1.39.0
+Bản tính năng
+Mới
+Bảng xếp hạng của đề, phía học sinh
+Mới
+Bật theo TỪNG ĐỀ, mặc định TẮT (Cài đặt thêm → Sau khi nộp bài)
+v1.38.0
+Bản tính năng
+Mới
+Phòng chơi trực tiếp nhận câu Đúng/Sai và câu trả lời ngắn
+Mới
+Chấm Đúng/Sai theo điểm thành phần chuẩn THPT
+Mới
+Màn chữa bài chỉ ra chỗ hỏng, không chỉ đếm số em sai
+Mới
+Nút "Chấp nhận đáp án này" cho câu trả lời ngắn lúc chữa bài: chấm bằng so chuỗi thì sẽ có âm tính giả, mà ở đây kết quả hiện công khai trước cả lớp và không có đường phúc khảo như bài thi
+Mới
+Tuỳ chọn "Tự sang câu kế"
+Đổi
+Thời lượng tính theo loại câu
+Đổi
+Đúng/Sai và trả lời ngắn có nút Gửi riêng
+Đổi
+Hết giờ thì phần đang điền dở vẫn được gửi
+Đổi
+Ô trả lời ngắn không thành kênh phát sóng
+Đổi
+Con số phần trăm trên máy chiếu ghi rõ "đúng trọn vẹn cả 4 ý"
+Đổi
+Máy học sinh nói đúng kết quả của em
+17/09
+
+Thứ Năm
+
+v1.37.2
+Bản vá
+Đổi
+Trạng thái đề thiết kế lại
+Đổi
+Bảng đề có cột Trạng thái
+Sửa
+Đề lỡ bấm khoá tay nay gỡ được
+Sửa
+Đề "Sắp mở" không còn hiện nút "Khoá đề"
+Sửa
+Nút chính không còn đổi kẹt này lấy kẹt kia
+Sửa
+Câu trả lời ngắn nhận mọi kiểu dấu trừ (– — − －)
+Sửa
+Học sinh không còn bị báo sai giờ đóng
+Sửa
+Danh sách đề tự làm mới
+15/09
+
+Thứ Ba
+
+v1.37.0
+Bản tính năng
+Mới
+Trộn đề thi giấy (menu Trộn đề)
+Mới
+Khoá bài khi học sinh vi phạm quá N lần (Cài đặt thêm, mặc định tắt): lần vi phạm thứ N+1 — chuyển tab, rời cửa sổ, sao chép đề — bài được nộp ngay với những câu đã làm
+14/09
+
+Thứ Hai
+
+v1.36.0
+Bản tính năng
+Mới
+Chơi trực tiếp không cần tài khoản
+Mới
+Nhạc trên máy chiếu
+Mới
+Bấm vào ảnh để phóng to trong đề và phương án: trên máy chiếu, màn chữa bài (trước đây màn này không hiện ảnh đề) và điện thoại học sinh
+Đổi
+Chơi trực tiếp bỏ giới hạn theo lớp: hộp thoại mở phòng chỉ còn chọn thời gian mỗi câu
+Đổi
+Nút chọn thời gian mỗi câu nay là 120, 60, 45, 30 giây: thêm 120 giây cho câu có bảng biến thiên, đồ thị hay phải nháp; bỏ nút 20 giây (vẫn gõ được ở ô “Khác”, từ 5 đến 300 giây)
+Đổi
+Nút “Khoá câu ngay” đổi thành “Kết thúc câu hiện tại”, nút “Kết thúc” thành “Kết thúc bài thi” — khỏi nhầm kết thúc một câu với dừng cả trận
+Đổi
+Dashboard quản trị thiết kế lại: một trang theo mức ưu tiên, màu trung tính, sáu chỉ số tổng gộp một dải; bỏ khối “Cần xử lý”, “Đề mở trong 24 giờ tới” gộp vào “Đang diễn ra”, biểu đồ máy…
+Sửa
+Sảnh chờ trên màn chiếu thấp: nút Bắt đầu không còn che mã QR (laptop ~730px, máy chiếu 1024×768)
+Sửa
+1000 học sinh cùng vào một đề qua chung một mạng trường
+Sửa
+Xuất Word sai 11 kiểu công thức (có từ 20/08): ⊄, dấu đồng dạng ~, chữ ỗ, dấu ∘ (độ, hàm hợp)
+Sửa
+Thẻ “Đang thi” ở dashboard quản trị khớp số của thẻ Máy chủ — trước đây chỉ đếm phiên bắt đầu chưa quá 15 phút
+13/09
+
+Chủ nhật
+
+v1.35.0
+Bản tính năng
+Mới
+Ngân hàng của tôi có thư mục riêng, thầy cô tự đặt
+Mới
+Tạo nhanh theo mẫu khi kho còn trống
+Mới
+Chuyển đề sang thư mục khác ngay trên từng dòng đề, không phải xoá rồi tải lại file
+Đổi
+Nút Thư mục mới nổi rõ ở đầu cột thư mục
+Đổi
+Chỉ xoá được thư mục trống: còn thư mục con hoặc còn đề thì trang báo lý do, không xoá gì
+v1.34.0
+Bản tính năng
+Mới
+Đề không giới hạn thời gian
+Mới
+Thời gian làm bài tối thiểu trước khi nộp
+Mới
+Hết giờ thì bài vẫn tự nộp như thường, kể cả khi mốc tối thiểu lỡ đặt dài hơn thời lượng đề — mốc được tự kẹp lại, form soạn đề có cảnh báo cho trường hợp này
+12/09
+
+Thứ Bảy
+
+v1.33.0
+Bản tính năng
+Mới
+Ngân hàng của tôi — kho đề riêng của từng thầy cô, xếp theo cây Môn ▸ Chương ▸ Bài (cùng cây với ngân hàng đề dùng chung, nên tên bài nhất quán)
+Mới
+“Dùng đề này” trong kho riêng tạo một đề mới mang mã riêng
+Mới
+Xem trước trọn đề kèm đáp án và lời giải ngay trong kho, bằng đúng khung xem trước của trang soạn đề
+Đổi
+Ẩn mục “Ngân hàng câu hỏi” (kho từng câu) khỏi menu, cùng hai lối vào trong trang soạn đề
+v1.32.3
+Bản vá
+Sửa
+Gõ đáp án trên điện thoại không còn bị cảnh báo oan
+Sửa
+Một lần rời khỏi bài chỉ tính một vi phạm
+Sửa
+Sửa đáp án bằng nút Cắt của bàn phím không còn bị tính vi phạm
+11/09
+
+Thứ Sáu
+
+v1.32.2
+Bản vá
+Sửa
+Nhập đề Word không còn làm mất ký hiệu chèn bằng Insert → Symbol
+10/09
+
+Thứ Năm
+
+v1.32.1
+Bản vá
+Sửa
+Mở đề ra sửa không còn báo "Ứng dụng gặp sự cố"
+Sửa
+Hình vẽ TikZ không còn mất khi mở rồi lưu đề
+Sửa
+Chấm lại xong bảng thống kê cập nhật ngay
+Sửa
+Chơi trực tiếp: đáp án dài không còn gãy dòng hay bị cắt khỏi màn chiếu
+Sửa
+Trang Hướng dẫn thêm mục 15 "Chơi trực tiếp cả lớp trên máy chiếu"
+09/09
+
+Thứ Tư
+
+v1.32.0
+Bản tính năng
+Mới
+Chơi trực tiếp: cả lớp cùng chơi một đề trên máy chiếu, thầy cô điều khiển
+Mới
+Bảng xanh chữa bài ngay cạnh đề
+Mới
+Điểm theo tốc độ và chuỗi trả lời đúng
+Mới
+Mã QR bấm được để phóng to
+Mới
+Bảng xếp hạng chiếu 5 bạn dẫn đầu sau mỗi câu, có mũi tên tăng/giảm hạng và biểu tượng chuỗi đúng
+v1.31.0
+Bản tính năng
+Mới
+Mở đề cũ ra sửa là tự format theo mẫu ngay
+Mới
+Chiếu ôn tập dùng gần trọn bề ngang máy chiếu và phóng chữ tới 52px
+Sửa
+Format đề chỉ cần bấm một lần
+Sửa
+Chọn "Trình bày" không còn nhảy sang câu kế tiếp
+08/09
+
+Thứ Ba
+
+v1.30.0
+Bản tính năng
+Mới
+Xuất Word tự xếp phương án trắc nghiệm 4 / 2 / 1 mỗi dòng theo độ dài hiển thị
+v1.29.1
+Bản vá
+Sửa
+Trò chơi Kéo co hiện ảnh trong đề: câu có hình vẽ / bảng biến thiên đính kèm và phương án là ảnh trước đây chỉ hiện chữ, hai đội không có gì để trả lời
+06/09
+
+Chủ nhật
+
+v1.29.0
+Bản tính năng
+Mới
+Tab Phân tích của đề: bấm vào một câu là mở ngay dưới dòng đó ba cột Làm đúng / Làm sai / Bỏ trống — cột "Làm sai" ghi kèm đáp án em đã chọn (câu Đúng/Sai hiện từng ý dạng ĐSSS và điểm thành…
+01/09
+
+Thứ Ba
+
+v1.28.4
+Bản vá
+Mới
+Cẩm nang giáo viên có mục mới Tạo đề nhiều bộ (mục 8): bật "Nhiều bộ" ở thanh bộ câu hỏi, nhân bản/đổi tên từng bộ, nhập nhiều file một lượt (mỗi file thành một bộ mang tên file), luật khớp…
+Tháng 8 năm 2026
+47 bản
+30/08
+
+Chủ nhật
+
+v1.28.2
+Bản vá
+Sửa
+Trả lời ngắn gõ ở những giây cuối không còn bị mất
+Sửa
+Gói đáp án cuối lúc nộp không còn xoá câu máy chủ đã lưu bằng ô trống của tab cũ; khôi phục phiên sau khi tải lại trang cũng lấy bù các câu máy chủ đã có mà máy chưa kịp lưu
+v1.28.1
+Bản vá
+Sửa
+Dashboard quản trị: khối Tiền & gói đổi thành Gói đã gán — hệ thống chưa dùng chuyển khoản tự động nên bỏ biểu đồ doanh thu/tỉ lệ duyệt; thay bằng danh sách tài khoản đang có gói (gói, gán…
+v1.28.0
+Bản tính năng
+Mới
+Dashboard quản trị có thêm 5 khối (trước chỉ có số đếm đề/lượt thi)
+v1.27.0
+Bản tính năng
+Mới
+Trạng thái lưu bài ngay dưới tên đề: Đã lưu · Đang lưu… · N câu chưa lưu được — Thử lại; mất mạng thì báo "Mất mạng · N câu chưa gửi — bài giữ trên máy, tự gửi khi có mạng", và có mạng…
+Mới
+Nhắc "Còn 5 phút" trong thanh đầu trang thi kèm số câu chưa làm; đồng hồ chuyển vàng dưới 5 phút, đỏ dưới 1 phút
+Sửa
+Đồng hồ trang thi không còn "trôi" khi học sinh khoá màn hình hoặc chuyển app
+Sửa
+Câu Đúng/Sai: ý chưa chọn không còn bị tính là đã chọn "Sai"
+Sửa
+Sau khi hết giờ, nút Xem kết quả không còn kẹt ở "Đang gửi bài…"
+Sửa
+Dải "Bạn đang offline" không còn đè lên đồng hồ và trạng thái lưu của trang thi
+29/08
+
+Thứ Bảy
+
+v1.26.2
+Bản vá
+Sửa
+Trang giới thiệu cập nhật theo tính năng hiện có
+v1.26.1
+Bản vá
+Sửa
+Bảng số liệu chèn trong trình soạn không còn bị mất khi lưu đề
+v1.26.0
+Bản tính năng
+Mới
+Ô điểm Phần 4 (tự luận) trong Điểm theo phần, mặc định 0đ — trước đây chỉ đặt được ba phần, điểm Phần IV phải sửa tay trong dữ liệu
+Mới
+Cách tính điểm câu Đúng/Sai chọn được cho từng đề: Chuẩn THPT (1 ý 10% · 2 ý 25% · 3 ý 50% · 4 ý 100%, như cũ) hoặc Mỗi ý đúng 25% điểm câu
+v1.25.0
+Bản tính năng
+Mới
+Link theo dõi cho phụ huynh
+v1.24.0
+Bản tính năng
+Mới
+Câu tự luận — Phần IV của đề
+Mới
+Nhập đề có tự luận: .tex (khối \begin{ex} chỉ có đề bài + \loigiai), .docx (câu dưới tiêu đề PHẦN IV), .json (type: "essay")
+Mới
+Trò chơi tự loại câu tự luận (không có đáp án để chơi)
+Sửa
+Mở hộp chọn ảnh/máy ảnh trong lúc thi không còn bị tính là "rời khỏi cửa sổ thi"
+Sửa
+Câu trả lời ngắn nhận đáp án không phải chuỗi thì chấm sai thay vì ném lỗi làm nghẽn vòng chấm
+Sửa
+Nhập .tex: bảng biến thiên có \draw[pattern=…] tô nền vẫn chuyển được; \loigiai{\allowdisplaybreaks …} không còn mất ngoặc; đồ thị pgfplots dựng được; enumerate giữ nhãn a) b);…
+28/08
+
+Thứ Sáu
+
+v1.23.2
+Bản vá
+Mới
+Chiếu ôn tập có lời khen / động viên khi bấm đáp án
+v1.23.1
+Bản vá
+Mới
+Trang Hướng dẫn dựng lại theo "Cẩm nang sử dụng iexam.vn"
+Sửa
+Thẻ đề ở lưới 3 cột không còn tràn nút xoá
+Sửa
+Cụm nút trên thẻ đề luôn nằm sát đáy, thẳng hàng giữa các thẻ dù thẻ có thêm dòng lớp
+v1.23.0
+Bản tính năng
+Mới
+Trò chơi từ đề đã có
+Mới
+Năm kiểu chơi: Triệu phú (15 bậc tiền, ba trợ giúp, sai là rơi về mốc an toàn — chỉ dùng câu trắc nghiệm), Chiếu ôn tập (giáo viên chiếu từng câu: đồng hồ mỗi câu, hiện đáp án, lời giải, bút…
+Mới
+Không lưu gì khi chơi: không phiên, không xếp hạng, đóng tab là hết ván — nên cũng không có gì để gian lận
+Mới
+Chỉ giáo viên gói trả phí bật được; ai có link đều chơi được
+25/08
+
+Thứ Ba
+
+v1.22.1
+Bản vá
+Mới
+File điểm của một đề nay có cột điểm từng phần
+Mới
+Đề chỉ có một hoặc hai phần thì chỉ hiện đúng số cột ấy, không in cột 0 điểm cho đủ bộ
+Mới
+Điểm từng phần lấy nguyên từ bộ chấm của hệ thống nên cộng lại luôn khớp tổng điểm ở cột bên cạnh; phần Đúng/Sai vẫn tính điểm thành phần theo số ý đúng như chuẩn THPT
+Sửa
+Trang Có gì mới không còn đánh rơi tính năng của các bản trước
+24/08
+
+Thứ Hai
+
+v1.22.0
+Bản tính năng
+Mới
+Bảng điểm cả lớp: nhiều bài kiểm tra trên một bảng
+Mới
+Điểm trung bình quá trình quy về thang 10
+Mới
+Bài em không làm để TRỐNG, không tính 0 — em nghỉ ốm hay vào lớp giữa kỳ không bị kéo trung bình xuống oan; cạnh trung bình luôn ghi rõ đã làm mấy trên mấy bài
+Mới
+File Excel kèm dòng trung bình lớp, cao nhất, thấp nhất và số bài nộp của từng bài kiểm tra
+Mới
+Chỉ gom bài của em có đăng nhập; bài thi ẩn danh được báo số lượng riêng vì không biết của ai
+23/08
+
+Chủ nhật
+
+v1.21.1
+Bản vá
+Sửa
+Câu trả lời ngắn: dấu chấm và dấu phẩy nay được chấm như nhau
+Sửa
+Khoảng trắng thừa không còn làm mất điểm
+Sửa
+Đáp án nhập thừa dấu chấm cuối được dọn ngay khi lưu đề
+v1.21.0
+Bản tính năng
+Mới
+Sinh đề tự động bằng AI, dùng key Google Gemini của chính thầy cô
+Mới
+Key nhập một lần, lưu ở dạng mã hoá
+Mới
+Đề AI đi đúng đường của một file nhập vào
+Mới
+Nhận cả file Word
+Mới
+Xem đề mọc dần ngay trong lúc AI viết
+Mới
+Sửa được ngay tại chỗ soát: mỗi câu có nút Tạo lại và Xoá
+Mới
+Công thức không còn mất chữ
+Mới
+AI không còn viết lời tự sửa vào bài
+Mới
+Lời giải xuống dòng theo từng bước, không còn dồn thành một đoạn dài đọc mỏi mắt
+Mới
+Lời giải hiện sẵn dưới mỗi câu, không phải bấm mở từng cái
+Mới
+Soát cả đề trước khi áp vào
+Mới
+Sinh dở vẫn theo dõi được: hộp thoại báo "Đang sinh đề 2/4", bấm huỷ giữa chừng thì những đề đã xong vẫn được giữ — thầy cô đã trả tiền cho chúng rồi
+Mới
+Tính năng dành cho gói trả phí; gói Miễn phí vẫn thấy nút nhưng ở trạng thái khoá kèm lời mời nâng cấp, thay vì bấm vào mới báo lỗi
+Mới
+Lưu ý: AI có thể sai
+22/08
+
+Thứ Bảy
+
+v1.20.0
+Bản tính năng
+Mới
+Nhập một lượt nhiều file, mỗi file là một mã đề
+Mới
+Hộp thoại liệt kê từng file kèm số câu đọc được, số cảnh báo và loại file
+Mới
+Cấu trúc được kiểm trước khi ghi: các mã đề của cùng một đề phải khớp nhau từng câu, lệch thì không đụng gì tới đề đang soạn và báo rõ bộ nào lệch — tên bộ chính là tên file nên biết ngay…
+v1.19.2
+Bản vá
+Sửa
+Câu trả lời ngắn cuối đề nhận đáp án dính dòng "-----HẾT-----"
+21/08
+
+Thứ Sáu
+
+v1.19.1
+Bản vá
+Sửa
+Chấm lại xong điểm không đổi dù đã sửa đáp án
+Sửa
+Chấm lại không áp đáp án mới khi phương án đã bị thay
+Sửa
+Thông báo sau khi chấm lại nói đúng số bài đổi điểm
+v1.19.0
+Bản tính năng
+Mới
+Điểm thành phần ngay đầu trang bài làm
+Mới
+Điểm thành phần do server chấm và làm tròn sao cho cộng lại đúng bằng tổng điểm đang hiện — điểm mỗi câu là phép chia (4 điểm cho 12 câu) nên làm tròn từng phần rồi cộng có thể lệch một xu,…
+v1.18.7
+Bản vá
+Sửa
+Hệ "hoặc" viết bằng ngoặc vuông biến mất khi nhập đề Word
+Sửa
+Nhập từ file .tex: hệ viết trần ngoài công thức không còn lọt mã ra màn hình
+Sửa
+Dấu ∉ đọc thành ∈ — sai hẳn nghĩa mà nhìn không ra
+v1.18.6
+Bản vá
+Sửa
+Công thức nằm nguyên dạng mã LaTeX cho tới khi tải lại trang
+20/08
+
+Thứ Năm
+
+v1.18.5
+Bản vá
+Sửa
+Đề có từ hai ảnh trở lên tải về thì Word đòi sửa file
+Sửa
+Ảnh rộng chạm trần bị tràn ra ngoài lề
+v1.18.4
+Bản vá
+Sửa
+Vào lớp không mật khẩu mà gõ bừa mật khẩu thì bị chặn
+Sửa
+Cả lớp vào cùng lúc từ một đường truyền bị chặn
+Sửa
+Thông báo khi không vào được lớp nói đúng việc cần làm
+v1.18.3
+Bản vá
+Sửa
+Dấu gạch của xác suất có điều kiện không còn biến mất
+Sửa
+Bốn công thức làm MathType treo cứng khi mở
+Sửa
+Chữ ℙ và toàn bộ chữ hoa mĩ 𝓐…𝓩 mở ra thành ô trống
+Sửa
+Bốn ký hiệu mở ra thành ô vuông đen: ∽ (đồng dạng), ≼, ◯, ♡
+v1.18.2
+Bản vá
+Sửa
+Hệ phương trình trong lời giải hiện ra thành mã LaTeX
+v1.18.1
+Bản vá
+Sửa
+Nút tải đề về Word báo lỗi is not a function
+v1.18.0
+Bản tính năng
+Mới
+Tải đề về Word với công thức MathType sửa được
+Mới
+Đã đối chiếu với chính MathType trên 565 công thức của chương trình toán phổ thông
+Sửa
+Sáu công thức làm MathType treo cứng khi mở
+Sửa
+Những ký hiệu lặng lẽ biến mất khi mở bằng MathType
+Sửa
+Tên hàm và giới hạn hiện đúng kiểu
+Sửa
+Bảng biến thiên và bảng xét dấu giữ được đường kẻ
+v1.17.0
+Bản tính năng
+Mới
+Thêm lại học sinh đã xoá khỏi lớp
+Đổi
+Hộp xác nhận khi xoá học sinh nói trước hậu quả
+19/08
+
+Thứ Tư
+
+v1.16.2
+Bản vá
+Sửa
+Công thức tích phân soạn bằng MathType không còn mất dấu ∫
+v1.16.1
+Bản vá
+Sửa
+Hướng dẫn định dạng file Word gọn và chính xác hơn
+18/08
+
+Thứ Ba
+
+v1.16.0
+Bản tính năng
+Mới
+Bảng đáp án cho toàn bộ đề ngay trong trang soạn
+Mới
+Huy hiệu báo số câu còn thiếu đáp án
+Sửa
+Đáp án trả lời ngắn chứa công thức được đọc đúng trong bảng đáp án
+v1.15.0
+Bản tính năng
+Mới
+Xem bài thi của một học sinh ngay trong danh sách lớp
+Mới
+Trang Hướng dẫn mở đầu bằng quy trình ba bước cho giáo viên mới
+Đổi
+Khối Cài đặt thêm khi soạn đề mở sẵn (đã ra ở 1.14.1): điểm theo phần, số lần làm bài, các ô sau khi nộp bài, xáo trộn và lịch mở/khoá đề nhìn thấy ngay khi mở panel Thông tin đề
+v1.14.1
+Bản vá
+Đổi
+Khối Cài đặt thêm khi soạn đề mở sẵn
+v1.14.0
+Bản tính năng
+Mới
+Nút con mắt ở mọi ô mật khẩu — bấm vào là hiện chữ vừa gõ, bấm lần nữa thì ẩn đi
+Sửa
+Hệ phương trình trong lời giải không còn hiện ra thành mã LaTeX
+17/08
+
+Thứ Hai
+
+v1.13.0
+Bản tính năng
+Đổi
+Số báo danh làm gọn lại còn một việc: điền vào file Excel
+Đổi
+Trước khi ghi luôn có bảng xem trước
+Đổi
+Sửa số của một em: bấm thẳng vào ô số báo danh
+Đổi
+Học sinh không còn bị hỏi số báo danh ở bất kỳ đâu — không ở lúc vào lớp, không ở màn vào thi
+Đổi
+Bảng điểm có dòng "Chưa thi" cho đủ mọi học sinh trong lớp
+Đổi
+Thẻ lớp hiện "SBD · 12/45" để biết còn bao nhiêu em chưa có số mà không phải mở từng lớp ra đếm
+v1.12.0
+Bản tính năng
+Mới
+Chọn xuất Word có hoặc không có đáp án — nút Xuất Word nay mở ra hai lựa chọn
+Mới
+File Word có đánh số trang Trang 1/4 ở chân mỗi trang
+Đổi
+File Word mở ra không còn bị gạch đỏ chính tả toàn bộ
+Đổi
+Sửa một chỗ là đổi cả đề
+Đổi
+File không còn mở trong "Chế độ tương thích"
+Sửa
+Phương án xếp 2 cột không còn bị kéo giãn toác ra
+16/08
+
+Chủ nhật
+
+v1.11.0
+Bản tính năng
+Mới
+Xuất đề ra file Word — nút Xuất Word có ở cả bốn chỗ soạn đề (iExam Editor, tạo đề, sửa đề, sửa đề trong kho)
+Mới
+Công thức là Equation của Word, không phải ảnh
+Mới
+Đọc được công thức Equation của Word khi nhập đề
+Sửa
+Nhập file .tex không còn thừa dấu { }
+v1.10.2
+Bản vá
+Mới
+Giới hạn số lần làm bài của học sinh — mặc định vẫn là không giới hạn, chọn Giới hạn N lần thì mỗi em chỉ vào thi được đúng chừng đó lượt
+Sửa
+Mũi tên vectơ phủ hết cụm chữ
+v1.10.1
+Bản vá
+Đổi
+Học sinh xem lại bài thấy đủ các phương án như lúc làm
+v1.10.0
+Bản tính năng
+Mới
+Chọn thời điểm học sinh xem đáp án — ba lựa chọn ngay dưới ô Cho phép xem đáp án: ngay sau khi nộp bài (hợp với đề luyện tập), sau khi đề đóng (thi thật — em thi sớm không chụp đáp án gửi…
+Mới
+Màn kết quả của học sinh nói rõ khi nào đáp án mở
+Đổi
+Gói Miễn phí chuyển sang chỉ xem
+Đổi
+Panel Cài đặt thêm sắp lại: tách "Sau khi nộp và xáo trộn" thành hai nhóm riêng, khối chọn thời điểm xem đáp án nằm ngay dưới ô tick nó phụ thuộc
+15/08
+
+Thứ Bảy
+
+v1.9.0
+Bản tính năng
+Mới
+Số báo danh theo lớp — tải lên file Excel gồm cột Số báo danh và Họ và tên, từ đó bảng điểm vào theo số báo danh thay vì theo tên tài khoản học sinh tự đặt
+Mới
+Chọn ai là người gán số
+Mới
+Gán số hàng loạt bằng file
+Mới
+Chọn số ngay ở màn vào thi
+Mới
+Chỉnh số báo danh của từng em: gán số cho em chưa có, đổi sang số khác, hoặc gỡ số ra để em chọn lại
+Mới
+Tắt tạm số báo danh mà vẫn giữ nguyên danh sách
+Mới
+Cột số báo danh trên bảng kết quả và trong file Excel xuất ra
+Đổi
+Bảng kết quả và file Excel xếp theo số báo danh
+Đổi
+Bấm vào tiêu đề cột để đổi thứ tự bảng kết quả
+Đổi
+Bảng điểm có dòng cho học sinh chưa thi (điểm để trống, ghi Chưa thi), lấy theo danh sách lớp — không phải tự dò xem còn thiếu ai
+Đổi
+Thẻ lớp và trang danh sách học sinh hiện rõ lớp đang dùng số báo danh theo kiểu nào
+Sửa
+Phím Esc không còn đóng nhầm cả chồng cửa sổ
+Sửa
+Đọc file Excel danh sách chắc chắn hơn: ô tiêu đề để trống ở đầu bảng không còn làm lệch cột; ô lỗi (#REF!) bị bỏ qua kèm cảnh báo thay vì nhập vào một dòng vô nghĩa; số báo danh 007 giữ…
+Sửa
+Tạo lớp kèm danh sách số báo danh mà bước nạp danh sách hỏng
+08/08
+
+Thứ Bảy
+
+v1.8.1
+Bản vá
+Mới
+Xem danh sách đề dạng bảng ở trang Đề của tôi — bấm nút đổi kiểu xem cạnh "Tạo đề mới" để chuyển giữa dạng thẻ và dạng bảng
+Mới
+Ngân hàng đề đã có sẵn nội dung — cây danh mục ba môn Toán 10, Toán 11, Toán 12 (Kết nối tri thức) với đầy đủ chương và bài theo sách, sẵn sàng để tra theo bài đang dạy
+Đổi
+Danh sách đề trong ngân hàng sắp theo tên
+Đổi
+Danh mục Môn / Chương / Bài gọn trong một khung
+Sửa
+Công thức toán không còn hiện đỏ giữa bài
+Sửa
+Câu trả lời ngắn có lời giải dài không còn bị tách thành nhiều câu
+Sửa
+Câu đúng/sai nhập từ Word không còn mất đáp án và phình thành 7–8 mệnh đề
+Sửa
+Nộp bài giờ có bước hỏi lại, kèm số câu chưa làm
+Sửa
+Hết giờ không còn quăng thẳng học sinh sang trang kết quả
+Sửa
+Nhập file .tex không còn mất phần đúng/sai
+Sửa
+Bảng số liệu trong đề .tex hiện ra thành bảng
+Sửa
+Hình vẽ xếp cạnh đề bài không còn bị tính thành phương án thừa
+Sửa
+Bớt một loạt lỗi công thức hiện đỏ và mã LaTeX lộ ra giữa bài
+Sửa
+Các đoạn trong lời giải .tex không còn dính liền nhau
+Sửa
+Hình TikZ trong đề .tex dựng ổn định hơn với các đề thi thật
+Sửa
+Nhận thêm các bảng biến thiên tkz-tab viết không hoàn toàn theo mẫu chuẩn
+07/08
+
+Thứ Sáu
+
+v1.8.0
+Bản tính năng
+Mới
+Ngân hàng đề dùng chung — kho đề do ban quản trị biên tập, sắp theo Môn ▸ Chương ▸ Bài (ví dụ Toán 10 KNTT ▸ Chương 1 ▸ Bài 1)
+Mới
+Chọn một Chương hoặc một Môn là thấy hết đề bên trong
+Đổi
+Panel xem trước ở ngân hàng đề dùng chung panel trượt phải với trang soạn đề — cùng cách hiển thị câu hỏi mà học sinh sẽ thấy
+Đổi
+Mục trên thanh điều hướng hiện đầy đủ tên khi rê chuột, kể cả lúc thanh đang thu gọn
+05/08
+
+Thứ Tư
+
+v1.7.1
+Bản vá
+Mới
+Lọc giáo viên theo khoảng hạn gói (khu quản trị) — ngoài các mốc có sẵn (còn hạn, sắp hết hạn, đã hết hạn, vô thời hạn), nay chọn được "Hết hạn trong khoảng…" rồi nhập từ ngày – đến ngày
+Đổi
+Trang giới thiệu có thanh đầu trang cố định
+Đổi
+Gọn lại phần mô tả dưới "Ba bước là xong một bài thi" và bỏ dòng chú thích thừa về chỗ đăng nhập chung của giáo viên và học sinh
+Đổi
+Đăng nhập tài khoản khác ngay tại trang vào thi
+Sửa
+Mở liên kết đăng nhập trong lúc đang đăng nhập không còn hiện hai màn chồng nhau
+02/08
+
+Chủ nhật
+
+v1.7.0
+Bản tính năng
+Mới
+Không gian tạo/sửa đề bằng iExam Editor — màn hình mới chia ba vùng: Thông tin đề ở bên trái, trang soạn WYSIWYG ở giữa và Cấu trúc câu hỏi ở bên phải
+Mới
+Thanh quản lý bộ câu hỏi kiểu tab Excel ở cạnh dưới — chuyển bộ đang chỉnh, đổi tên trực tiếp, thêm từ nội dung hiện tại, nhân bản, xóa và đặt bộ mặc định mà không rời khỏi trang soạn
+Mới
+Kiểm tra chi tiết trước khi lưu — liệt kê đầy đủ lỗi theo từng bộ, từng phần và từng câu (thiếu nội dung, phương án, đáp án hoặc lệch cấu trúc giữa các bộ), kèm thao tác mở đúng bộ cần sửa
+Đổi
+Tạo và sửa đề sử dụng trực tiếp toolbar, trang A4, định dạng toán, bảng, hình ảnh, đáp án và thao tác câu của iExam Editor
+Đổi
+Xem trước đề dùng chung thẻ câu hỏi và bộ nhập đáp án với màn làm bài của học sinh, hạn chế sai lệch giữa lúc soạn và lúc thi
+Đổi
+Ảnh dán, kéo thả hoặc chèn trong editor được giữ cục bộ trong lúc soạn và chỉ tải lên khi giáo viên bấm Lưu đề/Cập nhật
+Đổi
+Nút lưu câu vào ngân hàng được chuyển vào toolbar của chính câu hỏi; hai panel thông tin/cấu trúc có thể thu gọn và mở lại ngay dưới toolbar chính
+Sửa
+Làm rõ quyền truy cập của đề đã gắn lớp: thẻ đề nay hiển thị riêng Công khai hoặc Giới hạn lớp, đồng thời phân biệt lớp chỉ dùng để phân loại với lớp được phép thi
+Sửa
+Import DOCX ở màn tạo đề đi qua cùng luồng tài liệu giàu định dạng với iExam Editor, giữ đúng công thức, bảng biến thiên và vị trí ảnh trong đề bài/phương án/mệnh đề
+Sửa
+Giữ liên kết câu hỏi ngân hàng khi chuyển đổi qua lại giữa dữ liệu đề cũ và tài liệu iExam Editor
+v1.6.4
+Bản vá
+Đổi
+Tách bộ đọc công thức MathType/MTEF và lõi iExam Editor thành hai package độc lập trong shared/
+Tháng 7 năm 2026
+9 bản
+31/07
+
+Thứ Sáu
+
+v1.6.3
+Bản vá
+Mới
+Thời gian làm bài của từng học sinh — bảng kết quả có thêm cột "Thời gian làm", trang chi tiết bài làm hiện ngay cạnh tên học sinh, và chính học sinh cũng thấy mình làm mất bao lâu ở trang…
+Mới
+Số câu và nút xem trước ngay trên thanh dưới trang tạo/sửa đề
+Đổi
+Gói không giới hạn còn 149.000đ (trước 199.000đ)
+Đổi
+Gói miễn phí cho tối đa 10 câu mỗi đề thay vì 5 câu; số đề vẫn là 5
+Đổi
+Cập nhật phiên bản mới không còn làm gián đoạn giữa chừng
+Đổi
+Lỗi mất kết nối khi đăng nhập hiện "Không kết nối được máy chủ
+Sửa
+Đăng nhập báo "Failed to fetch" rồi phải xoá cookie mới vào được: khi có bản mới, trang tự tải lại và huỷ chính request đăng nhập đang gửi đi
+Sửa
+Lời giải import từ DOCX không còn lộ mã LaTeX thô ở trang tạo/sửa đề
+Sửa
+Lời giải giữ đúng xuống dòng theo từng đoạn trong file Word, thay vì bị dồn hết thành một hàng dài — trước đây chỉ iExam Editor hiển thị đúng, trang tạo/sửa đề thì không
+v1.6.1
+Bản vá
+Sửa
+Import DOCX không còn mất số mũ: f(x)=(x²−2)e^{2x} trước đây vào đề thành f(x)=(x−2)e
+Sửa
+Đoạn [-1;2] giữ đúng ngoặc vuông thay vì bị đổi thành (-1;2); khoảng nửa đóng nửa mở như [1;3/2) cũng vào đúng
+Sửa
+Giữ lại ký hiệu tập số ℝ, ℤ, ℕ, ℚ — trước đây bị bỏ trắng, khiến "đồng biến trên ℝ" thành "đồng biến trên"
+Sửa
+Sửa lỗi đọc lệch dữ liệu MathType làm hỏng trắng toàn bộ công thức ở một số câu
+Sửa
+Dấu % trong công thức không còn bị nuốt khi hiển thị ("giảm 1%" hiện ra thành "giảm 1")
+30/07
+
+Thứ Năm
+
+v1.6.0
+Bản tính năng
+Mới
+Bảng biến thiên trực quan — chèn và sửa BBT ngay trong trình soạn WYSIWYG bằng mẫu nhanh, lưới chỉnh sửa hoặc nhập theo dòng
+Mới
+Import TikZ tkz-tab — đọc \tkzTabInit, \tkzTabLine, \tkzTabVar và chuyển thành BBT có thể tiếp tục chỉnh sửa, thay vì để nguyên mã hoặc HTML
+Mới
+iExam Editor nhập thêm TEX và JSON bên cạnh DOCX
+Sửa
+WYSIWYG không còn hiển thị mã HTML của BBT; chế độ LaTeX thô thu gọn HTML bảng cũ và hướng dẫn rõ cách sửa công thức BBT iMath
+Sửa
+Căn lại cột, giá trị và điểm gián đoạn trong BBT; mũi tên tăng/giảm trở lại kích thước gọn, không kéo dài làm bảng khó đọc
+Sửa
+Giữ đúng BBT trong đề bài, phương án hoặc phát biểu khi import, kéo thả, format đề và xuất sang trang tạo đề
+Sửa
+Round-trip qua iExam Editor không còn làm lệch ảnh phương án/phát biểu, ảnh lời giải, nhiều đáp án trả lời ngắn hoặc trạng thái Đúng/Sai
+Sửa
+File DOCX rỗng/lỗi không còn ghi đè nội dung đang soạn; JSON sai cú pháp hoặc sai cấu trúc hiển thị thông báo tiếng Việt dễ hiểu
+Sửa
+Chuẩn hoá ID phương án JSON theo vị trí (A–F) để giữ đúng loại câu và đáp án khi sửa rồi xuất lại
+27/07
+
+Thứ Hai
+
+v1.5.0
+Bản tính năng
+Mới
+Tài khoản học sinh — học sinh tự đăng ký và đăng nhập ngay tại trang vào thi
+Mới
+Lớp học có mã tham gia — mỗi lớp được cấp mã 6 ký tự để chia sẻ, kèm mật khẩu tham gia tuỳ chọn cho lớp cần riêng tư
+Mới
+Học sinh vào lớp bằng mã — nhập mã (và mật khẩu nếu lớp yêu cầu); vào lại lớp đã ở không tạo bản ghi trùng
+Mới
+Sổ lớp cho giáo viên — trang quản lý lớp riêng, xem danh sách học sinh trong lớp và xoá học sinh khỏi lớp
+Mới
+Đề giới hạn theo lớp — mỗi đề chọn Công khai hoặc Giới hạn theo lớp; ở chế độ giới hạn chỉ học sinh thuộc lớp được chọn mới vào thi được
+Mới
+Quản lý học sinh cho admin — danh sách có tìm kiếm và phân trang, sửa tên/email, đặt lại mật khẩu
+Mới
+Bảng kết quả và trang chi tiết bài làm hiển thị học sinh nào có tài khoản, phân biệt với bài làm ẩn danh
+Đổi
+Trang /login gộp vào /exam: giáo viên, quản trị viên và học sinh đăng nhập cùng một chỗ, ngay cạnh ô nhập mã đề
+Đổi
+Trang đăng ký, quên mật khẩu và đặt lại mật khẩu dùng chung khung giao diện với trang vào thi
+Đổi
+Mật khẩu tài khoản học sinh tối thiểu 8 ký tự
+Đổi
+Giới hạn chống lạm dụng khi đăng ký chuyển sang tính theo email thay vì bóp theo địa chỉ mạng, để cả lớp dùng chung mạng trường vẫn đăng ký được
+Sửa
+Học sinh đã đăng nhập nhưng chưa vào lớp bấm "Bắt đầu" không còn đứng im: hiện đúng lý do (cần đăng nhập / chưa vào lớp) kèm nút xử lý tương ứng
+Sửa
+Bỏ hết lớp khỏi một đề đang giới hạn không còn để lại đề "giới hạn nhưng không lớp nào" — trạng thái mà không học sinh nào vào thi được
+Sửa
+Xoá lớp đang là lớp duy nhất của một đề giới hạn nay báo lỗi kèm tên đề, thay vì âm thầm chuyển đề đó thành công khai
+Sửa
+Học sinh đã bị giáo viên xoá khỏi lớp không tự vào lại bằng mã cũ
+Sửa
+Sổ lớp và sĩ số không còn tính học sinh đã bị xoá tài khoản
+Sửa
+Các trang học sinh phân biệt được "hết phiên đăng nhập" với "chưa có dữ liệu", thay vì cùng hiện màn hình trống
+Sửa
+Giáo viên chỉ mở được kết quả bài làm thuộc đề của mình; bài làm ẩn danh cũ vẫn xem lại được bằng liên kết như trước
+Sửa
+Đề công khai vẫn gán và đổi lớp được — lớp còn dùng để phân loại và lọc đề, không chỉ để giới hạn quyền
+v1.4.0
+Bản tính năng
+Mới
+Ngân hàng câu hỏi — kho câu riêng từng giáo viên để tái dùng qua nhiều đề: thêm/sửa/xoá mềm, gắn nhãn Lớp / Chương / Chủ đề, đặt độ khó, tìm kiếm nội dung
+Mới
+Soạn câu hợp nhất — gõ cả câu trong một khung (đề bài + phương án A–D / mệnh đề a–d + đáp án gạch chân + Lời giải), hệ thống tự nhận diện thành phần
+Mới
+Chèn câu từ ngân hàng vào đề — dialog 3 cột (bộ lọc · danh sách kèm breadcrumb Lớp/Chương/Chủ đề · các câu đã chọn), rút ngẫu nhiên từ danh sách đang lọc rồi tự soát trước khi chèn
+Mới
+Lưu câu vào ngân hàng ngay ở trang tạo/sửa đề
+Mới
+Phân tích đề — tổng quan điểm (cao nhất, thấp nhất, trung bình, trung vị, độ lệch chuẩn), thời gian làm bài (trung bình, trung vị, nhanh nhất, chậm nhất), phổ điểm và phân tích từng câu (%…
+Đổi
+Thống nhất cách gọi "kho" → "ngân hàng" ở trang tạo/sửa đề
+Sửa
+Đúng/Sai: khoá đáp án lấy trực tiếp từ dấu gạch chân — chữ "đúng" trong thân mệnh đề không còn làm lật sai đáp án khi lưu
+Sửa
+Giữ nguyên công thức khối $$…$$ ở đề bài/lời giải khi dựng lại câu
+Sửa
+Chặn nhập nhiều câu trong một khung; hỏi xác nhận trước khi đổi loại câu để tránh mất nội dung đang soạn
+Sửa
+Phổ điểm không còn cố định thang 0–10 (tự giãn theo điểm tối đa); đề nhiều bộ không tô nhầm đáp án đúng
+24/07
+
+Thứ Sáu
+
+v1.3.0
+Bản tính năng
+Mới
+iExam Editor — trình soạn thảo đề trực quan từ file Word
+22/07
+
+Thứ Tư
+
+v1.2.0
+Bản tính năng
+Mới
+Quản lý lớp học: Giáo viên tạo/sửa/xoá lớp ngay trên thanh bên trái trang Đề thi, gán 1 hoặc nhiều lớp cho đề
+Mới
+Chọn lớp cho học sinh: Khi vào làm bài
+Mới
+Skeleton loading: Thay thế spinner tĩnh bằng skeleton theo đúng layout từng trang (card grid, table rows, chart, sidebar) cho tất cả trang teacher/admin/student
+20/07
+
+Thứ Hai
+
+v1.1.0
+Bản tính năng
+Mới
+Học sinh xem lại bài đã làm: lưu liên kết bài thi trên thiết bị, mở lại bất cứ lúc nào để xem điểm và — khi giáo viên cho phép xem đáp án và đề đã đóng — xem lại đáp án đúng cùng lời giải
+Mới
+Admin tải đề ra file JSON đúng định dạng import để sao lưu, sao chép hoặc chuyển đề giữa các tài khoản
+Sửa
+Khắc phục lỗi 404 khi tải file mẫu import (.docx) trên bản triển khai
+19/07
+
+Chủ nhật
+
+v1.0.0
+Bản lớn
+Mới
+Hoàn thiện nền tảng thi Toán trực tuyến cho Admin, Giáo viên và Học sinh
+Mới
+Tạo đề với trắc nghiệm, đúng/sai và trả lời ngắn; hỗ trợ LaTeX, MathLive, hình ảnh và lời giải
+Mới
+Import JSON, DOCX, LaTeX và công thức MathType
+Mới
+Nhiều bộ câu hỏi, trộn câu/phương án, lịch thi và cấu hình chấm theo chương trình mới
+Mới
+Học sinh vào bằng mã đề/link, autosave, resume, PWA và kết quả có kiểm soát
+Mới
+Theo dõi trực tiếp tiến độ, ghi nhận vi phạm và tự động nộp bài theo chính sách chống gian lận
+Mới
+Dashboard kết quả, phổ điểm, tìm kiếm, chi tiết bài làm và xuất Excel

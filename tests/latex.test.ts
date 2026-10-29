@@ -119,7 +119,7 @@ describe('3. Kiểm thử Bảng Biến Thiên (tkz-tab) sang SVG', () => {
       const svg = generateTkzTabSvg(parsed);
       expect(svg).toContain('<svg');
       // Vạch đôi kéo dài từ hàng y' xuống tận đáy bảng y
-      expect(svg).toContain('y2="222"');
+      expect(svg).toContain('y2="250"');
       expect(svg).toContain('-1');
       expect(svg).toContain('-∞');
       expect(svg).toContain('+∞');
@@ -391,6 +391,38 @@ Ban đầu rô bốt ở vị trí $A$.`;
 
     const htmlNum = renderMathToHtml(rawNum);
     expect(htmlNum).toContain('<ol class="list-decimal');
+  });
+
+  it('renderTikzToSvg render hình học phẳng 2D chứa ellipse, arc và midway nhãn đơn vị (Câu 4 hồ nước) thành SVG thuần 0ms', () => {
+    const q4Tikz = `\\begin{tikzpicture}[scale=0.85, font=\\footnotesize, line join=round, line cap=round]
+      \\filldraw[fill=cyan!20, draw=black] (1.3,2.3) ellipse (2.2cm and 1.35cm);
+      \\node[cyan!60!black, font=\\footnotesize\\itshape] at (0.3,2.1) {Hồ nước};
+      \\coordinate (C) at (0,0);
+      \\coordinate (B) at (2.8,0);
+      \\coordinate (A) at (0.91,3.39);
+      \\fill[green!20] (C) -- (0.7,0) arc (0:75:0.7) -- cycle;
+      \\draw (0.7,0) arc (0:75:0.7);
+      \\node at (0.95,0.65) {$75^{\\circ}$};
+      \\fill[orange!20] (B) -- (2.1,0) arc (180:120:0.7) -- cycle;
+      \\draw (2.1,0) arc (180:120:0.7);
+      \\node at (1.75,0.55) {$60^{\\circ}$};
+      \\draw[thick] (C) -- (B) node[midway, below] {$300\\,$m};
+      \\draw[dashed, thick] (C) -- (A) (B) -- (A);
+      \\fill (A) circle (1.5pt) node[above] {Trạm $A$};
+      \\fill (B) circle (1.5pt) node[above right] {Trạm $B$};
+      \\fill (C) circle (1.5pt) node[left] {$C$};
+    \\end{tikzpicture}`;
+
+    const svg = renderTikzToSvg(q4Tikz);
+    expect(svg).not.toBeNull();
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('<ellipse');
+    expect(svg).toContain('Hồ nước');
+    expect(svg).toContain('300 m');
+    expect(svg).toContain('Trạm A');
+    expect(svg).toContain('Trạm B');
+    expect(svg).toContain('75°');
+    expect(svg).toContain('60°');
   });
 });
 

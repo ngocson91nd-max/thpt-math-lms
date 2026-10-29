@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { joinClassWithCode } from '@/lib/auth/enrollment';
+import { ClassItem } from '@/types/database';
 import {
   GraduationCap,
   KeyRound,
@@ -14,6 +15,8 @@ import {
   Sparkles,
   MessageCircle,
   Loader2,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const StudentPendingApprovalView: React.FC = () => {
@@ -24,6 +27,44 @@ export const StudentPendingApprovalView: React.FC = () => {
   const [codeError, setCodeError] = useState<string | null>(null);
   const [codeSuccess, setCodeSuccess] = useState<string | null>(null);
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [pendingClasses, setPendingClasses] = useState<ClassItem[]>([]);
+
+  // Nạp danh sách lớp đang chờ duyệt của học sinh này
+  const loadPendingClasses = () => {
+    if (typeof window === 'undefined' || !user) return;
+    try {
+      const classesRaw = localStorage.getItem('lms_classes');
+      const classes: ClassItem[] = classesRaw ? JSON.parse(classesRaw) : [];
+
+      const userPendingRaw = localStorage.getItem(`lms_user_pending_requests_${user.id}`);
+      const userPendingIds: string[] = userPendingRaw ? JSON.parse(userPendingRaw) : [];
+
+      const foundList: ClassItem[] = [];
+      classes.forEach((c) => {
+        // Kiểm tra qua danh sách user pending
+        if (userPendingIds.includes(c.id)) {
+          foundList.push(c);
+          return;
+        }
+        // Kiểm tra trong pending requests của từng lớp
+        const cPendingRaw = localStorage.getItem(`lms_class_pending_requests_${c.id}`);
+        if (cPendingRaw) {
+          const cPending: any[] = JSON.parse(cPendingRaw);
+          const isPending = cPending.some(
+            (p) =>
+              p.user_id === user.id ||
+              (user.email && p.user?.email && p.user.email.toLowerCase() === user.email.toLowerCase())
+          );
+          if (isPending && !foundList.some((f) => f.id === c.id)) {
+            foundList.push(c);
+          }
+        }
+      });
+      setPendingClasses(foundList);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     // 1. Tải danh sách lớp thực tế âm thầm từ Supabase Cloud để cập nhật cache mã lớp
@@ -34,27 +75,53 @@ export const StudentPendingApprovalView: React.FC = () => {
           if (typeof window !== 'undefined') {
             localStorage.setItem('lms_classes', JSON.stringify(data.classes));
             localStorage.removeItem('lms_deleted_class_ids');
+            loadPendingClasses();
           }
         }
       })
       .catch(console.error);
 
-    // 2. Kiểm tra nếu Thầy Sơn đã duyệt học sinh trên Cloud
-    if (user) {
-      fetch(`/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`)
+    loadPendingClasses();
+
+    // 2. Định kỳ kiểm tra (polling 3s/lần) xem Thầy Sơn đã duyệt học sinh chưa
+    if (!user) return;
+
+    const checkApproval = () => {
+      fetch(`/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}&t=${Date.now()}`, { cache: 'no-store' })
         .then((r) => r.json())
         .then((res) => {
           if (res.success && Array.isArray(res.approvedClasses)) {
             const studentClassesKey = `lms_student_classes_${user.id}`;
-            // Chỉ đồng bộ các lớp thực sự active trên Supabase Cloud
-            localStorage.setItem(studentClassesKey, JSON.stringify(res.approvedClasses));
             if (res.approvedClasses.length > 0) {
+              // Thầy đã bấm DUYỆT! Kích hoạt ngay
+              localStorage.setItem(studentClassesKey, JSON.stringify(res.approvedClasses));
+              if (user.email) {
+                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(res.approvedClasses));
+              }
+
+              // Xóa các lớp đã được duyệt khỏi danh sách chờ
+              const uPendKey = `lms_user_pending_requests_${user.id}`;
+              const uPend: string[] = JSON.parse(localStorage.getItem(uPendKey) || '[]');
+              const remainingPend = uPend.filter((id) => !res.approvedClasses.includes(id));
+              localStorage.setItem(uPendKey, JSON.stringify(remainingPend));
+
               window.dispatchEvent(new Event('lms_enrollment_changed'));
+              window.location.reload();
+            } else {
+              // Chưa được duyệt -> Đảm bảo xóa sạch cache active
+              localStorage.setItem(studentClassesKey, JSON.stringify([]));
+              if (user.email) {
+                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify([]));
+              }
             }
           }
         })
         .catch(() => {});
-    }
+    };
+
+    checkApproval();
+    const interval = setInterval(checkApproval, 3000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const handleJoinWithCode = (e: React.FormEvent) => {
@@ -75,9 +142,8 @@ export const StudentPendingApprovalView: React.FC = () => {
     if (result.success) {
       setCodeSuccess(result.message);
       setClassCodeInput('');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1200);
+      loadPendingClasses();
+      setIsSubmittingCode(false);
     } else {
       setCodeError(result.message);
       setIsSubmittingCode(false);
@@ -87,8 +153,8 @@ export const StudentPendingApprovalView: React.FC = () => {
   return (
     <div className="min-h-[75vh] flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-7 sm:p-9 shadow-lg shadow-blue-900/5 text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
-        {/* Biểu tượng thương hiệu Toán Thầy Sơn */}
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25">
+        {/* Biểu tượng trạng thái */}
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white shadow-lg shadow-amber-500/25">
           <KeyRound className="h-10 w-10 stroke-[2.2]" />
         </div>
 
@@ -104,19 +170,57 @@ export const StudentPendingApprovalView: React.FC = () => {
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-500 leading-relaxed max-w-md mx-auto">
-            Nhập <strong>Mã Lớp Học</strong> do Thầy Sơn cấp qua Zalo để mở khóa đề thi và bắt đầu học ngay.
+            Nhập <strong>Mã Lớp Học</strong> để gửi yêu cầu tham gia lớp. Đề thi và bài giảng sẽ được kích hoạt ngay khi <strong>Thầy Sơn phê duyệt</strong>.
           </p>
         </div>
 
-        {/* Form nhập mã lớp duy nhất (tối giản, trực quan) */}
-        <form onSubmit={handleJoinWithCode} className="space-y-3.5 pt-2">
+        {/* Khối hiển thị các lớp đang chờ Thầy Sơn duyệt */}
+        {pendingClasses.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-left space-y-3 animate-in fade-in">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+              <Clock className="h-4 w-4 text-amber-600 animate-pulse shrink-0" />
+              <span>Yêu cầu đang chờ Thầy Sơn phê duyệt ({pendingClasses.length}):</span>
+            </div>
+
+            <div className="space-y-2">
+              {pendingClasses.map((cls) => (
+                <div
+                  key={cls.id}
+                  className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-amber-200 shadow-2xs text-xs"
+                >
+                  <div>
+                    <div className="font-extrabold text-slate-900">{cls.name}</div>
+                    <div className="text-[11px] text-slate-400">Toán Lớp {cls.grade}</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block font-mono text-[11px] font-bold text-amber-700 bg-amber-100/70 border border-amber-300 px-2 py-0.5 rounded-md">
+                      Mã: {cls.code}
+                    </span>
+                    <div className="text-[10px] text-amber-600 font-semibold mt-0.5">Chờ Thầy duyệt...</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px] text-amber-700 pt-1 border-t border-amber-200/60">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />
+              <span>Hệ thống đang chờ Thầy Sơn duyệt. Trang sẽ tự động mở đề thi ngay khi Thầy duyệt!</span>
+            </div>
+          </div>
+        )}
+
+        {/* Form nhập mã lớp */}
+        <form onSubmit={handleJoinWithCode} className="space-y-3.5 pt-1">
           <div>
+            <label className="block text-xs font-semibold text-slate-700 text-left mb-1.5">
+              Nhập mã tham gia lớp học mới:
+            </label>
             <input
               type="text"
               value={classCodeInput}
               onChange={(e) => setClassCodeInput(e.target.value.toUpperCase())}
-              placeholder="VD: TOAN12-2150"
-              autoFocus
+              placeholder="VD: TOAN12-6084"
+              autoFocus={pendingClasses.length === 0}
               className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/70 p-4 text-center font-mono text-base sm:text-lg font-extrabold tracking-widest text-slate-900 uppercase placeholder:text-slate-400 placeholder:font-sans placeholder:tracking-normal focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 transition"
             />
           </div>
@@ -142,11 +246,11 @@ export const StudentPendingApprovalView: React.FC = () => {
             {isSubmittingCode ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Đang kích hoạt...</span>
+                <span>Đang gửi yêu cầu...</span>
               </>
             ) : (
               <>
-                <span>Kích Hoạt & Vào Học Ngay</span>
+                <span>Gửi Yêu Cầu Vào Lớp</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}

@@ -18,6 +18,58 @@ function resolveStudentUuid(rawId: string | null | undefined, email?: string | n
   return s;
 }
 
+/**
+ * Tra cứu UUID chuẩn của lớp học trong Supabase từ bất kỳ định danh nào (UUID, Code, Tên lớp)
+ */
+async function resolveClassUuid(
+  supabase: any,
+  rawClassId?: string | null,
+  name?: string | null,
+  code?: string | null
+): Promise<string | null> {
+  const s = (rawClassId || '').trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(s)) return s;
+
+  // 1. Tìm theo mã code
+  const targetCode = (code || s).trim();
+  if (targetCode) {
+    const { data: byCode } = await supabase
+      .from('classes')
+      .select('id')
+      .ilike('code', targetCode)
+      .maybeSingle();
+    if (byCode?.id) return byCode.id;
+  }
+
+  // 2. Tìm theo tên lớp (ví dụ: '1' hoặc '12 Toán 1')
+  const targetName = (name || s).trim();
+  if (targetName) {
+    const { data: byName } = await supabase
+      .from('classes')
+      .select('id')
+      .ilike('name', targetName)
+      .maybeSingle();
+    if (byName?.id) return byName.id;
+  }
+
+  // 3. Tìm kiếm mờ theo code
+  if (s) {
+    const { data: byLike } = await supabase
+      .from('classes')
+      .select('id')
+      .ilike('code', `%${s}%`)
+      .limit(1);
+    if (byLike && byLike.length > 0) return byLike[0].id;
+  }
+
+  // 4. Nếu database chỉ có đúng 1 lớp duy nhất
+  const { data: allClasses } = await supabase.from('classes').select('id').limit(2);
+  if (allClasses && allClasses.length === 1) return allClasses[0].id;
+
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -128,7 +180,7 @@ export async function GET(req: NextRequest) {
       if (uuidRegex.test(targetUserId)) {
         const { data: members, error: uErr } = await supabase
           .from('class_members')
-          .select('class_id, status')
+          .select('class_id, status, classes(id, name, code)')
           .eq('user_id', targetUserId);
 
         if (uErr) {
@@ -138,15 +190,28 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const pendingClasses = userMembers
-        .filter((m: any) => m.status === 'pending')
-        .map((m: any) => m.class_id);
+      const pendingClassesSet = new Set<string>();
+      const approvedClassesSet = new Set<string>();
 
-      const approvedClasses = userMembers
-        .filter((m: any) => m.status === 'active')
-        .map((m: any) => m.class_id);
+      userMembers.forEach((m: any) => {
+        if (m.status === 'pending') {
+          if (m.class_id) pendingClassesSet.add(m.class_id);
+          if (m.classes?.id) pendingClassesSet.add(m.classes.id);
+          if (m.classes?.code) pendingClassesSet.add(m.classes.code);
+          if (m.classes?.name) pendingClassesSet.add(m.classes.name);
+        } else if (m.status === 'active') {
+          if (m.class_id) approvedClassesSet.add(m.class_id);
+          if (m.classes?.id) approvedClassesSet.add(m.classes.id);
+          if (m.classes?.code) approvedClassesSet.add(m.classes.code);
+          if (m.classes?.name) approvedClassesSet.add(m.classes.name);
+        }
+      });
 
-      return NextResponse.json({ success: true, pendingClasses, approvedClasses });
+      return NextResponse.json({
+        success: true,
+        pendingClasses: Array.from(pendingClassesSet),
+        approvedClasses: Array.from(approvedClassesSet),
+      });
     }
 
     return NextResponse.json({ success: true, message: 'Cloud sync API ready' });
@@ -159,18 +224,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, classId, user, student, userId } = body;
+    const { action, classId, className, classCode, user, student, userId } = body;
     const supabase = getSupabaseAdmin();
 
-    const targetClassId = classId;
+    const targetClassId = await resolveClassUuid(supabase, classId, className, classCode);
 
     // 1. Học sinh xin vào lớp (chờ duyệt)
-    if (action === 'request_join') {
+    if (action === 'request_join' || action === 'join_with_code') {
       const studentProfile = user || student;
       const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
 
       if (!targetClassId || !targetUserId) {
-        return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Thiếu thông tin lớp hoặc học sinh' }, { status: 400 });
       }
 
       // Đảm bảo Profile đã tồn tại trong Supabase
@@ -195,18 +260,20 @@ export async function POST(req: NextRequest) {
       // Lưu trạng thái pending vào class_members
       const { data: existing } = await supabase
         .from('class_members')
-        .select('id')
+        .select('id, status')
         .eq('class_id', targetClassId)
         .eq('user_id', targetUserId)
         .maybeSingle();
 
       let reqErr: any = null;
       if (existing) {
-        const { error } = await supabase
-          .from('class_members')
-          .update({ status: 'pending', joined_at: new Date().toISOString() })
-          .eq('id', existing.id);
-        reqErr = error;
+        if (existing.status !== 'active') {
+          const { error } = await supabase
+            .from('class_members')
+            .update({ status: 'pending', joined_at: new Date().toISOString() })
+            .eq('id', existing.id);
+          reqErr = error;
+        }
       } else {
         const { error } = await supabase.from('class_members').insert([
           {
@@ -225,67 +292,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: reqErr.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, message: 'Đã gửi yêu cầu vào lớp trên Supabase Cloud!' });
-    }
-
-    // 2. Học sinh kích hoạt mã vào lớp thành công (active ngay)
-    if (action === 'join_with_code') {
-      const studentProfile = user || student;
-      const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
-
-      if (!targetClassId || !targetUserId) {
-        return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
-      }
-
-      if (studentProfile) {
-        try {
-          await supabase.from('profiles').upsert([
-            {
-              id: targetUserId,
-              email: studentProfile.email || 'student@thpt-math-lms.vn',
-              full_name: studentProfile.full_name || 'Học sinh',
-              role: 'student',
-              grade: studentProfile.grade || 12,
-              school_name: studentProfile.school_name || 'THPT Chuyên',
-              phone: studentProfile.phone || '',
-            },
-          ]);
-        } catch (e) {}
-      }
-
-      const { data: existing } = await supabase
-        .from('class_members')
-        .select('id')
-        .eq('class_id', targetClassId)
-        .eq('user_id', targetUserId)
-        .maybeSingle();
-
-      let joinErr: any = null;
-      if (existing) {
-        const { error } = await supabase
-          .from('class_members')
-          .update({ status: 'active', joined_at: new Date().toISOString() })
-          .eq('id', existing.id);
-        joinErr = error;
-      } else {
-        const { error } = await supabase.from('class_members').insert([
-          {
-            class_id: targetClassId,
-            user_id: targetUserId,
-            role: 'student',
-            status: 'active',
-            joined_at: new Date().toISOString(),
-          },
-        ]);
-        joinErr = error;
-      }
-
-      if (joinErr) {
-        console.error('Join with code cloud error:', joinErr);
-        return NextResponse.json({ success: false, error: joinErr.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ success: true, message: 'Đã vào lớp trên Cloud thành công!' });
+      return NextResponse.json({ success: true, message: 'Đã gửi yêu cầu vào lớp chờ Thầy Sơn phê duyệt!' });
     }
 
     // 3. Thầy Sơn duyệt học sinh vào lớp
@@ -294,7 +301,7 @@ export async function POST(req: NextRequest) {
       const targetUserId = resolveStudentUuid(studentProfile?.id || userId, studentProfile?.email);
 
       if (!targetClassId || !targetUserId) {
-        return NextResponse.json({ success: false, error: 'Thiếu thông tin' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Thiếu thông tin lớp hoặc học sinh' }, { status: 400 });
       }
 
       // Đảm bảo Profile đã tồn tại trong Supabase trước khi ghi vào class_members
@@ -327,11 +334,11 @@ export async function POST(req: NextRequest) {
       if (existing) {
         const { error } = await supabase
           .from('class_members')
-          .update({ status: 'active' })
+          .update({ status: 'active', joined_at: new Date().toISOString() })
           .eq('id', existing.id);
         appErr = error;
       } else {
-        const { error } = await supabase.from('class_members').insert([
+        const { error } = await supabase.from('class_members').upsert([
           {
             class_id: targetClassId,
             user_id: targetUserId,
@@ -339,7 +346,7 @@ export async function POST(req: NextRequest) {
             status: 'active',
             joined_at: new Date().toISOString(),
           },
-        ]);
+        ], { onConflict: 'class_id,user_id' });
         appErr = error;
       }
 

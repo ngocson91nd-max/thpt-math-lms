@@ -26,6 +26,8 @@ export interface ClassItem {
   teacher?: Profile;
   description?: string;
   is_active: boolean;
+  join_mode?: 'free' | 'approval'; // 'free': Vào tự do, 'approval': Thầy cô duyệt
+  join_password?: string; // Mật khẩu tham gia lớp (tùy chọn)
   member_count?: number;
   pending_count?: number;
   created_at?: string;

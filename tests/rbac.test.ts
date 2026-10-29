@@ -156,4 +156,33 @@ describe('Kiểm thử phân quyền RBAC (Admin, Teacher, Student)', () => {
 
     expect(isExamPermittedForStudent(examClass1, 'user-an-diff-id', [class1], 'an.toan12@gmail.com')).toBe(true);
   });
+
+  it('8. Học sinh có yêu cầu tham gia lớp đang CHỜ DUYỆT (pending) tuyệt đối KHÔNG được tính là đã vào lớp và KHÔNG xem được đề thi', () => {
+    const pendingStudent: Profile = {
+      id: 'pending-student-001',
+      email: 'pending@thpt.vn',
+      full_name: 'Học sinh đang chờ duyệt',
+      role: 'student',
+      grade: 12,
+    };
+    const classPending: any = { id: 'cls-pending', name: 'Toán 12 Chuyên', code: 'TOAN12-PENDING' };
+    localStorage.setItem('lms_classes', JSON.stringify([classPending]));
+    // Đang nằm trong user pending requests
+    localStorage.setItem('lms_user_pending_requests_pending-student-001', JSON.stringify(['cls-pending']));
+    // Đang nằm trong class pending requests
+    localStorage.setItem('lms_class_pending_requests_cls-pending', JSON.stringify([
+      { id: 'req-1', class_id: 'cls-pending', user_id: 'pending-student-001', status: 'pending' }
+    ]));
+
+    // Tuyệt đối không được tính là đã vào lớp
+    expect(isUserEnrolledInAnyClass(pendingStudent)).toBe(false);
+
+    const examOfClass: any = {
+      id: 'exam-pending-class',
+      title: 'Đề Toán 12 Chuyên',
+      access_type: 'restricted',
+      assigned_classes: ['Toán 12 Chuyên'],
+    };
+    expect(isExamPermittedForStudent(examOfClass, pendingStudent.id, [classPending], pendingStudent.email)).toBe(false);
+  });
 });

@@ -30,7 +30,27 @@ import {
   Hash,
   Sparkles,
   ArrowUpDown,
+  FileSpreadsheet,
+  Share2,
+  Search,
+  Award,
+  RotateCcw,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
+
+function splitVietnameseName(fullName: string = '') {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 0 || !fullName.trim()) {
+    return { hoDem: '', ten: 'Học sinh' };
+  }
+  if (parts.length === 1) {
+    return { hoDem: '', ten: parts[0] };
+  }
+  const ten = parts.pop() || '';
+  const hoDem = parts.join(' ');
+  return { hoDem, ten };
+}
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -224,6 +244,29 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [showAutoAssignModal, setShowAutoAssignModal] = useState(false);
   const [autoAssignPrefix, setAutoAssignPrefix] = useState(String(currentClass.grade || '12'));
 
+  // Tìm kiếm học sinh trong lớp (chuẩn ảnh 1)
+  const [studentSearch, setStudentSearch] = useState('');
+
+  // Modal Link phụ huynh
+  const [showParentLinkModal, setShowParentLinkModal] = useState(false);
+  const [parentLinkCopied, setParentLinkCopied] = useState(false);
+
+  // Thùng rác: Danh sách học sinh đã xóa khỏi lớp
+  const [deletedMembers, setDeletedMembers] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(`lms_class_deleted_members_${currentClass.id}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showDeletedMembersModal, setShowDeletedMembersModal] = useState(false);
+
+  // Sửa nhanh SBD trực tiếp tại dòng
+  const [quickEditSbdId, setQuickEditSbdId] = useState<string | null>(null);
+  const [quickEditSbdVal, setQuickEditSbdVal] = useState('');
+
   // Load from localStorage on mount
   useEffect(() => {
     if (isClassDeleted) {
@@ -325,6 +368,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       body: JSON.stringify({
         action: 'approve_student',
         classId: currentClass.id,
+        className: currentClass.name,
+        classCode: currentClass.code,
         student: studentProfile,
         userId: studentProfile.id,
       }),
@@ -653,10 +698,10 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     setTimeout(() => setAssignToast(null), 3000);
   };
 
-  // Xóa học sinh khỏi lớp
+  // Xóa học sinh khỏi lớp & đưa vào Thùng rác "Học sinh đã xóa" (chuẩn ảnh 1 của iExam)
   const handleDeleteMember = (memberId: string, studentName: string) => {
     const isConfirmed = confirm(
-      `Thầy có chắc chắn muốn xóa học sinh "${studentName}" ra khỏi lớp này không?`
+      `Thầy có chắc chắn muốn xóa học sinh "${studentName}" ra khỏi lớp này không? Học sinh sẽ được chuyển vào mục "Học sinh đã xóa" để Thầy có thể khôi phục lại khi cần.`
     );
     if (!isConfirmed) return;
 
@@ -664,8 +709,19 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     const updated = members.filter((m) => m.id !== memberId);
     saveMembersToStorage(updated);
 
-    // Xóa quyền trên Cloud
     if (targetMember) {
+      const updatedDeleted = [
+        { ...targetMember, deleted_at: new Date().toISOString() },
+        ...deletedMembers.filter((dm) => dm.id !== memberId),
+      ];
+      setDeletedMembers(updatedDeleted);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          `lms_class_deleted_members_${currentClass.id}`,
+          JSON.stringify(updatedDeleted)
+        );
+      }
+
       fetch('/api/cloud-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -677,6 +733,92 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         }),
       }).catch(console.error);
     }
+  };
+
+  // Khôi phục học sinh từ thùng rác
+  const handleRestoreMember = (delMember: any) => {
+    const { deleted_at, ...restored } = delMember;
+    const updatedMembers = [...members, restored];
+    saveMembersToStorage(updatedMembers);
+
+    const updatedDeleted = deletedMembers.filter((dm) => dm.id !== delMember.id);
+    setDeletedMembers(updatedDeleted);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        `lms_class_deleted_members_${currentClass.id}`,
+        JSON.stringify(updatedDeleted)
+      );
+    }
+
+    // Cập nhật lại Cloud
+    fetch('/api/cloud-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve_student',
+        classId: currentClass.id,
+        className: currentClass.name,
+        classCode: currentClass.code,
+        student: restored.profile || restored,
+        userId: restored.user_id,
+      }),
+    }).catch(console.error);
+
+    setAssignToast(`Đã khôi phục học sinh "${restored.profile?.full_name || 'Học sinh'}" trở lại lớp!`);
+    setTimeout(() => setAssignToast(null), 3000);
+  };
+
+  // Xuất file Excel danh sách học sinh (chuẩn iExam Ảnh 1)
+  const handleExportExcel = () => {
+    const bom = '\uFEFF';
+    let csv = `${bom}STT,Số Báo Danh,Họ và đệm,Tên,Họ và tên đầy đủ,Email / Tên đăng nhập,Số điện thoại,Trường THPT,Ngày tham gia\n`;
+    members.forEach((m, idx) => {
+      const full = m.profile?.full_name || 'Học sinh';
+      const { hoDem, ten } = splitVietnameseName(full);
+      const sbd = m.candidate_number || m.profile?.candidate_number || '';
+      const email = m.profile?.email || '';
+      const phone = m.profile?.phone || '';
+      const school = m.profile?.school_name || 'THPT Chuyên Lê Hồng Phong';
+      const joined = m.joined_at ? new Date(m.joined_at).toLocaleDateString('vi-VN') : '';
+      csv += `${idx + 1},"${sbd}","${hoDem}","${ten}","${full}","${email}","${phone}","${school}","${joined}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Danh_sach_lop_${currentClass.name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setAssignToast('Đã xuất file Excel danh sách học sinh thành công!');
+    setTimeout(() => setAssignToast(null), 3000);
+  };
+
+  // Sửa nhanh SBD trực tiếp tại ô
+  const handleSaveQuickSbd = (memberId: string) => {
+    const cleanSbd = quickEditSbdVal.trim();
+    const updated = members.map((m) => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          candidate_number: cleanSbd,
+          profile: {
+            ...m.profile,
+            id: m.profile?.id || m.user_id,
+            email: m.profile?.email || '',
+            full_name: m.profile?.full_name || '',
+            role: 'student' as const,
+            candidate_number: cleanSbd,
+          },
+        };
+      }
+      return m;
+    });
+    saveMembersToStorage(updated);
+    setQuickEditSbdId(null);
+    setAssignToast('Đã cập nhật Số Báo Danh thành công!');
+    setTimeout(() => setAssignToast(null), 2500);
   };
 
   return (
@@ -888,97 +1030,251 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Tab: Members List */}
+      {/* Tab: Members List (Thiết kế chuẩn iExam Ảnh 1) */}
       {activeTab === 'members' && (
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xs">
-          {members.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              Chưa có học sinh nào trong lớp. Thầy có thể bấm &quot;Thêm Học Sinh Vào Lớp&quot; hoặc gửi mã vào lớp cho học sinh.
+        <div className="space-y-4">
+          {/* Header Thông Tin Lớp & Hàng Nút Tác Vụ Chuẩn iExam */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">Danh sách học sinh</h2>
+              <div className="text-xs text-slate-500 mt-1 font-medium flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-slate-700">Lớp {currentClass.name}</span>
+                <span>•</span>
+                <span className="font-bold text-slate-800">{members.length} học sinh</span>
+                <span>•</span>
+                <span className="font-bold text-blue-700">
+                  {members.filter((m) => Boolean(m.candidate_number || m.profile?.candidate_number)).length}/{members.length} có số báo danh
+                </span>
+              </div>
             </div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase font-semibold">
-                <tr>
-                  <th className="py-3.5 px-6">Học Sinh</th>
-                  <th className="py-3.5 px-6">Số Báo Danh (SBD)</th>
-                  <th className="py-3.5 px-6">Email & SĐT</th>
-                  <th className="py-3.5 px-6">Trường</th>
-                  <th className="py-3.5 px-6">Trạng thái</th>
-                  {isTeacher && <th className="py-3.5 px-6 text-right">Thao Tác</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {members.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/50 transition">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-                          {m.profile?.full_name?.charAt(0) || 'H'}
-                        </div>
-                        <span className="font-semibold text-slate-900">
-                          {m.profile?.full_name || 'Học sinh'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      {m.candidate_number || m.profile?.candidate_number ? (
-                        <span className="inline-flex items-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
-                          <Hash className="h-3 w-3 text-blue-500" />
-                          <span>{m.candidate_number || m.profile?.candidate_number}</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 font-mono text-xs italic">Chưa có</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <Mail className="h-3.5 w-3.5 text-slate-400" />
-                        <span>{m.profile?.email}</span>
-                      </div>
-                      {m.profile?.phone && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
-                          <Phone className="h-3 w-3 text-slate-400" />
-                          <span>{m.profile.phone}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-slate-600">
-                      {m.profile?.school_name || 'THPT Chuyên Lê Hồng Phong'}
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
-                        <UserCheck className="h-3 w-3" /> Đang học
-                      </span>
-                    </td>
-                    {isTeacher && (
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openEditMemberModal(m)}
-                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition"
-                            title="Chỉnh sửa thông tin học sinh"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            <span>Sửa</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMember(m.id, m.profile?.full_name || 'Học sinh')}
-                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
-                            title="Xóa học sinh khỏi lớp"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Xóa</span>
-                          </button>
-                        </div>
-                      </td>
-                    )}
+
+            {isTeacher && (
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Nút Học sinh đã xóa (Thùng rác) */}
+                <button
+                  type="button"
+                  onClick={() => setShowDeletedMembersModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Học sinh đã xoá ({deletedMembers.length})</span>
+                </button>
+
+                {/* Nút Bảng điểm cả lớp */}
+                <Link
+                  href={`/gradebook?class=${encodeURIComponent(currentClass.name)}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-500 transition cursor-pointer"
+                >
+                  <Award className="h-3.5 w-3.5" />
+                  <span>Bảng điểm cả lớp</span>
+                </Link>
+
+                {/* Nút Link phụ huynh */}
+                <button
+                  type="button"
+                  onClick={() => setShowParentLinkModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                >
+                  <Share2 className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Link phụ huynh</span>
+                </button>
+
+                {/* Nút Gán số báo danh */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutoAssignPrefix(String(currentClass.grade || '12'));
+                    setShowAutoAssignModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                >
+                  <Hash className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Gán số báo danh</span>
+                </button>
+
+                {/* Nút Xuất Excel */}
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Xuất Excel</span>
+                </button>
+
+                {/* Nút Thêm Học Sinh Vào Lớp */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddMemberModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 transition cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Thêm học sinh</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Ô Tìm kiếm học sinh */}
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
+              <Search className="h-4 w-4" />
+            </div>
+            <input
+              type="text"
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              placeholder="Tìm theo tên, email hoặc SBD..."
+              className="w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 py-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 shadow-2xs transition"
+            />
+          </div>
+
+          {/* Bảng Danh Sách Học Sinh */}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xs">
+            {members.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                Chưa có học sinh nào trong lớp. Thầy có thể bấm &quot;Thêm học sinh&quot; hoặc gửi mã vào lớp cho học sinh.
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-bold uppercase text-[11px]">
+                  <tr>
+                    <th className="py-3.5 px-6 w-36">SBD</th>
+                    <th className="py-3.5 px-6">Họ và đệm</th>
+                    <th className="py-3.5 px-6 font-black text-slate-800">Tên</th>
+                    <th className="py-3.5 px-6">Email / SĐT</th>
+                    <th className="py-3.5 px-6">Ngày tham gia</th>
+                    {isTeacher && <th className="py-3.5 px-6 text-right">THAO TÁC</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {members
+                    .filter((m) => {
+                      if (!studentSearch.trim()) return true;
+                      const q = studentSearch.trim().toLowerCase();
+                      const full = (m.profile?.full_name || '').toLowerCase();
+                      const email = (m.profile?.email || '').toLowerCase();
+                      const phone = (m.profile?.phone || '').toLowerCase();
+                      const sbd = (m.candidate_number || m.profile?.candidate_number || '').toLowerCase();
+                      return full.includes(q) || email.includes(q) || phone.includes(q) || sbd.includes(q);
+                    })
+                    .map((m) => {
+                      const full = m.profile?.full_name || 'Học sinh';
+                      const { hoDem, ten } = splitVietnameseName(full);
+                      const sbd = m.candidate_number || m.profile?.candidate_number;
+                      const joinedDate = m.joined_at ? new Date(m.joined_at) : null;
+                      const joinedFormatted = joinedDate
+                        ? `${joinedDate.toLocaleTimeString('vi-VN')} ${joinedDate.toLocaleDateString('vi-VN')}`
+                        : 'Mới vào lớp';
+
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-50/70 transition group">
+                          {/* SBD */}
+                          <td className="py-4 px-6">
+                            {quickEditSbdId === m.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={quickEditSbdVal}
+                                  onChange={(e) => setQuickEditSbdVal(e.target.value)}
+                                  autoFocus
+                                  placeholder="SBD..."
+                                  className="w-20 font-mono font-bold text-xs p-1 rounded-md border border-blue-500 text-blue-700 outline-none"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveQuickSbd(m.id);
+                                    if (e.key === 'Escape') setQuickEditSbdId(null);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveQuickSbd(m.id)}
+                                  className="p-1 rounded bg-blue-600 text-white hover:bg-blue-500 cursor-pointer"
+                                  title="Lưu SBD"
+                                >
+                                  <Check className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : sbd ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickEditSbdId(m.id);
+                                  setQuickEditSbdVal(sbd);
+                                }}
+                                className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+                                title="Bấm để sửa số báo danh"
+                              >
+                                {sbd}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickEditSbdId(m.id);
+                                  setQuickEditSbdVal('');
+                                }}
+                                className="text-amber-600 font-semibold italic hover:underline cursor-pointer"
+                                title="Bấm để gán số báo danh"
+                              >
+                                chưa có
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Họ và đệm */}
+                          <td className="py-4 px-6 text-slate-700 font-medium">
+                            {hoDem || '—'}
+                          </td>
+
+                          {/* Tên */}
+                          <td className="py-4 px-6 font-bold text-slate-900 text-sm">
+                            {ten}
+                          </td>
+
+                          {/* Email & SĐT */}
+                          <td className="py-4 px-6 text-slate-600">
+                            <div className="font-medium text-slate-800">{m.profile?.email || 'Chưa có email'}</div>
+                            {m.profile?.phone && (
+                              <div className="text-[11px] text-slate-400 font-mono">{m.profile.phone}</div>
+                            )}
+                          </td>
+
+                          {/* Ngày tham gia */}
+                          <td className="py-4 px-6 text-slate-500 text-[11px] font-mono">
+                            {joinedFormatted}
+                          </td>
+
+                          {/* Thao tác */}
+                          {isTeacher && (
+                            <td className="py-4 px-6 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Link
+                                  href={`/gradebook?student=${encodeURIComponent(m.user_id)}&class=${encodeURIComponent(currentClass.name)}`}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition shadow-2xs"
+                                  title="Xem kết quả bài thi của học sinh"
+                                >
+                                  <FileText className="h-3.5 w-3.5 text-blue-600" />
+                                  <span>Bài thi</span>
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMember(m.id, full)}
+                                  className="inline-flex items-center gap-1 rounded-xl bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-500 transition shadow-2xs cursor-pointer"
+                                  title="Xóa học sinh khỏi lớp"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>Xóa</span>
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
@@ -1526,6 +1822,146 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 className="rounded-xl bg-blue-600 px-5 py-2 font-bold text-white hover:bg-blue-500 shadow-md shadow-blue-500/20 transition cursor-pointer"
               >
                 Lưu phân công
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LINK PHỤ HUYNH (Chuẩn iExam Ảnh 1) */}
+      {showParentLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Share2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">Link Tra Cứu Dành Cho Phụ Huynh</h3>
+                  <p className="text-[11px] text-slate-500">Lớp {currentClass.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowParentLinkModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Thầy chỉ cần gửi đường link duy nhất này vào nhóm Zalo phụ huynh. Bố mẹ học sinh có thể vào tra cứu điểm thi, bài chưa làm và nhận xét của Thầy:
+            </p>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-2">
+              <span className="font-mono text-xs text-blue-700 truncate select-all">
+                {typeof window !== 'undefined' ? `${window.location.origin}/classes/${currentClass.id}?role=parent` : ''}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    const link = `${window.location.origin}/classes/${currentClass.id}?role=parent`;
+                    navigator.clipboard.writeText(link);
+                    setParentLinkCopied(true);
+                    setTimeout(() => setParentLinkCopied(false), 2000);
+                  }
+                }}
+                className="shrink-0 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition cursor-pointer"
+              >
+                {parentLinkCopied ? 'Đã sao chép!' : 'Sao chép link'}
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-amber-50 p-3.5 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>💡 Hướng dẫn phụ huynh:</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Phụ huynh tra cứu bằng <strong>Số báo danh (SBD)</strong> hoặc <strong>Số điện thoại</strong> của học sinh.
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowParentLinkModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HỌC SINH ĐÃ XÓA (Thùng rác chuẩn iExam Ảnh 1) */}
+      {showDeletedMembersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                  <RotateCcw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">Học Sinh Đã Xóa Khỏi Lớp ({deletedMembers.length})</h3>
+                  <p className="text-[11px] text-slate-500">Lớp {currentClass.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeletedMembersModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Danh sách học sinh Thầy đã xóa khỏi lớp này. Thầy có thể khôi phục lại bất cứ lúc nào mà không làm mất điểm bài thi cũ của em.
+            </p>
+
+            {deletedMembers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+                Chưa có học sinh nào bị xóa khỏi lớp này.
+              </div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-2xl">
+                {deletedMembers.map((dm) => (
+                  <div key={dm.id} className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50 transition">
+                    <div>
+                      <div className="font-bold text-slate-900">{dm.profile?.full_name || 'Học sinh'}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {dm.profile?.email || dm.profile?.phone || 'Chưa có thông tin liên hệ'}
+                      </div>
+                      {dm.deleted_at && (
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          Đã xóa lúc: {new Date(dm.deleted_at).toLocaleString('vi-VN')}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreMember(dm)}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold hover:bg-emerald-100 transition shadow-2xs cursor-pointer"
+                    >
+                      Khôi phục
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-slate-100 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowDeletedMembersModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Đóng
               </button>
             </div>
           </div>

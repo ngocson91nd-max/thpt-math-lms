@@ -24,7 +24,63 @@ export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): 
   const activeClassIdSet = new Set<string>(activeClasses.map((c) => c.id));
   const enrolledSet = new Set<string>();
 
-  // 2. Kiểm tra bộ nhớ cache riêng của học sinh (theo cả userId và email)
+  // Danh sách các lớp học sinh đang CHỜ DUYỆT (bắt buộc phải loại trừ, tuyệt đối không cho phép active)
+  const pendingClassIds = new Set<string>();
+  try {
+    if (userId) {
+      const userPendingRaw = storage.getItem(`lms_user_pending_requests_${userId}`);
+      if (userPendingRaw) {
+        const uPend: string[] = JSON.parse(userPendingRaw);
+        if (Array.isArray(uPend)) uPend.forEach((id) => pendingClassIds.add(id));
+      }
+    }
+    activeClasses.forEach((c) => {
+      const classPendingRaw = storage.getItem(`lms_class_pending_requests_${c.id}`);
+      if (classPendingRaw) {
+        const cPend: any[] = JSON.parse(classPendingRaw);
+        if (Array.isArray(cPend)) {
+          const isPendingInClass = cPend.some(
+            (p) =>
+              (userId && p.user_id === userId) ||
+              (cleanEmail && p.user?.email && p.user.email.trim().toLowerCase() === cleanEmail)
+          );
+          if (isPendingInClass) {
+            pendingClassIds.add(c.id);
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error(e);
+  }
+
+  // 2. Kiểm tra danh sách thành viên trong từng lớp hiện hữu (NGUỒN SỰ THẬT CHÍNH THỨC)
+  try {
+    activeClasses.forEach((c) => {
+      // Nếu đang trong danh sách chờ duyệt -> Tuyệt đối không tính là đã vào lớp
+      if (pendingClassIds.has(c.id)) {
+        return;
+      }
+
+      const memRaw = storage.getItem(`lms_class_members_${c.id}`);
+      if (memRaw) {
+        const mems: ClassMember[] = JSON.parse(memRaw);
+        const activeMember = mems.find((m) => {
+          if (m.status !== 'active') return false;
+          if (userId && m.user_id === userId) return true;
+          if (cleanEmail && m.profile?.email && m.profile.email.trim().toLowerCase() === cleanEmail) return true;
+          return false;
+        });
+        if (activeMember) {
+          enrolledSet.add(c.id);
+        }
+      }
+    });
+  } catch (e) {
+    console.error(e);
+  }
+
+  // 3. Đối chiếu thêm với cache lms_student_classes_ nhưng PHẢI đảm bảo lớp đó không bị pending
   const checkCachedKeys = [
     userId ? `lms_student_classes_${userId}` : null,
     cleanEmail ? `lms_student_classes_${cleanEmail}` : null,
@@ -36,12 +92,29 @@ export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): 
       if (cached) {
         const parsed: string[] = JSON.parse(cached);
         if (Array.isArray(parsed)) {
-          if (activeClasses.length > 0) {
-            const validParsed = parsed.filter((id) => activeClassIdSet.has(id));
-            validParsed.forEach((id) => enrolledSet.add(id));
-          } else {
-            parsed.forEach((id) => enrolledSet.add(id));
-          }
+          parsed.forEach((id) => {
+            // Chỉ thêm nếu là lớp đang tồn tại và KHÔNG nằm trong danh sách chờ duyệt
+            if (activeClasses.length > 0) {
+              if (activeClassIdSet.has(id) && !pendingClassIds.has(id)) {
+                // Kiểm tra thêm: nếu lớp này có cache thành viên mà học sinh không active thì xóa
+                const memRaw = storage.getItem(`lms_class_members_${id}`);
+                if (memRaw) {
+                  const mems: ClassMember[] = JSON.parse(memRaw);
+                  const isAct = mems.some(
+                    (m) =>
+                      m.status === 'active' &&
+                      ((userId && m.user_id === userId) ||
+                        (cleanEmail && m.profile?.email?.toLowerCase() === cleanEmail))
+                  );
+                  if (isAct) enrolledSet.add(id);
+                } else {
+                  enrolledSet.add(id);
+                }
+              }
+            } else if (!pendingClassIds.has(id)) {
+              enrolledSet.add(id);
+            }
+          });
         }
       }
     } catch (e) {
@@ -49,26 +122,8 @@ export const getEnrolledClassIdsForUser = (userId: string, userEmail?: string): 
     }
   });
 
-  // 3. Kiểm tra danh sách thành viên trong từng lớp hiện hữu (đối chiếu cả userId và email)
-  try {
-    activeClasses.forEach((c) => {
-      const memRaw = storage.getItem(`lms_class_members_${c.id}`);
-      if (memRaw) {
-        const mems: ClassMember[] = JSON.parse(memRaw);
-        const isMember = mems.some((m) => {
-          if (m.status !== 'active') return false;
-          if (userId && m.user_id === userId) return true;
-          if (cleanEmail && m.profile?.email && m.profile.email.trim().toLowerCase() === cleanEmail) return true;
-          return false;
-        });
-        if (isMember) {
-          enrolledSet.add(c.id);
-        }
-      }
-    });
-  } catch (e) {
-    console.error(e);
-  }
+  // 4. Loại bỏ tuyệt đối mọi lớp đang chờ duyệt
+  pendingClassIds.forEach((id) => enrolledSet.delete(id));
 
   return Array.from(enrolledSet);
 };
@@ -160,12 +215,12 @@ export const requestToJoinClass = (
 };
 
 /**
- * Học sinh nhập mã lớp để vào thẳng lớp học (khi Thầy phát mã)
+ * Học sinh nhập mã lớp để gửi yêu cầu xin vào lớp học (bắt buộc Thầy Sơn phê duyệt)
  */
 export const joinClassWithCode = (
   user: Profile,
   code: string
-): { success: boolean; message: string; classItem?: ClassItem } => {
+): { success: boolean; message: string; classItem?: ClassItem; pending?: boolean } => {
   if (typeof window === 'undefined') return { success: false, message: 'Thao tác không khả dụng' };
 
   const cleanCode = code.trim().toUpperCase();
@@ -186,13 +241,26 @@ export const joinClassWithCode = (
       return { success: false, message: `Không tìm thấy lớp học có mã "${cleanCode}". Em vui lòng kiểm tra lại!` };
     }
 
-    // 1. Thêm học sinh vào danh sách thành viên của lớp
+    // Kiểm tra xem em đã là thành viên chính thức chưa
     const memKey = `lms_class_members_${foundClass.id}`;
     const existingMems: ClassMember[] = JSON.parse(localStorage.getItem(memKey) || '[]');
+    const isAlreadyActive = existingMems.some(
+      (m) =>
+        m.status === 'active' &&
+        (m.user_id === user.id || (user.email && m.profile?.email?.toLowerCase() === user.email.toLowerCase()))
+    );
+    if (isAlreadyActive) {
+      return {
+        success: true,
+        pending: false,
+        message: `Em đã là thành viên chính thức của lớp "${foundClass.name}" rồi!`,
+        classItem: foundClass,
+      };
+    }
 
-    const alreadyMember = existingMems.find((m) => m.user_id === user.id);
-    if (!alreadyMember) {
-      existingMems.push({
+    // 0. Nếu lớp được cấu hình "Vào tự do" (join_mode === 'free') -> Vào thẳng lớp ngay không cần duyệt
+    if (foundClass.join_mode === 'free') {
+      const newMember: ClassMember = {
         id: `cm-${Date.now()}`,
         class_id: foundClass.id,
         user_id: user.id,
@@ -200,32 +268,106 @@ export const joinClassWithCode = (
         status: 'active',
         joined_at: new Date().toISOString(),
         profile: user,
-      });
+      };
+      existingMems.push(newMember);
       localStorage.setItem(memKey, JSON.stringify(existingMems));
+
+      const studentClassesKey = `lms_student_classes_${user.id}`;
+      const enrolledClasses: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
+      if (!enrolledClasses.includes(foundClass.id)) {
+        enrolledClasses.push(foundClass.id);
+        localStorage.setItem(studentClassesKey, JSON.stringify(enrolledClasses));
+      }
+      if (user.email) {
+        const emailClassesKey = `lms_student_classes_${user.email.toLowerCase()}`;
+        const emailEnrolled: string[] = JSON.parse(localStorage.getItem(emailClassesKey) || '[]');
+        if (!emailEnrolled.includes(foundClass.id)) {
+          emailEnrolled.push(foundClass.id);
+          localStorage.setItem(emailClassesKey, JSON.stringify(emailEnrolled));
+        }
+      }
+
+      // Xóa khỏi pending nếu có
+      const userPendingKey = `lms_user_pending_requests_${user.id}`;
+      const userPending: string[] = JSON.parse(localStorage.getItem(userPendingKey) || '[]');
+      localStorage.setItem(userPendingKey, JSON.stringify(userPending.filter((id) => id !== foundClass.id)));
+
+      // Đồng bộ kích hoạt học sinh vào Supabase Cloud
+      fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'approve_student',
+          classId: foundClass.id,
+          className: foundClass.name,
+          classCode: foundClass.code,
+          student: user,
+          userId: user.id,
+        }),
+      }).catch(console.error);
+
+      window.dispatchEvent(new Event('lms_enrollment_changed'));
+      return {
+        success: true,
+        pending: false,
+        message: `Chúc mừng em đã tham gia lớp "${foundClass.name}" thành công!`,
+        classItem: foundClass,
+      };
     }
 
-    // 2. Thêm vào cache các lớp học đã tham gia của học sinh
-    const studentClassesKey = `lms_student_classes_${user.id}`;
-    const enrolledClasses: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
-    if (!enrolledClasses.includes(foundClass.id)) {
-      enrolledClasses.push(foundClass.id);
-      localStorage.setItem(studentClassesKey, JSON.stringify(enrolledClasses));
+    // 1. Thêm vào danh sách chờ duyệt của lớp (PENDING - Mặc định Thầy cô duyệt)
+    const classPendingKey = `lms_class_pending_requests_${foundClass.id}`;
+    const classPending: any[] = JSON.parse(localStorage.getItem(classPendingKey) || '[]');
+    const alreadyPending = classPending.some(
+      (p) =>
+        p.user_id === user.id ||
+        (user.email && p.user?.email?.toLowerCase() === user.email.toLowerCase())
+    );
+    if (!alreadyPending) {
+      classPending.push({
+        id: `req-${Date.now()}`,
+        class_id: foundClass.id,
+        user_id: user.id,
+        user: {
+          id: user.id,
+          full_name: user.full_name || 'Học sinh',
+          email: user.email,
+          role: 'student',
+          grade: user.grade || foundClass.grade || 12,
+          school_name: user.school_name || 'THPT Chuyên',
+          phone: user.phone || '',
+          candidate_number: user.candidate_number || '',
+        },
+        status: 'pending',
+        requested_at: new Date().toISOString(),
+      });
+      localStorage.setItem(classPendingKey, JSON.stringify(classPending));
     }
 
-    // 3. Xóa khỏi danh sách chờ duyệt nếu có
+    // 2. Thêm vào danh sách chờ duyệt của học sinh
     const userPendingKey = `lms_user_pending_requests_${user.id}`;
     const userPending: string[] = JSON.parse(localStorage.getItem(userPendingKey) || '[]');
-    localStorage.setItem(
-      userPendingKey,
-      JSON.stringify(userPending.filter((id) => id !== foundClass.id))
-    );
+    if (!userPending.includes(foundClass.id)) {
+      userPending.push(foundClass.id);
+      localStorage.setItem(userPendingKey, JSON.stringify(userPending));
+    }
 
-    // 4. Đồng bộ ngay lập tức lên Supabase Cloud
+    // 3. Xóa khỏi cache enrolled (nếu có nhầm trước đó) để đảm bảo không được active trước khi Thầy duyệt
+    const studentClassesKey = `lms_student_classes_${user.id}`;
+    const enrolledClasses: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
+    localStorage.setItem(studentClassesKey, JSON.stringify(enrolledClasses.filter((id) => id !== foundClass.id)));
+    if (user.email) {
+      const emailClassesKey = `lms_student_classes_${user.email.toLowerCase()}`;
+      const emailEnrolled: string[] = JSON.parse(localStorage.getItem(emailClassesKey) || '[]');
+      localStorage.setItem(emailClassesKey, JSON.stringify(emailEnrolled.filter((id) => id !== foundClass.id)));
+    }
+
+    // 4. Đồng bộ yêu cầu chờ duyệt lên Supabase Cloud
     fetch('/api/cloud-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'join_with_code',
+        action: 'request_join',
         classId: foundClass.id,
         user,
       }),
@@ -236,7 +378,8 @@ export const joinClassWithCode = (
 
     return {
       success: true,
-      message: `Chào mừng em đã vào lớp "${foundClass.name}" thành công!`,
+      pending: true,
+      message: `Đã gửi yêu cầu vào lớp "${foundClass.name}" thành công! Vui lòng chờ Thầy Sơn phê duyệt trong danh sách lớp để được làm bài thi.`,
       classItem: foundClass,
     };
   } catch (err) {
@@ -388,12 +531,15 @@ export const isExamPermittedForStudent = (
   }
 
   const allClassesPool = Array.from(classesMap.values());
-  const enrolledClasses = allClassesPool.filter((c) => enrolledIds.includes(c.id));
-  const enrolledNames = enrolledClasses.map((c) => c.name.trim().toLowerCase());
-  const enrolledCodes = enrolledClasses.map((c) => c.code?.trim().toLowerCase()).filter(Boolean) as string[];
+  const cleanEnrolledIds = enrolledIds.map((id) => id.trim().toLowerCase());
+  const enrolledClasses = allClassesPool.filter((c) =>
+    enrolledIds.includes(c.id) || cleanEnrolledIds.includes(c.id.toLowerCase()) || cleanEnrolledIds.includes(c.name.toLowerCase()) || (c.code && cleanEnrolledIds.includes(c.code.toLowerCase()))
+  );
+  const enrolledNames = Array.from(new Set([...enrolledClasses.map((c) => c.name.trim().toLowerCase()), ...cleanEnrolledIds]));
+  const enrolledCodes = Array.from(new Set([...enrolledClasses.map((c) => c.code?.trim().toLowerCase()).filter(Boolean) as string[], ...cleanEnrolledIds]));
 
   // 1. Kiểm tra trực tiếp theo class_id
-  if (exam.class_id && enrolledIds.includes(exam.class_id)) return true;
+  if (exam.class_id && (enrolledIds.includes(exam.class_id) || cleanEnrolledIds.includes(exam.class_id.toLowerCase()))) return true;
 
   // 2. Kiểm tra theo class_name
   if (exam.class_name) {
@@ -401,7 +547,7 @@ export const isExamPermittedForStudent = (
     if (
       enrolledNames.includes(cleanClassName) ||
       enrolledCodes.includes(cleanClassName) ||
-      enrolledIds.includes(exam.class_name.trim())
+      cleanEnrolledIds.includes(cleanClassName)
     ) {
       return true;
     }
@@ -415,7 +561,7 @@ export const isExamPermittedForStudent = (
       return (
         enrolledNames.includes(cleanCls) ||
         enrolledCodes.includes(cleanCls) ||
-        enrolledIds.includes(cls.trim())
+        cleanEnrolledIds.includes(cleanCls)
       );
     });
   }

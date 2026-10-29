@@ -22,6 +22,11 @@ import {
   Pencil,
   Clock,
   ClipboardList,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function ClassesPage() {
@@ -66,20 +71,26 @@ export default function ClassesPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassItem | null>(null);
 
-  // Create Form State
+  // Create Form State (Chuẩn iExam Ảnh 2)
   const [className, setClassName] = useState('');
   const [classCode, setClassCode] = useState('');
   const [grade, setGrade] = useState<10 | 11 | 12>(12);
   const [desc, setDesc] = useState('');
   const [createYear, setCreateYear] = useState('2026-2027');
+  const [createJoinMode, setCreateJoinMode] = useState<'free' | 'approval'>('approval');
+  const [createPassword, setCreatePassword] = useState('');
+  const [showCreatePass, setShowCreatePass] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Edit Form State
+  // Edit Form State (Chuẩn iExam Ảnh 2)
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
   const [editGrade, setEditGrade] = useState<10 | 11 | 12>(12);
   const [editDesc, setEditDesc] = useState('');
   const [editYear, setEditYear] = useState('2026-2027');
+  const [editJoinMode, setEditJoinMode] = useState<'free' | 'approval'>('approval');
+  const [editPassword, setEditPassword] = useState('');
+  const [showEditPass, setShowEditPass] = useState(false);
 
   // Join state
   const [joinInput, setJoinInput] = useState('');
@@ -141,6 +152,8 @@ export default function ClassesPage() {
       teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
       description: finalDesc,
       is_active: true,
+      join_mode: createJoinMode,
+      join_password: createPassword.trim() || undefined,
       member_count: 0,
       pending_count: 0,
       created_at: new Date().toISOString(),
@@ -153,6 +166,8 @@ export default function ClassesPage() {
     setClassName('');
     setClassCode('');
     setDesc('');
+    setCreatePassword('');
+    setCreateJoinMode('approval');
     setClasses((prev) => [optimisticClass, ...prev]);
 
     if (typeof window !== 'undefined') {
@@ -177,6 +192,8 @@ export default function ClassesPage() {
           academic_year: selectedYear,
           teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
           description: finalDesc,
+          join_mode: createJoinMode,
+          join_password: createPassword.trim() || null,
         }),
       });
       const data = await res.json();
@@ -203,7 +220,9 @@ export default function ClassesPage() {
     setEditCode(c.code);
     setEditGrade(c.grade);
     setEditDesc(c.description || '');
-    setEditYear(c.academic_year || '2025-2026');
+    setEditYear(c.academic_year || '2026-2027');
+    setEditJoinMode(c.join_mode || 'approval');
+    setEditPassword(c.join_password || '');
     setShowEditModal(true);
   };
 
@@ -218,6 +237,8 @@ export default function ClassesPage() {
       grade: editGrade,
       description: editDesc.trim(),
       academic_year: editYear.trim(),
+      join_mode: editJoinMode,
+      join_password: editPassword.trim() || undefined,
     };
 
     // 1. Phản hồi tức thì 0ms trên giao diện
@@ -378,69 +399,95 @@ export default function ClassesPage() {
           {classes.map((c) => (
             <div
               key={c.id}
-              className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-7 shadow-xs hover:shadow-md transition hover:border-blue-200"
+              className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs hover:shadow-md transition hover:border-blue-200 space-y-5"
             >
               <div>
-                <div className="flex items-center justify-between gap-3 mb-4">
+                {/* Header Thẻ: Mã Lớp & Ngày Tạo (Chuẩn iExam Ảnh 3) */}
+                <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                      Toán Lớp {c.grade}
+                    <span className="font-mono text-xs font-black bg-slate-900 text-white px-2.5 py-1 rounded-lg tracking-wider flex items-center gap-1.5 shadow-2xs">
+                      <span>{c.code}</span>
                     </span>
-                    {c.pending_count !== undefined && c.pending_count > 0 && (
-                      <span className="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-800 animate-pulse flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-amber-600" />
-                        <span>{c.pending_count} chờ duyệt</span>
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => copyCode(c.code)}
+                      className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition cursor-pointer"
+                      title="Sao chép mã lớp"
+                    >
+                      {copiedCode === c.code ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
                     <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Năm học {c.academic_year || '2025-2026'}</span>
+                    <span>{c.created_at ? new Date(c.created_at).toLocaleDateString('vi-VN') : '21/09/2026'}</span>
                   </div>
                 </div>
 
-                <h2 className="text-xl font-bold text-slate-900 leading-snug">{c.name}</h2>
-                <p className="mt-2 text-xs text-slate-500 leading-relaxed line-clamp-2">
-                  {c.description || 'Lớp bồi dưỡng và luyện thi THPT Thầy Sơn.'}
+                {/* Tên Lớp & Mô Tả */}
+                <h2 className="text-xl font-black text-slate-900 leading-snug">{c.name}</h2>
+                <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">
+                  {c.description || 'Chưa có mô tả.'}
                 </p>
 
-                {/* Invite Code Box */}
-                <div className="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-100 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">
-                      Mã Lớp Học (Dành Cho Học Sinh):
-                    </div>
-                    <div className="font-mono text-sm font-bold text-slate-900 tracking-wider">
-                      {c.code}
-                    </div>
-                  </div>
+                {/* Hàng Badge Chuẩn iExam (Ảnh 3) */}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {/* Sĩ số */}
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 border border-blue-100">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>{c.member_count || 0} học sinh</span>
+                  </span>
 
-                  <button
-                    type="button"
-                    onClick={() => copyCode(c.code)}
-                    className="flex items-center gap-1 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-2xs transition"
-                  >
-                    {copiedCode === c.code ? (
+                  {/* Mật khẩu */}
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                    {c.join_password ? (
                       <>
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        <span className="text-emerald-600 font-bold">Đã chép</span>
+                        <Lock className="h-3.5 w-3.5 text-amber-600" />
+                        <span>Có MK</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3.5 w-3.5 text-slate-400" />
-                        <span>Sao chép</span>
+                        <Unlock className="h-3.5 w-3.5 text-slate-400" />
+                        <span>Không MK</span>
                       </>
                     )}
-                  </button>
+                  </span>
+
+                  {/* Cách vào lớp */}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                      c.join_mode === 'free'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-purple-50 text-purple-700 border border-purple-200'
+                    }`}
+                  >
+                    <span>{c.join_mode === 'free' ? 'Vào tự do' : 'Duyệt khi vào'}</span>
+                  </span>
+
+                  {/* Pending duyệt nếu có */}
+                  {c.pending_count !== undefined && c.pending_count > 0 && (
+                    <span className="rounded-lg bg-amber-100 border border-amber-300 px-2.5 py-1 text-xs font-black text-amber-800 animate-pulse flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span>{c.pending_count} chờ duyệt</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Users className="h-4 w-4 text-blue-600" />
-                  <span className="font-semibold text-slate-700">{c.member_count || 0} học sinh</span>
-                </div>
+              {/* Hàng Nút Thao Tác Dưới Cùng (Chuẩn iExam Ảnh 3) */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <Link
+                  href={`/classes/${c.id}`}
+                  prefetch={true}
+                  className="inline-flex items-center gap-1 rounded-xl bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                >
+                  <span>Xem học sinh</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
 
                 <div className="flex items-center gap-2">
                   {isTeacher && (
@@ -448,16 +495,16 @@ export default function ClassesPage() {
                       <button
                         type="button"
                         onClick={() => openEditModal(c)}
-                        className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition"
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
                         title="Chỉnh sửa lớp học"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-3.5 w-3.5 text-slate-500" />
                         <span>Sửa</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDeleteClass(c.id, c.name)}
-                        className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
+                        className="inline-flex items-center gap-1 rounded-xl bg-rose-50 border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
                         title="Xóa lớp học"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -465,25 +512,6 @@ export default function ClassesPage() {
                       </button>
                     </>
                   )}
-
-                  <Link
-                    href={`/exams?class=${encodeURIComponent(c.name)}`}
-                    prefetch={true}
-                    className="inline-flex items-center gap-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                    title={`Xem các đề thi gán cho lớp ${c.name}`}
-                  >
-                    <ClipboardList className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Đề thi</span>
-                  </Link>
-
-                  <Link
-                    href={`/classes/${c.id}`}
-                    prefetch={true}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
-                  >
-                    <span>Vào lớp</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
                 </div>
               </div>
             </div>
@@ -491,31 +519,100 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* Modal Tạo Lớp Học Mới */}
+      {/* Modal Tạo Lớp Học Mới (Chuẩn iExam Ảnh 2) */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <h2 className="text-xl font-bold text-slate-900">Tạo Lớp Học Trực Tuyến Mới</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Khởi tạo lớp mới của Thầy Sơn và cung cấp mã tham gia cho học sinh.
-            </p>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-xl font-bold text-slate-900">Tạo Lớp Học Mới</h2>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateClass} className="mt-5 space-y-4">
+            <form onSubmit={handleCreateClass} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Tên lớp học <span className="text-rose-500">*</span>
+                  Tên lớp *
                 </label>
                 <input
                   type="text"
                   required
                   value={className}
                   onChange={(e) => setClassName(e.target.value)}
-                  placeholder="Ví dụ: 12A1 Chuyên Toán..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  placeholder="Ví dụ: 11 Anh 1, 12 Toán 1..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-medium"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Mật khẩu tham gia mới (Tùy chọn)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Để trống nếu không cần</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showCreatePass ? 'text' : 'password'}
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    placeholder="Để trống để không đặt mật khẩu"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 pr-9 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePass(!showCreatePass)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showCreatePass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Cách vào lớp: 2 Card chọn (Chuẩn iExam Ảnh 2) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-2">
+                  Cách vào lớp
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateJoinMode('free')}
+                    className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                      createJoinMode === 'free'
+                        ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-xs text-slate-900">Vào tự do</div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
+                      Có mã lớp là vào ngay.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCreateJoinMode('approval')}
+                    className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                      createJoinMode === 'approval'
+                        ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-xs text-slate-900">Thầy cô duyệt</div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
+                      Học sinh gửi yêu cầu, duyệt xong mới vào lớp.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
                   <select
@@ -526,19 +623,6 @@ export default function ClassesPage() {
                     <option value={12}>Lớp 12</option>
                     <option value={11}>Lớp 11</option>
                     <option value={10}>Lớp 10</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Năm học</label>
-                  <select
-                    value={createYear}
-                    onChange={(e) => setCreateYear(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="2026-2027">2026-2027</option>
-                    <option value="2025-2026">2025-2026</option>
-                    <option value="2024-2025">2024-2025</option>
                   </select>
                 </div>
 
@@ -556,33 +640,20 @@ export default function ClassesPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mô tả lớp học
-                </label>
-                <textarea
-                  rows={2}
-                  value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
-                  placeholder="Thông tin mục tiêu ôn luyện, lịch học trực tuyến..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
               <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition shadow-sm cursor-pointer"
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50 transition shadow-sm cursor-pointer"
                 >
-                  {isSubmitting ? 'Đang tạo...' : 'Lưu & Tạo Lớp'}
+                  {isSubmitting ? 'Đang tạo...' : 'Lưu'}
                 </button>
               </div>
             </form>
@@ -590,28 +661,99 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* Modal Chỉnh Sửa Lớp Học */}
+      {/* Modal Chỉnh Sửa Lớp Học (Chuẩn iExam Ảnh 2) */}
       {showEditModal && editingClass && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <h2 className="text-xl font-bold text-slate-900">Chỉnh Sửa Lớp Học</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Cập nhật thông tin lớp học của Thầy Sơn.
-            </p>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-xl font-bold text-slate-900">Sửa lớp học</h2>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleUpdateClass} className="mt-5 space-y-4">
+            <form onSubmit={handleUpdateClass} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Tên lớp học <span className="text-rose-500">*</span>
+                  Tên lớp *
                 </label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Ví dụ: Lớp 12A1 Chuyên Toán..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  placeholder="Ví dụ: 11 Anh 1..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-medium"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Mật khẩu tham gia mới
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    {editingClass.join_password ? 'Đang có mật khẩu' : 'Không có mật khẩu'}
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showEditPass ? 'text' : 'password'}
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Để trống để giữ nguyên mật khẩu"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 pr-9 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPass(!showEditPass)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showEditPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Cách vào lớp: 2 Card chọn (Chuẩn iExam Ảnh 2) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-2">
+                  Cách vào lớp
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditJoinMode('free')}
+                    className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                      editJoinMode === 'free'
+                        ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-xs text-slate-900">Vào tự do</div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
+                      Có mã lớp là vào ngay.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditJoinMode('approval')}
+                    className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                      editJoinMode === 'approval'
+                        ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-xs text-slate-900">Thầy cô duyệt</div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
+                      Học sinh gửi yêu cầu, duyệt xong mới vào lớp.
+                    </p>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -629,41 +771,17 @@ export default function ClassesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Năm học</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Mã vào lớp
+                  </label>
                   <input
                     type="text"
-                    value={editYear}
-                    onChange={(e) => setEditYear(e.target.value)}
-                    placeholder="2025-2026"
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                    value={editCode}
+                    onChange={(e) => setEditCode(e.target.value)}
+                    placeholder="TOAN12A1"
+                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-mono uppercase"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mã vào lớp
-                </label>
-                <input
-                  type="text"
-                  value={editCode}
-                  onChange={(e) => setEditCode(e.target.value)}
-                  placeholder="TOAN12A1"
-                  className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 font-mono uppercase"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mô tả lớp học
-                </label>
-                <textarea
-                  rows={2}
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  placeholder="Thông tin mục tiêu ôn luyện, lịch học trực tuyến..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
-                />
               </div>
 
               <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
@@ -673,15 +791,15 @@ export default function ClassesPage() {
                     setShowEditModal(false);
                     setEditingClass(null);
                   }}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition shadow-sm cursor-pointer"
                 >
-                  Lưu Thay Đổi
+                  Lưu
                 </button>
               </div>
             </form>
