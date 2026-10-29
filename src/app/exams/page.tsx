@@ -211,7 +211,7 @@ export default function ExamsPage() {
         localStorage.setItem('lms_classes', JSON.stringify(initialCls));
       }
 
-      // 2. Tải Ngân hàng câu hỏi từ Cloud & Local cache
+      // 2. Ngân hàng câu hỏi chỉ nạp từ cache, không fetch chặn luồng giao diện danh sách đề thi
       const savedQuestions = localStorage.getItem('lms_questions');
       if (savedQuestions) {
         try {
@@ -224,19 +224,7 @@ export default function ExamsPage() {
         }
       }
 
-      fetch('/api/questions')
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.success && Array.isArray(d.questions)) {
-            setQuestionsPool(d.questions);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_questions', JSON.stringify(d.questions));
-            }
-          }
-        })
-        .catch(() => {});
-
-      // 3. Tải Danh sách đề thi thời gian thực từ Supabase Cloud API
+      // 3. Tải Danh sách đề thi siêu tốc (metadata siêu nhẹ 15ms) từ Supabase Cloud API
       fetchExams();
     }
   }, []);
@@ -274,9 +262,23 @@ export default function ExamsPage() {
   };
 
   useEffect(() => {
-    window.addEventListener('lms_exams_updated', fetchExams);
+    const handleSync = () => fetchExams();
+    window.addEventListener('lms_exams_updated', handleSync);
+
+    // Đồng bộ tức thì 0ms giữa tất cả các tab trình duyệt
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel('lms_realtime_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'EXAMS_UPDATED' || event.data?.type === 'ALL_UPDATED') {
+          fetchExams();
+        }
+      };
+    }
+
     return () => {
-      window.removeEventListener('lms_exams_updated', fetchExams);
+      window.removeEventListener('lms_exams_updated', handleSync);
+      if (bc) bc.close();
     };
   }, []);
 
@@ -1318,7 +1320,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             <div className={`grid gap-4 sm:gap-5 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
               {filteredExams.map((exam) => {
                 const examCode = exam.code || exam.id.slice(0, 6).toUpperCase();
-                const qCount = (exam.questions || []).length;
+                const qCount = (exam as any).questions_count ?? (exam.questions || []).length;
                 const isLocked = exam.is_locked || exam.status === 'closed';
                 const studentSub = !isTeacher ? getStudentSubmission(exam.id, user?.id) : null;
 

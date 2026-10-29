@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { MOCK_CLASSES, MOCK_USERS, MOCK_CLASS_MEMBERS } from '@/lib/supabase/mockStore';
 import { ClassItem } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
+import { broadcastDataChange } from '@/lib/realtime/syncService';
 import {
   GraduationCap,
   Plus,
@@ -118,8 +119,21 @@ export default function ClassesPage() {
   useEffect(() => {
     fetchClasses();
     window.addEventListener('lms_classes_updated', fetchClasses);
+
+    // Kênh Realtime Broadcast đa tab 0ms
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel('lms_realtime_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'CLASSES_UPDATED' || event.data?.type === 'ALL_UPDATED') {
+          fetchClasses();
+        }
+      };
+    }
+
     return () => {
       window.removeEventListener('lms_classes_updated', fetchClasses);
+      if (bc) bc.close();
     };
   }, []);
 
@@ -176,6 +190,7 @@ export default function ClassesPage() {
         const list: ClassItem[] = raw ? JSON.parse(raw) : [];
         localStorage.setItem('lms_classes', JSON.stringify([optimisticClass, ...list]));
       } catch {}
+      broadcastDataChange('CLASSES_UPDATED');
     }
 
     // 2. Đồng bộ ngầm lên Supabase Cloud (Background Sync không làm đơ giao diện)
@@ -247,6 +262,7 @@ export default function ClassesPage() {
     );
     setShowEditModal(false);
     setEditingClass(null);
+    broadcastDataChange('CLASSES_UPDATED');
 
     // 2. Gửi ngầm lên Cloud
     try {
@@ -282,6 +298,7 @@ export default function ClassesPage() {
       }
       localStorage.removeItem(`lms_class_members_${classId}`);
       localStorage.removeItem(`lms_class_pending_requests_${classId}`);
+      broadcastDataChange('CLASSES_UPDATED');
     }
 
     // 2. Xóa vĩnh viễn trên Supabase Cloud Database ngầm

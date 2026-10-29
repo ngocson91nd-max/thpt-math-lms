@@ -163,7 +163,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         try {
           const parsed: Exam[] = JSON.parse(savedExams);
           const found = parsed.find((e) => e.id === resolvedParams.id);
-          if (found) {
+          // Nếu trong cache đã có sẵn câu hỏi đầy đủ thì nạp tức thì 0ms
+          if (found && Array.isArray(found.questions) && found.questions.length > 0) {
             setExam(found);
             setTimeLeft(found.duration_minutes * 60);
             checkAndLoadPdf(found);
@@ -175,7 +176,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       }
     }
 
-    if (mockExam) {
+    if (mockExam && Array.isArray(mockExam.questions) && mockExam.questions.length > 0) {
       setExam(mockExam);
       setTimeLeft(mockExam.duration_minutes * 60);
       checkAndLoadPdf(mockExam);
@@ -211,20 +212,32 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         .catch(() => {});
     }
 
-    // Tải thông tin đề thi đầy đủ từ Cloud API
-    fetch('/api/exams')
+    // Tải thông tin đề thi đầy đủ câu hỏi trực tiếp theo ID từ Cloud API
+    fetch(`/api/exams?id=${encodeURIComponent(resolvedParams.id)}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && Array.isArray(d.exams)) {
-          const found = d.exams.find((e: any) => e.id === resolvedParams.id);
-          if (found) {
-            setExam(found);
-            setTimeLeft(found.duration_minutes * 60);
-            checkAndLoadPdf(found);
-          }
+        if (d.success && d.exam) {
+          setExam(d.exam);
+          setTimeLeft(d.exam.duration_minutes * 60);
+          checkAndLoadPdf(d.exam);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fallback tải nếu mạng chập chờn
+        fetch('/api/exams?full=true')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.exams)) {
+              const found = d.exams.find((e: any) => e.id === resolvedParams.id);
+              if (found) {
+                setExam(found);
+                setTimeLeft(found.duration_minutes * 60);
+                checkAndLoadPdf(found);
+              }
+            }
+          })
+          .catch(() => {});
+      });
   }, [resolvedParams.id, user, isStudent]);
 
   // 2. KHÔI PHỤC TIẾN ĐỘ BÀI LÀM TỰ ĐỘNG (Crash Recovery / F5 Protection)

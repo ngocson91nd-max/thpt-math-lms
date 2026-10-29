@@ -171,7 +171,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       });
       observer.observe(target, { childList: true, subtree: true });
 
-      // F. TIMEOUT AN TOÀN (3.5 GIÂY): NẾU TIKZJAX HOẶC CDN LỖI THÌ HIỂN THỊ HỘP MÃ TIKZ GỌN GÀNG, KHÔNG TREO SPINNER
+      // F. TIMEOUT AN TOÀN (2 GIÂY): NẾU TIKZJAX HOẶC CDN CHẬM THÌ KHÔNG ĐỂ TREO SPINNER VÔ TẬN
       setTimeout(() => {
         const hasRealSvg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
         if (!isRendered && !hasRealSvg) {
@@ -180,20 +180,44 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .trim();
+
+          // Nhận diện loại hình vẽ để hiển thị tiêu đề sư phạm
+          let shapeLabel = 'Hình vẽ hình học';
+          if (/\\widehat\{|góc|tam giác|trạm/i.test(rawTikz)) shapeLabel = 'Hình học tam giác & góc';
+          else if (/lap_phuong|khối|lập phương|cube/i.test(rawTikz)) shapeLabel = 'Hình khối lập phương 3D';
+          else if (/chóp|pyramid|nón|trụ/i.test(rawTikz)) shapeLabel = 'Hình không gian 3D';
+
           target.innerHTML = `
-            <div class="my-2 rounded-2xl border border-blue-200/80 bg-blue-50/40 p-3.5 text-center">
+            <div class="my-2 rounded-2xl border border-blue-200/90 bg-gradient-to-b from-blue-50/60 to-slate-50 p-3.5 text-center shadow-2xs max-w-sm mx-auto">
               <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-blue-100 text-xs font-bold text-blue-900">
-                <span>📐 Hình vẽ TikZ (Mã nguồn hình học)</span>
-                <span class="text-[11px] font-normal text-slate-500">Đang lưu mã gốc</span>
+                <span class="flex items-center gap-1.5">📐 ${shapeLabel}</span>
+                <button type="button" class="retry-tikz-btn text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs cursor-pointer hover:bg-blue-50 transition">
+                  🔄 Dựng lại
+                </button>
               </div>
-              <pre class="text-[11px] text-slate-700 font-mono text-left bg-white p-2.5 rounded-xl border border-slate-200 overflow-x-auto max-h-40 leading-relaxed">${cleanSnippet}</pre>
+              <pre class="text-[10.5px] text-slate-700 font-mono text-left bg-white p-2 rounded-xl border border-slate-200 overflow-x-auto max-h-32 leading-relaxed">${cleanSnippet}</pre>
             </div>
           `;
+
+          // Gắn sự kiện cho nút Dựng lại
+          const retryBtn = target.querySelector('.retry-tikz-btn');
+          if (retryBtn) {
+            retryBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              try {
+                if (typeof (window as any).tikzjax === 'function') {
+                  (window as any).tikzjax();
+                } else if (typeof (window as any).tikzjax?.process === 'function') {
+                  (window as any).tikzjax.process();
+                }
+              } catch {}
+            });
+          }
         }
-      }, 3500);
+      }, 2000);
     });
 
-    // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á
+    // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao với CDN Unpkg dự phòng
     const existingScript = document.querySelector('script[src*="tikzjax"]');
     if (!existingScript) {
       const fontLink = document.createElement('link');
@@ -204,6 +228,13 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
       script.async = true;
+      script.onerror = () => {
+        // Fallback CDN Unpkg nếu JsDelivr bị lỗi hoặc bị chặn mạng
+        const fallbackScript = document.createElement('script');
+        fallbackScript.src = 'https://unpkg.com/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
+        fallbackScript.async = true;
+        document.head.appendChild(fallbackScript);
+      };
       document.head.appendChild(script);
     }
   }, [html]);

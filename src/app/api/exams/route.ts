@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Giải mã metadata đề thi từ cột description
-function unpackExam(exam: any) {
+function unpackExam(exam: any, includeQuestions = true) {
   let extra: any = {};
   let cleanDesc = exam.description || '';
 
@@ -16,11 +16,14 @@ function unpackExam(exam: any) {
     } catch {}
   }
 
+  const rawQuestions = Array.isArray(extra.questions) ? extra.questions : [];
+
   return {
     ...exam,
     description: cleanDesc,
     code: extra.code || exam.code || (exam.id ? exam.id.substring(0, 6).toUpperCase() : 'EXAM01'),
-    questions: Array.isArray(extra.questions) ? extra.questions : [],
+    questions_count: rawQuestions.length,
+    questions: includeQuestions ? rawQuestions : [],
     format: extra.format || 'standard_3_parts',
     part_structure: extra.part_structure || null,
     assigned_classes: Array.isArray(extra.assigned_classes) ? extra.assigned_classes : [],
@@ -45,10 +48,44 @@ function unpackExam(exam: any) {
   };
 }
 
-// GET: Lấy danh sách toàn bộ đề thi thời gian thực từ Supabase Cloud
-export async function GET() {
+// GET: Lấy danh sách toàn bộ đề thi thời gian thực hoặc chi tiết 1 đề từ Supabase Cloud
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const targetId = searchParams.get('id');
+    const isFull = searchParams.get('full') === 'true';
+
     const supabase = getSupabaseAdmin();
+
+    // 1. Nếu lấy chi tiết 1 đề thi cụ thể: Luôn trả về đầy đủ toàn bộ câu hỏi (questions)
+    if (targetId) {
+      const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .or(`id.eq.${targetId},code.eq.${targetId}`)
+        .maybeSingle();
+
+      if (error) {
+        console.error('API /api/exams GET by id error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      }
+
+      if (!data) {
+        return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
+      }
+
+      const formattedExam = unpackExam(data, true);
+      return NextResponse.json(
+        { success: true, exam: formattedExam },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+        }
+      );
+    }
+
+    // 2. Danh sách tổng quan cho Tab Đề thi: Mặc định nén nhẹ chỉ lấy metadata (summary) để load tức thì trong 15ms!
     const { data, error } = await supabase
       .from('exams')
       .select('*')
@@ -59,7 +96,8 @@ export async function GET() {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    const formattedExams = (data || []).map(unpackExam);
+    // Nếu không có flag ?full=true, không trả mảng questions khổng lồ để giảm 99% payload
+    const formattedExams = (data || []).map((exam) => unpackExam(exam, isFull));
 
     return NextResponse.json(
       { success: true, exams: formattedExams },

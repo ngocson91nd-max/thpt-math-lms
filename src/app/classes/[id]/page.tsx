@@ -7,6 +7,7 @@ import { MOCK_CLASSES, MOCK_CLASS_MEMBERS, MOCK_EXAMS } from '@/lib/supabase/moc
 import { useAuth } from '@/context/AuthContext';
 import { ClassMember, Exam, Profile, ClassItem } from '@/types/database';
 import { approveStudentJoinRequest, rejectStudentJoinRequest } from '@/lib/auth/enrollment';
+import { broadcastDataChange } from '@/lib/realtime/syncService';
 import {
   GraduationCap,
   Users,
@@ -347,6 +348,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         console.error(e);
       }
       window.dispatchEvent(new Event('lms_classes_updated'));
+      broadcastDataChange('CLASSES_UPDATED');
+      broadcastDataChange('ENROLLMENT_UPDATED');
     }
   };
 

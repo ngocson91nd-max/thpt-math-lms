@@ -8,6 +8,7 @@ import { Footer } from './Footer';
 import { GuestAuthWall } from '@/components/auth/GuestAuthWall';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
 import { isUserEnrolledInAnyClass, getEnrolledClassIdsForUser } from '@/lib/auth/enrollment';
+import { setupRealtimeSync } from '@/lib/realtime/syncService';
 import { MOCK_USERS } from '@/lib/supabase/mockStore';
 import { PanelLeftOpen, Loader2 } from 'lucide-react';
 
@@ -210,9 +211,27 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
     checkEnrollment();
     window.addEventListener('lms_enrollment_changed', checkEnrollment);
+
+    // Kích hoạt đồng bộ thời gian thực toàn cục (đa tab + Supabase WebSocket)
+    const cleanupRealtime = setupRealtimeSync({
+      onEnrollmentChange: checkEnrollment,
+      onClassesChange: () => {
+        fetch('/api/classes')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.classes)) {
+              localStorage.setItem('lms_classes', JSON.stringify(d.classes));
+            }
+          })
+          .catch(() => {});
+        checkEnrollment();
+      },
+    });
+
     return () => {
       isMounted = false;
       window.removeEventListener('lms_enrollment_changed', checkEnrollment);
+      cleanupRealtime();
     };
   }, [user]);
 
