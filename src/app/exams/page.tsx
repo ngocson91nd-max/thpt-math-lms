@@ -4,14 +4,12 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
+import { MOCK_EXAMS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import { Exam, Question, ClassItem } from '@/types/database';
 import { parseExamLatex } from '@/lib/latex/examParser';
-import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
 import { createClient } from '@/lib/supabase/client';
 import { savePdfToIndexedDb } from '@/lib/pdf/pdfStorage';
-import { maskPdfAnswerKey, buildPdfExamQuestions } from '@/lib/pdf/pdfExamHelper';
 import { isExamPermittedForStudent, isUserEnrolledInAnyClass } from '@/lib/auth/enrollment';
 import { autoRecoverAllSubmissionsFromBrowser } from '@/lib/realtime/syncService';
 import { StudentPendingApprovalView } from '@/components/auth/StudentPendingApprovalView';
@@ -413,6 +411,7 @@ export default function ExamsPage() {
         reader.readAsDataURL(pdfFile);
       });
 
+      const { maskPdfAnswerKey, buildPdfExamQuestions } = await import('@/lib/pdf/pdfExamHelper');
       let totalPages = 1;
       if (pdfSmartMask) {
         try {
@@ -576,9 +575,10 @@ export default function ExamsPage() {
 
       // 1. Phân tích trực tiếp phía client (chuyển đổi WMF MathType sang PNG Canvas siêu nét)
       try {
+        const { parseWordDocx, convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
         const result = await parseWordDocx(file);
         if (result.questions && result.questions.length > 0) {
-          extractedQuestions = result.questions;
+          extractedQuestions = convertWmfQuestionsToPng(result.questions);
         }
       } catch (clientErr) {
         console.warn('Client parser failed, falling back to API:', clientErr);
@@ -606,6 +606,7 @@ export default function ExamsPage() {
 
       // Chuyển đổi toàn bộ ảnh WMF sang PNG trên Canvas trình duyệt
       if (extractedQuestions.length > 0) {
+        const { convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
         extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
       }
 

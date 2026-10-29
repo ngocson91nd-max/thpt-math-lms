@@ -1,18 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Exam, Question, QuestionType, QuestionDifficulty, ClassItem } from '@/types/database';
 import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import { parseExamLatex } from '@/lib/latex/examParser';
-import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
-import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount, maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import { savePdfToIndexedDb, getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
+
+const PdfExamViewer = dynamic(() => import('@/components/exam/PdfExamViewer'), { ssr: false });
 import {
   Sparkles,
   FileText,
@@ -675,9 +676,10 @@ function ExamEditorContent() {
 
         // Thử parse bằng bộ parser client (hỗ trợ MathType WMF vector, công thức OMML)
         try {
+          const { parseWordDocx, convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
           const res = await parseWordDocx(file);
           if (res.questions && res.questions.length > 0) {
-            extractedQuestions = res.questions;
+            extractedQuestions = convertWmfQuestionsToPng(res.questions);
           }
         } catch (clientErr) {
           console.warn('Client parser failed, falling back to API:', clientErr);
@@ -701,6 +703,7 @@ function ExamEditorContent() {
         }
 
         if (extractedQuestions.length > 0) {
+          const { convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
           extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
           setQuestionsWithHistory(extractedQuestions);
           setActiveQuestionId(extractedQuestions[0]?.id);

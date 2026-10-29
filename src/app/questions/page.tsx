@@ -5,7 +5,6 @@ import { useAuth } from '@/context/AuthContext';
 import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
-import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
 import { parseExamLatex } from '@/lib/latex/examParser';
 import {
   FileQuestion,
@@ -131,9 +130,10 @@ export default function QuestionsPage() {
       let extracted: Question[] = [];
 
       try {
+        const { parseWordDocx, convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
         const result = await parseWordDocx(file);
         if (result.questions && result.questions.length > 0) {
-          extracted = result.questions;
+          extracted = convertWmfQuestionsToPng(result.questions);
         }
       } catch (clientErr) {
         console.warn('Client parser failed, falling back to API:', clientErr);
@@ -159,6 +159,7 @@ export default function QuestionsPage() {
       }
 
       if (extracted.length > 0) {
+        const { convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
         extracted = convertWmfQuestionsToPng(extracted);
       }
 

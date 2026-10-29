@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  poweredByHeader: false,
+  compress: true,
   turbopack: {
     rules: {
       "*.css": {
@@ -9,6 +10,9 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  experimental: {
+    optimizePackageImports: ["lucide-react", "katex"],
   },
 };
 

@@ -6,15 +6,26 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_EXAMS, MOCK_SUBMISSIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import { Exam, Question, ClassItem } from '@/types/database';
+import dynamic from 'next/dynamic';
 import MathRenderer from '@/components/math/MathRenderer';
 import { gradeExamSubmission } from '@/lib/grading/grader';
 import { createClient } from '@/lib/supabase/client';
 import { ExamCalculator } from '@/components/exam/ExamCalculator';
 import { ExamFormulaSheetModal } from '@/components/exam/ExamFormulaSheetModal';
-import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
-import { maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import { isExamPermittedForStudent } from '@/lib/auth/enrollment';
+
+const PdfExamViewer = dynamic(() => import('@/components/exam/PdfExamViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-96 items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 text-slate-400">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+        <span className="text-xs font-semibold">Đang nạp trình đọc PDF...</span>
+      </div>
+    </div>
+  ),
+});
 import { broadcastDataChange } from '@/lib/realtime/syncService';
 import {
   Clock,
@@ -131,6 +142,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       const applyAutoMask = async (rawPdf: string) => {
         // Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy (giữ trọn vẹn câu hỏi)
         try {
+          const { maskPdfAnswerKey } = await import('@/lib/pdf/pdfExamHelper');
           const res = await maskPdfAnswerKey(rawPdf);
           setLoadedPdfUrl(res.maskedDataUrl);
         } catch (e) {

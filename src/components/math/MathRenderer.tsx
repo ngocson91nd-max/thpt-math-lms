@@ -13,6 +13,44 @@ interface MathRendererProps {
 // Bộ nhớ đệm RAM cho đồ thị TikZ đã render SVG (hiển thị 0ms)
 const inMemoryTikzCache = new Map<string, string>();
 
+let tikzJaxLoadPromise: Promise<void> | null = null;
+
+function ensureTikzJaxLoaded(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  if ((window as any).tikzjax) return Promise.resolve();
+  if (tikzJaxLoadPromise) return tikzJaxLoadPromise;
+
+  tikzJaxLoadPromise = new Promise((resolve) => {
+    // 1. Thêm CSS font nếu chưa có
+    if (!document.getElementById('tikzjax-fonts-css')) {
+      const link = document.createElement('link');
+      link.id = 'tikzjax-fonts-css';
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = 'https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/fonts.css';
+      document.head.appendChild(link);
+    }
+
+    // 2. Thêm script nếu chưa có
+    const existingScript = document.getElementById('tikzjax-js') as HTMLScriptElement | null;
+    if (existingScript) {
+      if ((window as any).tikzjax) resolve();
+      else existingScript.addEventListener('load', () => resolve());
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'tikzjax-js';
+    script.src = 'https://cdn.jsdelivr.net/npm/@rod2ik/tikzjax@1.6.0/dist/tikzjax.min.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.head.appendChild(script);
+  });
+
+  return tikzJaxLoadPromise;
+}
+
 function hashTikz(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -139,17 +177,19 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       scriptTag.textContent = rawTikz;
       target.appendChild(scriptTag);
 
-      // Kích hoạt TikzJax WebAssembly quét và render thẻ script mới vừa chèn
+      // Kích hoạt TikzJax WebAssembly quét và render thẻ script mới vừa chèn (Tự động nạp script nếu chưa có)
       if (typeof window !== 'undefined') {
-        try {
-          if (typeof (window as any).tikzjax === 'function') {
-            (window as any).tikzjax();
-          } else if (typeof (window as any).tikzjax?.process === 'function') {
-            (window as any).tikzjax.process();
-          } else {
-            window.dispatchEvent(new Event('DOMContentLoaded'));
-          }
-        } catch {}
+        ensureTikzJaxLoaded().then(() => {
+          try {
+            if (typeof (window as any).tikzjax === 'function') {
+              (window as any).tikzjax();
+            } else if (typeof (window as any).tikzjax?.process === 'function') {
+              (window as any).tikzjax.process();
+            } else {
+              window.dispatchEvent(new Event('DOMContentLoaded'));
+            }
+          } catch {}
+        });
       }
 
       // E. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
