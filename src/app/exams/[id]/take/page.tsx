@@ -15,6 +15,7 @@ import PdfExamViewer from '@/components/exam/PdfExamViewer';
 import { getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
 import { maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import { isExamPermittedForStudent } from '@/lib/auth/enrollment';
+import { broadcastDataChange } from '@/lib/realtime/syncService';
 import {
   Clock,
   Flag,
@@ -560,38 +561,52 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       answers: submissionAnswers,
     };
 
-    // Đồng bộ vào Supabase
+    // 1. Đồng bộ lên Supabase Cloud API qua /api/submissions (đảm bảo 100% giáo viên nhận được)
     try {
-      const supabase = createClient();
-      if (supabase && user) {
-        await supabase.from('submissions').insert([
-          {
-            id: newSubId,
-            exam_id: exam.id,
-            student_id: user.id,
-            start_time: startTimeIso,
-            submitted_at: submittedAtIso,
-            score: gradingResult.score,
-            max_score: maxScore,
-            status: gradingResult.hasPendingEssay ? 'grading' : 'graded',
-            tab_switch_count: tabSwitchCount,
-            teacher_feedback: newSubmission.teacher_feedback,
-          },
-        ]);
-      }
+      fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSubmission),
+      }).catch(console.error);
     } catch (err) {
-      console.warn('Supabase submission save info:', err);
+      console.warn('API submission save error:', err);
     }
 
     MOCK_SUBMISSIONS.unshift(newSubmission as any);
 
-    // Lưu vào localStorage
+    // 2. Lưu vào localStorage đa người dùng (để cả học sinh và giáo viên cùng xem được tức thì)
     if (typeof window !== 'undefined') {
       localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
+
+      // A. Lưu vào danh sách cá nhân của học sinh
       const mySubmissionsKey = `my_submissions_${studentId}`;
       const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
       existingMySubs.unshift(newSubmission);
       localStorage.setItem(mySubmissionsKey, JSON.stringify(existingMySubs));
+
+      // B. Lưu vào SỔ ĐIỂM TOÀN TRƯỜNG (lms_all_submissions) để Giáo viên / Admin thấy ngay tức thì!
+      const allSubsKey = 'lms_all_submissions';
+      const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
+      const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
+      filteredAll.unshift(newSubmission);
+      localStorage.setItem(allSubsKey, JSON.stringify(filteredAll));
+
+      // C. Tự động tăng số lượt làm bài (submissions_count) của đề thi trên card Đề thi
+      try {
+        const savedExamsRaw = localStorage.getItem('lms_exams');
+        if (savedExamsRaw) {
+          const listExams = JSON.parse(savedExamsRaw);
+          const eIdx = listExams.findIndex((e: any) => e.id === exam.id);
+          if (eIdx >= 0) {
+            listExams[eIdx].submissions_count = (listExams[eIdx].submissions_count || 0) + 1;
+            localStorage.setItem('lms_exams', JSON.stringify(listExams));
+          }
+        }
+      } catch {}
+
+      // D. Phát tín hiệu thời gian thực 0ms tới tất cả các tab của Giáo viên
+      broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
+      broadcastDataChange('EXAMS_UPDATED');
 
       // Xóa bộ nhớ tạm tiến độ bài thi sau khi nộp thành công
       localStorage.removeItem(storageKey);

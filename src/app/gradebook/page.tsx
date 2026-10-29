@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { MOCK_SUBMISSIONS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import { Submission } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
+import { broadcastDataChange } from '@/lib/realtime/syncService';
 import {
   Award,
   Download,
@@ -37,6 +38,7 @@ export default function GradebookPage() {
     return [];
   });
   const [search, setSearch] = useState('');
+  const [filterExamId, setFilterExamId] = useState<string>('all');
 
   // Modals
   const [showEditScoreModal, setShowEditScoreModal] = useState(false);
@@ -53,22 +55,29 @@ export default function GradebookPage() {
   const [newExamTitle, setNewExamTitle] = useState('Đề Khảo Sát Toán THPT 2025');
   const [newScore, setNewScore] = useState<number>(8.5);
 
-  // Tải thêm bài thi từ localStorage và Supabase
+  // 1. Đọc filter đề thi từ URL query param nếu có: ?examId=...
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const eId = params.get('examId');
+      if (eId) setFilterExamId(eId);
+    }
+  }, []);
+
+  // 2. Tải bài thi thời gian thực từ Supabase Cloud API và LocalStorage
+  const fetchSubmissions = async () => {
     let combined: Submission[] = [];
 
+    // A. Nạp từ cache nội bộ
     if (typeof window !== 'undefined') {
       const globalSaved = localStorage.getItem('lms_all_submissions');
       if (globalSaved) {
         try {
           const parsed = JSON.parse(globalSaved);
-          if (Array.isArray(parsed)) {
-            combined = parsed;
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      } else if (user) {
+          if (Array.isArray(parsed)) combined = parsed;
+        } catch {}
+      }
+      if (user) {
         const mySaved = localStorage.getItem(`my_submissions_${user.id}`);
         if (mySaved) {
           try {
@@ -81,9 +90,7 @@ export default function GradebookPage() {
                 }
               });
             }
-          } catch (e) {
-            console.error(e);
-          }
+          } catch {}
         }
       }
     }
@@ -96,6 +103,57 @@ export default function GradebookPage() {
     } else {
       setSubmissions(combined);
     }
+
+    // B. Đồng bộ từ Cloud Supabase API
+    try {
+      const res = await fetch('/api/submissions');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.submissions) && data.submissions.length > 0) {
+        const cloudList: Submission[] = data.submissions;
+        const mergedMap = new Map<string, Submission>();
+        cloudList.forEach((s) => mergedMap.set(s.id, s));
+        combined.forEach((s) => {
+          if (!mergedMap.has(s.id)) mergedMap.set(s.id, s);
+        });
+        const finalMerged = Array.from(mergedMap.values());
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_all_submissions', JSON.stringify(finalMerged));
+        }
+
+        if (!isTeacher && user) {
+          setSubmissions(
+            finalMerged.filter((s) => s.student_id === user.id || s.student?.email === user.email)
+          );
+        } else {
+          setSubmissions(finalMerged);
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi fetch /api/submissions:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubmissions();
+
+    window.addEventListener('lms_submissions_updated', fetchSubmissions);
+
+    // Kênh Realtime Broadcast đa tab 0ms
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel('lms_realtime_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'SUBMISSIONS_UPDATED' || event.data?.type === 'ALL_UPDATED') {
+          fetchSubmissions();
+        }
+      };
+    }
+
+    return () => {
+      window.removeEventListener('lms_submissions_updated', fetchSubmissions);
+      if (bc) bc.close();
+    };
   }, [user, isTeacher]);
 
   const saveSubmissions = (updated: Submission[]) => {
@@ -213,14 +271,28 @@ export default function GradebookPage() {
   };
 
   const filtered = submissions.filter((s) => {
+    // Lọc theo đề thi cụ thể nếu được chuyển từ nút [Kết quả] của đề thi
+    if (
+      filterExamId !== 'all' &&
+      s.exam_id !== filterExamId &&
+      s.exam?.id !== filterExamId &&
+      s.exam?.code !== filterExamId
+    ) {
+      return false;
+    }
+
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
       s.student?.full_name?.toLowerCase().includes(q) ||
       s.student?.email?.toLowerCase().includes(q) ||
-      s.exam?.title?.toLowerCase().includes(q)
+      s.exam?.title?.toLowerCase().includes(q) ||
+      s.exam?.code?.toLowerCase().includes(q)
     );
   });
+
+  const pendingEssayCount = filtered.filter((s) => s.status === 'grading').length;
+  const firstPendingSub = filtered.find((s) => s.status === 'grading');
 
   // Thống kê điểm số
   const scores = submissions.map((s) => s.score ?? 0);
@@ -330,20 +402,66 @@ export default function GradebookPage() {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200">
-        <Search className="h-4 w-4 text-slate-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={
-            isTeacher
-              ? 'Tìm kiếm theo tên học sinh, email hoặc tên đề thi...'
-              : 'Tìm kiếm theo tên bài thi...'
-          }
-          className="w-full text-xs text-slate-900 focus:outline-none"
-        />
+      {/* Banner Cảnh Báo Có Bài Chờ Chấm Tự Luận Cho Giáo Viên */}
+      {isTeacher && pendingEssayCount > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Clock className="h-5 w-5 animate-spin" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                <span>Thầy có {pendingEssayCount} bài thi tự luận đang chờ chấm điểm!</span>
+                <span className="bg-amber-200 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-black uppercase">
+                  Cần chấm ngay
+                </span>
+              </h3>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Học sinh đã nộp bài giải trắc nghiệm và đính kèm ảnh/lời giải tự luận. Thầy hãy vào chấm để học sinh nhận điểm chính thức.
+              </p>
+            </div>
+          </div>
+          {firstPendingSub && (
+            <Link
+              href={`/gradebook/grade/${firstPendingSub.id}`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 text-xs font-extrabold shadow-md shadow-amber-600/20 transition active:scale-95 shrink-0"
+            >
+              <Pencil className="h-4 w-4" />
+              <span>Chấm bài tự luận ngay</span>
+            </Link>
+          )}
+        </div>
+      )}
+
+      {/* Search Bar & Filter Đề Thi */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200">
+        <div className="flex items-center gap-3 flex-1">
+          <Search className="h-4 w-4 text-slate-400 shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={
+              isTeacher
+                ? 'Tìm kiếm theo tên học sinh, email hoặc tên đề thi...'
+                : 'Tìm kiếm theo tên bài thi...'
+            }
+            className="w-full text-xs text-slate-900 focus:outline-none"
+          />
+        </div>
+
+        {filterExamId !== 'all' && (
+          <div className="flex items-center gap-2 self-start sm:self-auto bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0">
+            <span>Đang lọc theo đề thi</span>
+            <button
+              onClick={() => setFilterExamId('all')}
+              className="text-blue-500 hover:text-blue-800 font-black ml-1 cursor-pointer"
+              title="Xem tất cả đề thi"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Submissions Table */}
@@ -425,7 +543,18 @@ export default function GradebookPage() {
                       : '26/10/2026'}
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {isTeacher && s.status === 'grading' && (
+                        <Link
+                          href={`/gradebook/grade/${s.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition active:scale-95"
+                          title="Chấm điểm câu hỏi tự luận của học sinh"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Chấm tự luận</span>
+                        </Link>
+                      )}
+
                       <Link
                         href={`/exams/${s.exam_id}/result/${s.id}`}
                         className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition"

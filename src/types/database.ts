@@ -202,6 +202,7 @@ export interface SubmissionAnswer {
   max_points: number;
   teacher_comment?: string;
   essay_file_url?: string;
+  essay_images?: string[];
 }
 
 export interface Submission {

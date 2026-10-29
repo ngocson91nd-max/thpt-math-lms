@@ -105,6 +105,14 @@ export default function ExamsPage() {
     } catch {}
     return [];
   });
+  const [allSubmissions, setAllSubmissions] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('lms_all_submissions');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [filterType, setFilterType] = useState<'all' | 'timed' | 'practice'>('all');
@@ -226,6 +234,19 @@ export default function ExamsPage() {
 
       // 3. Tải Danh sách đề thi siêu tốc (metadata siêu nhẹ 15ms) từ Supabase Cloud API
       fetchExams();
+
+      // 4. Tải danh sách bài nộp để đếm số HS đã thi và hiển thị bài chờ chấm
+      fetch('/api/submissions')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.submissions)) {
+            setAllSubmissions(d.submissions);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('lms_all_submissions', JSON.stringify(d.submissions));
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -267,17 +288,31 @@ export default function ExamsPage() {
 
     // Đồng bộ tức thì 0ms giữa tất cả các tab trình duyệt
     let bc: BroadcastChannel | null = null;
+    const handleSubmissionsSync = () => {
+      try {
+        const raw = localStorage.getItem('lms_all_submissions');
+        if (raw) setAllSubmissions(JSON.parse(raw));
+      } catch {}
+      fetchExams();
+    };
+
+    window.addEventListener('lms_submissions_updated', handleSubmissionsSync);
+
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       bc = new BroadcastChannel('lms_realtime_sync');
       bc.onmessage = (event) => {
         if (event.data?.type === 'EXAMS_UPDATED' || event.data?.type === 'ALL_UPDATED') {
           fetchExams();
         }
+        if (event.data?.type === 'SUBMISSIONS_UPDATED') {
+          handleSubmissionsSync();
+        }
       };
     }
 
     return () => {
       window.removeEventListener('lms_exams_updated', handleSync);
+      window.removeEventListener('lms_submissions_updated', handleSubmissionsSync);
       if (bc) bc.close();
     };
   }, []);
@@ -1324,6 +1359,17 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                 const isLocked = exam.is_locked || exam.status === 'closed';
                 const studentSub = !isTeacher ? getStudentSubmission(exam.id, user?.id) : null;
 
+                // Lấy danh sách bài nộp thực tế của đề thi này
+                const examSubmissions = allSubmissions.filter(
+                  (s: any) =>
+                    s.exam_id === exam.id ||
+                    s.exam?.id === exam.id ||
+                    s.exam?.code === exam.code ||
+                    s.exam_id === examCode
+                );
+                const actualSubCount = Math.max(exam.submissions_count || 0, examSubmissions.length);
+                const pendingEssaySubs = examSubmissions.filter((s: any) => s.status === 'grading');
+
                 return (
                   <div
                     key={exam.id}
@@ -1471,7 +1517,9 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                       <div className="text-xs text-slate-500 my-2">
                         <span className="font-semibold text-slate-700">{qCount} câu</span>
                         <span className="mx-1.5">•</span>
-                        <span>{exam.submissions_count || 0} HS đã thi</span>
+                        <span className={actualSubCount > 0 ? 'font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded' : ''}>
+                          {actualSubCount} HS đã thi
+                        </span>
                         <span className="mx-1.5">•</span>
                         <span>{exam.duration_minutes} phút</span>
                       </div>
@@ -1480,6 +1528,18 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     {/* Hàng nút tác vụ (Phân quyền: Giáo viên quản lý đề vs Học sinh làm bài) */}
                     {isTeacher ? (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
+                        {/* Nút Cảnh Báo Có Bài Tự Luận Cần Chấm Ngay */}
+                        {pendingEssaySubs.length > 0 && (
+                          <Link
+                            href={`/gradebook/grade/${pendingEssaySubs[0].id}`}
+                            className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 transition active:scale-95 animate-pulse"
+                            title="Đề thi có bài tự luận của học sinh đang chờ Thầy chấm"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>✍️ Chấm tự luận ({pendingEssaySubs.length} bài chờ)</span>
+                          </Link>
+                        )}
+
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
@@ -1515,11 +1575,12 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                           </Link>
 
                           <Link
-                            href="/gradebook"
+                            href={`/gradebook?examId=${exam.id}`}
                             className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 transition"
+                            title="Xem bảng điểm và danh sách học sinh đã thi đề này"
                           >
                             <BarChart3 className="h-3.5 w-3.5" />
-                            <span>Kết quả</span>
+                            <span>Kết quả {actualSubCount > 0 ? `(${actualSubCount})` : ''}</span>
                           </Link>
                         </div>
 
