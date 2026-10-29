@@ -195,9 +195,10 @@ function ExamEditorContent() {
   const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   // Ngân hàng câu hỏi gốc để chọn
-  const [bankQuestions, setBankQuestions] = useState<Question[]>(MOCK_QUESTIONS);
+  const [bankQuestions, setBankQuestions] = useState<Question[]>([]);
   const [bankSearch, setBankSearch] = useState('');
   const [bankPartFilter, setBankPartFilter] = useState<'all' | 1 | 2 | 3 | 4>('all');
+  const [saveToBank, setSaveToBank] = useState<boolean>(false);
 
   // Lưu thông báo lưu thành công
   const [saveToast, setSaveToast] = useState<string | null>(null);
@@ -984,13 +985,25 @@ function ExamEditorContent() {
         }
         localStorage.setItem('lms_exams', JSON.stringify(examsList));
 
-        // Cập nhật cả ngân hàng câu hỏi nếu ở chế độ tương tác
-        if (examMode !== 'pdf_view') {
-          const savedQ = localStorage.getItem('lms_questions');
-          let qList: Question[] = savedQ ? JSON.parse(savedQ) : MOCK_QUESTIONS;
-          const qIds = new Set(qList.map((q) => q.id));
-          const newItems = questions.filter((q) => !qIds.has(q.id));
-          localStorage.setItem('lms_questions', JSON.stringify([...newItems, ...qList]));
+        // Chỉ lưu câu hỏi vào ngân hàng nếu giáo viên chủ động tick chọn
+        if (saveToBank && examMode !== 'pdf_view' && questions.length > 0) {
+          try {
+            const savedQ = localStorage.getItem('lms_questions');
+            let qList: Question[] = savedQ ? JSON.parse(savedQ) : [];
+            const qIds = new Set(qList.map((q) => q.id));
+            const newItems = questions.filter((q) => !qIds.has(q.id));
+            if (newItems.length > 0) {
+              const combined = [...newItems, ...qList];
+              localStorage.setItem('lms_questions', JSON.stringify(combined));
+              fetch('/api/questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questions: newItems }),
+              }).catch((err) => console.warn('Lỗi lưu câu hỏi vào ngân hàng:', err));
+            }
+          } catch (e) {
+            console.warn(e);
+          }
         }
         // Đồng bộ ngầm lên Supabase Cloud API
         fetch('/api/exams', {
@@ -1477,6 +1490,16 @@ function ExamEditorContent() {
             >
               Hủy
             </Link>
+
+            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 hover:bg-slate-100 transition" title="Lưu các câu hỏi vào Ngân hàng câu hỏi để tái sử dụng cho các đề sau">
+              <input
+                type="checkbox"
+                checked={saveToBank}
+                onChange={(e) => setSaveToBank(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="hidden sm:inline">Lưu vào Ngân hàng</span>
+            </label>
 
             <button
               type="button"
@@ -2227,6 +2250,20 @@ function ExamEditorContent() {
                         className="rounded text-blue-600"
                       />
                       <span>Xáo trộn phương án đúng sai</span>
+                    </label>
+                  </div>
+
+                  {/* Ngân hàng câu hỏi */}
+                  <div className="space-y-1 pt-1 border-t border-slate-100">
+                    <span className="font-bold text-slate-700 text-[11px] block">Ngân hàng câu hỏi</span>
+                    <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={saveToBank}
+                        onChange={(e) => setSaveToBank(e.target.checked)}
+                        className="rounded text-blue-600"
+                      />
+                      <span>Đồng thời lưu các câu hỏi vào Ngân hàng đề</span>
                     </label>
                   </div>
 

@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_QUESTIONS } from '@/lib/supabase/mockStore';
 import { Question, QuestionType, QuestionDifficulty } from '@/types/database';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
-import { createClient } from '@/lib/supabase/client';
 import { parseWordDocx, convertWmfQuestionsToPng } from '@/lib/word/wordExamParser';
+import { parseExamLatex } from '@/lib/latex/examParser';
 import {
   FileQuestion,
   Plus,
@@ -21,25 +20,25 @@ import {
   Pencil,
   Trash2,
   Upload,
+  FileCode,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function QuestionsPage() {
   const { isTeacher } = useAuth();
   const [questions, setQuestions] = useState<Question[]>(() => {
-    if (typeof window === 'undefined') return MOCK_QUESTIONS;
+    if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem('lms_questions');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingIds = new Set(parsed.map((q: any) => q.id));
-          const missing = MOCK_QUESTIONS.filter((q) => !existingIds.has(q.id));
-          return [...parsed, ...missing];
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return MOCK_QUESTIONS;
+    return [];
   });
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
@@ -49,6 +48,9 @@ export default function QuestionsPage() {
   // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showLatexModal, setShowLatexModal] = useState(false);
+  const [latexInput, setLatexInput] = useState('');
+  const [latexParseNotice, setLatexParseNotice] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
@@ -82,40 +84,29 @@ export default function QuestionsPage() {
   const [editCorrectSingle, setEditCorrectSingle] = useState('A');
   const [editShortAns, setEditShortAns] = useState('');
 
-  // Tải danh sách câu hỏi từ localStorage hoặc Supabase
+  // Tải danh sách câu hỏi thực tế từ Supabase Cloud API
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('lms_questions');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const existingIds = new Set(parsed.map((q: any) => q.id));
-            const missing = MOCK_QUESTIONS.filter((q) => !existingIds.has(q.id));
-            setQuestions([...parsed, ...missing]);
-            return;
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-
-    const supabase = createClient();
-    if (supabase) {
-      supabase
-        .from('questions')
-        .select('*')
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setQuestions(data as any);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_questions', JSON.stringify(data));
-            }
-          }
-        });
-    }
+    fetchQuestions();
   }, []);
+
+  const fetchQuestions = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/questions?t=${Date.now()}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.questions)) {
+        setQuestions(data.questions);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lms_questions', JSON.stringify(data.questions));
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Lỗi tải ngân hàng câu hỏi:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const saveQuestions = (updated: Question[]) => {
     setQuestions(updated);
@@ -124,6 +115,7 @@ export default function QuestionsPage() {
     }
   };
 
+  // Nạp câu hỏi từ file Word (.docx)
   const [isUploadingWord, setIsUploadingWord] = useState(false);
   const handleWordImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +124,6 @@ export default function QuestionsPage() {
     try {
       let extracted: Question[] = [];
 
-      // 1. Phân tích trực tiếp phía client (chuyển đổi WMF MathType sang PNG Canvas siêu nét)
       try {
         const result = await parseWordDocx(file);
         if (result.questions && result.questions.length > 0) {
@@ -142,7 +133,6 @@ export default function QuestionsPage() {
         console.warn('Client parser failed, falling back to API:', clientErr);
       }
 
-      // 2. Dự phòng qua API server nếu client không đọc được
       if (extracted.length === 0) {
         try {
           const fd = new FormData();
@@ -162,7 +152,6 @@ export default function QuestionsPage() {
         }
       }
 
-      // Chuyển đổi toàn bộ ảnh WMF sang PNG trên Canvas trình duyệt
       if (extracted.length > 0) {
         extracted = convertWmfQuestionsToPng(extracted);
       }
@@ -172,13 +161,71 @@ export default function QuestionsPage() {
       } else {
         const updated = [...extracted, ...questions];
         saveQuestions(updated);
-        alert(`Đã nhập thành công ${extracted.length} câu hỏi từ file "${file.name}" vào Ngân hàng câu hỏi!`);
+
+        // Lưu đồng bộ lên Supabase Cloud
+        fetch('/api/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questions: extracted }),
+        }).catch((err) => console.warn('Lỗi lưu câu hỏi lên Cloud:', err));
+
+        alert(`Đã nạp thành công ${extracted.length} câu hỏi từ file "${file.name}" vào Ngân hàng câu hỏi!`);
       }
     } catch (err: any) {
       alert(`Lỗi đọc file Word: ${err?.message || 'Không xác định'}`);
     } finally {
       setIsUploadingWord(false);
       e.target.value = '';
+    }
+  };
+
+  // Nạp câu hỏi từ mã LaTeX
+  const handleLatexImport = () => {
+    if (!latexInput.trim()) {
+      setLatexParseNotice('Vui lòng dán mã nguồn LaTeX chứa câu hỏi vào khung bên dưới!');
+      return;
+    }
+
+    try {
+      const result = parseExamLatex(latexInput);
+      const parsed = result.questions || [];
+      if (parsed.length === 0) {
+        setLatexParseNotice('Không tìm thấy câu hỏi \\begin{ex}...\\end{ex} hợp lệ trong mã LaTeX.');
+        return;
+      }
+
+      const updated = [...parsed, ...questions];
+      saveQuestions(updated);
+
+      // Lưu đồng bộ lên Cloud API
+      fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions: parsed }),
+      }).catch((err) => console.warn('Lỗi lưu câu hỏi LaTeX lên Cloud:', err));
+
+      setShowLatexModal(false);
+      setLatexInput('');
+      setLatexParseNotice(null);
+      alert(`Đã nạp thành công ${parsed.length} câu hỏi LaTeX vào Ngân hàng đề thi!`);
+    } catch (err: any) {
+      setLatexParseNotice(`Lỗi phân tích LaTeX: ${err?.message || 'Không rõ nguyên nhân'}`);
+    }
+  };
+
+  // Xóa toàn bộ Ngân hàng câu hỏi
+  const handleDeleteAllQuestions = async () => {
+    const isConfirmed = confirm(
+      'Thầy có chắc chắn muốn XÓA TOÀN BỘ câu hỏi trong Ngân hàng câu hỏi không?\nDữ liệu trên Cloud và trình duyệt sẽ được xóa trống hoàn toàn.'
+    );
+    if (!isConfirmed) return;
+
+    saveQuestions([]);
+    try {
+      await fetch('/api/questions?all=true', { method: 'DELETE' });
+      alert('Đã xóa sạch toàn bộ câu hỏi trong Ngân hàng đề!');
+    } catch (err) {
+      console.warn('Lỗi xóa tất cả câu hỏi:', err);
     }
   };
 
@@ -226,6 +273,7 @@ export default function QuestionsPage() {
     }
   };
 
+  // Thêm câu hỏi thủ công
   const handleCreateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formContent.trim()) return;
@@ -252,11 +300,11 @@ export default function QuestionsPage() {
     const newId =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : `q-${Date.now()}`;
+        : '00000000-0000-0000-0000-' + Math.random().toString(36).substring(2, 14);
 
     const newQ: Question = {
       id: newId,
-      teacher_id: '22222222-2222-2222-2222-222222222222',
+      teacher_id: '11111111-1111-1111-1111-111111111111',
       grade: formGrade,
       topic: formTopic,
       difficulty: formDifficulty,
@@ -272,28 +320,12 @@ export default function QuestionsPage() {
     const updated = [newQ, ...questions];
     saveQuestions(updated);
 
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('questions').insert([
-          {
-            id: newId,
-            grade: formGrade,
-            topic: formTopic,
-            difficulty: formDifficulty,
-            type: formType,
-            content: formContent,
-            options,
-            correct_answer,
-            explanation: formExplanation,
-            points: Number(formPoints),
-            is_public: true,
-          },
-        ]);
-      }
-    } catch (err) {
-      console.warn('Lỗi thêm câu hỏi trên Supabase:', err);
-    }
+    // Lưu lên Supabase Cloud API
+    fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newQ),
+    }).catch((err) => console.warn('Lỗi lưu câu hỏi lên Cloud:', err));
 
     setShowModal(false);
     setFormContent('');
@@ -356,47 +388,28 @@ export default function QuestionsPage() {
       correct_answer = 'Hướng dẫn chấm';
     }
 
-    const updated = questions.map((q) => {
-      if (q.id === editingQuestion.id) {
-        return {
-          ...q,
-          grade: editGrade,
-          topic: editTopic,
-          difficulty: editDifficulty,
-          type: editType,
-          content: editContent,
-          options,
-          correct_answer,
-          explanation: editExplanation,
-          points: Number(editPoints),
-        };
-      }
-      return q;
-    });
+    const updatedQ: Question = {
+      ...editingQuestion,
+      grade: editGrade,
+      topic: editTopic,
+      difficulty: editDifficulty,
+      type: editType,
+      content: editContent,
+      options,
+      correct_answer,
+      explanation: editExplanation,
+      points: Number(editPoints),
+    };
 
+    const updated = questions.map((q) => (q.id === editingQuestion.id ? updatedQ : q));
     saveQuestions(updated);
 
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase
-          .from('questions')
-          .update({
-            grade: editGrade,
-            topic: editTopic,
-            difficulty: editDifficulty,
-            type: editType,
-            content: editContent,
-            options,
-            correct_answer,
-            explanation: editExplanation,
-            points: Number(editPoints),
-          })
-          .eq('id', editingQuestion.id);
-      }
-    } catch (err) {
-      console.warn('Lỗi cập nhật câu hỏi trên Supabase:', err);
-    }
+    // Lưu lên Supabase Cloud API
+    fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedQ),
+    }).catch((err) => console.warn('Lỗi cập nhật câu hỏi trên Cloud:', err));
 
     setShowEditModal(false);
     setEditingQuestion(null);
@@ -412,14 +425,9 @@ export default function QuestionsPage() {
     const updated = questions.filter((q) => q.id !== questionId);
     saveQuestions(updated);
 
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('questions').delete().eq('id', questionId);
-      }
-    } catch (err) {
-      console.warn('Lỗi xóa câu hỏi trên Supabase:', err);
-    }
+    fetch(`/api/questions?id=${questionId}`, { method: 'DELETE' }).catch((err) =>
+      console.warn('Lỗi xóa câu hỏi trên Cloud:', err)
+    );
   };
 
   const filteredQuestions = questions.filter((q) => {
@@ -451,12 +459,31 @@ export default function QuestionsPage() {
             Ngân Hàng Câu Hỏi Toán THPT
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Kho câu hỏi phong phú chuẩn hóa theo 5 định dạng của Bộ GD&ĐT 2025, hiển thị chuẩn KaTeX và tích hợp AI.
+            Kho lưu trữ câu hỏi chuyên đề chuẩn hóa theo 5 định dạng của Bộ GD&ĐT 2025 ({questions.length} câu hỏi).
           </p>
         </div>
 
         {isTeacher && (
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {questions.length > 0 && (
+              <button
+                onClick={handleDeleteAllQuestions}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                title="Xóa toàn bộ câu hỏi trong ngân hàng"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Xóa Hết ({questions.length})</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowLatexModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3.5 py-2.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition cursor-pointer shadow-2xs"
+            >
+              <FileCode className="h-4 w-4" />
+              <span>Dán Mã LaTeX</span>
+            </button>
+
             <label className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition cursor-pointer shadow-2xs">
               <Upload className="h-4 w-4" />
               <span>{isUploadingWord ? 'Đang đọc Word...' : 'Nhập Từ Word (.docx)'}</span>
@@ -468,6 +495,7 @@ export default function QuestionsPage() {
                 className="hidden"
               />
             </label>
+
             <button
               onClick={() => setShowModal(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-500 transition cursor-pointer"
@@ -524,10 +552,10 @@ export default function QuestionsPage() {
             onChange={(e) => setGradeFilter(e.target.value)}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
           >
-            <option value="all">Tất cả các lớp (10, 11, 12)</option>
-            <option value="12">Toán Lớp 12</option>
-            <option value="11">Toán Lớp 11</option>
-            <option value="10">Toán Lớp 10</option>
+            <option value="all">Tất cả các khối lớp</option>
+            <option value="12">Lớp 12 (Trọng tâm THPT 2025)</option>
+            <option value="11">Lớp 11</option>
+            <option value="10">Lớp 10</option>
           </select>
         </div>
 
@@ -537,11 +565,11 @@ export default function QuestionsPage() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
           >
-            <option value="all">Tất cả dạng câu hỏi</option>
-            <option value="single_choice">Trắc nghiệm 1 đáp án (Phần I)</option>
-            <option value="true_false">Đúng / Sai 4 ý (Phần II)</option>
-            <option value="short_answer">Điền đáp số ngắn (Phần III)</option>
+            <option value="all">Tất cả các dạng</option>
+            <option value="single_choice">Trắc nghiệm 1 đáp án</option>
             <option value="multiple_choice">Nhiều lựa chọn đúng</option>
+            <option value="true_false">Đúng / Sai 4 ý</option>
+            <option value="short_answer">Điền đáp số ngắn</option>
             <option value="essay">Tự luận giải chi tiết</option>
           </select>
         </div>
@@ -564,8 +592,48 @@ export default function QuestionsPage() {
       {/* Questions List */}
       <div className="space-y-4">
         {filteredQuestions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 p-12 text-center text-slate-400 text-xs">
-            Không tìm thấy câu hỏi nào phù hợp với bộ lọc.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 mb-4 shadow-xs">
+              <FileQuestion className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">
+              {questions.length === 0 ? 'Ngân hàng câu hỏi hiện đang trống' : 'Không tìm thấy câu hỏi phù hợp với bộ lọc'}
+            </h3>
+            <p className="mt-2 text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+              {questions.length === 0
+                ? 'Dữ liệu đã được dọn sạch hoàn toàn theo yêu cầu của Thầy. Thầy có thể nạp câu hỏi mới vào ngân hàng bằng các tính năng bên dưới:'
+                : 'Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn lại các bộ lọc chuyên đề/khối lớp.'}
+            </p>
+
+            {isTeacher && questions.length === 0 && (
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  Thêm Câu Hỏi Mới
+                </button>
+                <button
+                  onClick={() => setShowLatexModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-xs font-semibold text-purple-700 hover:bg-purple-50 transition shadow-2xs"
+                >
+                  <FileCode className="h-4 w-4" />
+                  Dán Mã LaTeX
+                </button>
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs">
+                  <Upload className="h-4 w-4 text-slate-500" />
+                  Nhập File Word (.docx)
+                  <input
+                    type="file"
+                    accept=".docx"
+                    disabled={isUploadingWord}
+                    onChange={handleWordImport}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
           </div>
         ) : (
           filteredQuestions.map((q, index) => (
@@ -610,6 +678,25 @@ export default function QuestionsPage() {
                   </span>
 
                   <span className="font-bold text-slate-700">{q.points} điểm</span>
+
+                  {isTeacher && (
+                    <div className="flex items-center gap-1 ml-2 border-l border-slate-200 pl-2">
+                      <button
+                        onClick={() => openEditQuestion(q)}
+                        className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition"
+                        title="Chỉnh sửa câu hỏi"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteQuestion(q.id)}
+                        className="p-1 rounded-lg hover:bg-rose-50 text-rose-600 transition"
+                        title="Xóa câu hỏi khỏi ngân hàng"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -638,37 +725,13 @@ export default function QuestionsPage() {
               {/* Correct Answer & Explanation Preview */}
               {q.explanation && (
                 <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4 text-sm">
-                  <div className="font-bold text-blue-900 mb-1.5">
-                    Đáp án đúng:{' '}
-                    <span className="font-mono text-emerald-700 font-semibold">
-                      {typeof q.correct_answer === 'object'
-                        ? JSON.stringify(q.correct_answer)
-                        : String(q.correct_answer)}
-                    </span>
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs mb-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                    <span>Lời giải chi tiết:</span>
                   </div>
-                  <MathRenderer content={q.explanation} className="text-slate-700 leading-relaxed" />
-                </div>
-              )}
-
-              {/* Teacher Actions (Edit / Delete) */}
-              {isTeacher && (
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEditQuestion(q)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    <span>Sửa câu hỏi</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteQuestion(q.id)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Xóa câu hỏi</span>
-                  </button>
+                  <div className="text-slate-800">
+                    <MathRenderer content={q.explanation} />
+                  </div>
                 </div>
               )}
             </div>
@@ -676,61 +739,138 @@ export default function QuestionsPage() {
         )}
       </div>
 
-      {/* Modal Thêm Câu Hỏi Mới */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl my-8 rounded-3xl bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Thêm Câu Hỏi Toán Mới</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Soạn câu hỏi với công thức KaTeX và hỗ trợ tạo tự động bằng AI.
-                </p>
-              </div>
+      {/* Modal Dán mã LaTeX */}
+      {showLatexModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FileCode className="h-5 w-5 text-purple-600" />
+                Nạp Câu Hỏi Từ Mã LaTeX Vào Ngân Hàng
+              </h3>
+              <button
+                onClick={() => setShowLatexModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
+            <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+              Dán đoạn mã LaTeX chứa một hoặc nhiều câu hỏi (môi trường <code>\begin&#123;ex&#125; ... \end&#123;ex&#125;</code> với <code>\choice</code>, <code>\choiceTF</code>, <code>\shortans</code> và <code>\loigiai</code>).
+            </p>
+
+            {latexParseNotice && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>{latexParseNotice}</span>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <textarea
+                value={latexInput}
+                onChange={(e) => setLatexInput(e.target.value)}
+                placeholder={`\\begin{ex}
+Cho hàm số $y = f(x)$ có bảng biến thiên...
+\\choice
+{$1$}
+{\\True $2$}
+{$3$}
+{$4$}
+\\loigiai{
+Đạo hàm đổi dấu tại 2 điểm nên hàm số có 2 điểm cực trị.
+}
+\\end{ex}`}
+                rows={10}
+                className="w-full rounded-2xl border border-slate-200 p-3.5 font-mono text-xs text-slate-900 focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                disabled={isGeneratingAi}
-                onClick={handleAiGenerate}
-                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 hover:from-indigo-500 hover:to-purple-500 transition disabled:opacity-50"
+                onClick={() => setShowLatexModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
               >
-                <Sparkles className="h-4 w-4" />
-                {isGeneratingAi ? 'AI Đang Soạn Đề...' : 'AI Tạo Đề Tự Động'}
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleLatexImport}
+                className="rounded-xl bg-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-purple-500 transition"
+              >
+                Nạp Vào Ngân Hàng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Thêm Câu Hỏi Mới */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Plus className="h-5 w-5 text-blue-600" />
+                Thêm Câu Hỏi Mới Vào Ngân Hàng
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
               </button>
             </div>
 
             <form onSubmit={handleCreateQuestion} className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng câu hỏi:</label>
+                  <select
+                    value={formType}
+                    onChange={(e) => setFormType(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
+                  >
+                    <option value="single_choice">Trắc nghiệm 1 đáp án</option>
+                    <option value="short_answer">Điền số ngắn</option>
+                    <option value="essay">Tự luận</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp:</label>
                   <select
                     value={formGrade}
                     onChange={(e) => setFormGrade(Number(e.target.value) as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   >
                     <option value={12}>Lớp 12</option>
                     <option value={11}>Lớp 11</option>
                     <option value={10}>Lớp 10</option>
                   </select>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chủ đề</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chuyên đề:</label>
                   <input
                     type="text"
                     value={formTopic}
                     onChange={(e) => setFormTopic(e.target.value)}
-                    placeholder="Khảo sát hàm số, Oxyz..."
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    placeholder="VD: Khảo sát hàm số"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ:</label>
                   <select
                     value={formDifficulty}
                     onChange={(e) => setFormDifficulty(e.target.value as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   >
                     <option value="nhan_biet">Nhận biết</option>
                     <option value="thong_hieu">Thông hiểu</option>
@@ -738,38 +878,35 @@ export default function QuestionsPage() {
                     <option value="van_dung_cao">Vận dụng cao</option>
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng câu</label>
-                  <select
-                    value={formType}
-                    onChange={(e) => setFormType(e.target.value as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
-                  >
-                    <option value="single_choice">Trắc nghiệm 1 đáp án</option>
-                    <option value="true_false">Đúng / Sai 4 ý</option>
-                    <option value="short_answer">Điền đáp số ngắn</option>
-                    <option value="essay">Tự luận</option>
-                  </select>
-                </div>
               </div>
 
-              {/* Math Editor for Content */}
+              {/* Question Content Editor */}
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700">Đề bài (hỗ trợ LaTeX, Ctrl+V dán ảnh):</label>
+                  <button
+                    type="button"
+                    onClick={handleAiGenerate}
+                    disabled={isGeneratingAi}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-700 cursor-pointer"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {isGeneratingAi ? 'Đang tạo bằng AI...' : 'Tạo nhanh bằng AI'}
+                  </button>
+                </div>
                 <MathEditor
                   value={formContent}
                   onChange={setFormContent}
-                  label="Nội dung đề bài (Hỗ trợ LaTeX):"
-                  placeholder="Ví dụ: Cho hàm số $y = x^3 - 3x^2$... Tính $\int_0^1 ...$"
+                  placeholder="Nhập đề bài câu hỏi tại đây... Nhấn Win+Shift+S rồi Ctrl+V để dán ảnh trực tiếp!"
                   rows={4}
                 />
               </div>
 
-              {/* Options if single choice */}
+              {/* Single Choice Options */}
               {formType === 'single_choice' && (
-                <div className="space-y-2 rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                  <div className="text-xs font-semibold text-slate-700 mb-1">4 Phương án lựa chọn:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2 rounded-2xl bg-slate-50 p-4 border border-slate-200">
+                  <span className="text-xs font-bold text-slate-800 block">4 Lựa chọn trả lời:</span>
+                  <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Phương án A"
@@ -822,26 +959,24 @@ export default function QuestionsPage() {
               {/* Short Answer */}
               {formType === 'short_answer' && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Đáp số đúng:
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Đáp số đúng:</label>
                   <input
                     type="text"
+                    placeholder="VD: 4 hoặc 0.5"
                     value={shortAns}
                     onChange={(e) => setShortAns(e.target.value)}
-                    placeholder="Ví dụ: 6 hoặc 2.5 hoặc 5/2"
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   />
                 </div>
               )}
 
-              {/* Explanation Editor */}
+              {/* Explanation */}
               <div>
                 <MathEditor
                   value={formExplanation}
                   onChange={setFormExplanation}
-                  label="Lời giải chi tiết chuẩn sư phạm (KaTeX):"
-                  placeholder="Trình bày các bước suy luận và công thức toán..."
+                  label="Lời giải chi tiết chuẩn sư phạm:"
+                  placeholder="Nhập lời giải chi tiết (tùy chọn)..."
                   rows={3}
                 />
               </div>
@@ -858,7 +993,7 @@ export default function QuestionsPage() {
                   type="submit"
                   className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-blue-500 transition"
                 >
-                  Lưu Vào Ngân Hàng Đề
+                  Thêm Vào Ngân Hàng
                 </button>
               </div>
             </form>
@@ -868,61 +1003,76 @@ export default function QuestionsPage() {
 
       {/* Modal Chỉnh Sửa Câu Hỏi */}
       {showEditModal && editingQuestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl my-8 rounded-3xl bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95">
-            <h2 className="text-xl font-bold text-slate-900 border-b border-slate-100 pb-3 mb-5">
-              Chỉnh Sửa Câu Hỏi
-            </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-blue-600" />
+                Chỉnh Sửa Câu Hỏi Trong Ngân Hàng
+              </h3>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingQuestion(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleUpdateQuestion} className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng câu hỏi:</label>
+                  <select
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
+                  >
+                    <option value="single_choice">Trắc nghiệm 1 đáp án</option>
+                    <option value="short_answer">Điền số ngắn</option>
+                    <option value="essay">Tự luận</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Khối lớp:</label>
                   <select
                     value={editGrade}
                     onChange={(e) => setEditGrade(Number(e.target.value) as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   >
                     <option value={12}>Lớp 12</option>
                     <option value={11}>Lớp 11</option>
                     <option value={10}>Lớp 10</option>
                   </select>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chủ đề</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Chuyên đề:</label>
                   <input
                     type="text"
                     value={editTopic}
                     onChange={(e) => setEditTopic(e.target.value)}
-                    placeholder="Khảo sát hàm số..."
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mức độ:</label>
                   <select
                     value={editDifficulty}
                     onChange={(e) => setEditDifficulty(e.target.value as any)}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none"
                   >
                     <option value="nhan_biet">Nhận biết</option>
                     <option value="thong_hieu">Thông hiểu</option>
                     <option value="van_dung">Vận dụng</option>
                     <option value="van_dung_cao">Vận dụng cao</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Điểm số</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={editPoints}
-                    onChange={(e) => setEditPoints(Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-900 focus:outline-none"
-                  />
                 </div>
               </div>
 
@@ -931,16 +1081,16 @@ export default function QuestionsPage() {
                 <MathEditor
                   value={editContent}
                   onChange={setEditContent}
-                  label="Nội dung câu hỏi (KaTeX):"
+                  label="Đề bài (hỗ trợ LaTeX, Ctrl+V dán ảnh):"
                   rows={4}
                 />
               </div>
 
-              {/* Options for single choice */}
+              {/* Single Choice Options */}
               {editType === 'single_choice' && (
-                <div className="space-y-2 rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                  <div className="text-xs font-semibold text-slate-700 mb-1">4 Phương án:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2 rounded-2xl bg-slate-50 p-4 border border-slate-200">
+                  <span className="text-xs font-bold text-slate-800 block">4 Lựa chọn trả lời:</span>
+                  <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Phương án A"

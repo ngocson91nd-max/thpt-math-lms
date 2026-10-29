@@ -424,6 +424,15 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
       localStorage.setItem('lms_exams', JSON.stringify(updatedList));
 
+      // Đồng bộ các đề thi đã thay đổi lớp lên Cloud API
+      updatedList.forEach((e) => {
+        fetch('/api/exams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(e),
+        }).catch(() => {});
+      });
+
       // Cập nhật lại classExams hiện tại
       const relevant = updatedList.filter((e) => {
         const inAssigned = e.assigned_classes?.some(
@@ -456,6 +465,16 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       });
 
       localStorage.setItem('lms_exams', JSON.stringify(updatedList));
+
+      const unassignedExam = updatedList.find((e) => e.id === examId);
+      if (unassignedExam) {
+        fetch('/api/exams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(unassignedExam),
+        }).catch(() => {});
+      }
+
       setClassExams((prev) => prev.filter((e) => e.id !== examId));
       setAssignToast(`Đã gỡ đề khỏi lớp ${currentClass.name}!`);
       setTimeout(() => setAssignToast(null), 3000);

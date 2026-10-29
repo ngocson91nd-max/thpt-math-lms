@@ -81,6 +81,13 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         localStorage.setItem(DATA_CLEAN_VERSION, 'true');
         window.dispatchEvent(new Event('lms_exams_updated'));
       }
+
+      // Xóa sạch dữ liệu ngân hàng câu hỏi theo yêu cầu của Thầy Sơn
+      const QB_CLEAN_VERSION = 'lms_v4_clean_questions_bank';
+      if (localStorage.getItem(QB_CLEAN_VERSION) !== 'true') {
+        localStorage.setItem('lms_questions', '[]');
+        localStorage.setItem(QB_CLEAN_VERSION, 'true');
+      }
     }
   }, []);
 

@@ -94,7 +94,17 @@ export default function ExamsPage() {
     } catch {}
     return [];
   });
-  const [questionsPool, setQuestionsPool] = useState<Question[]>(MOCK_QUESTIONS);
+  const [questionsPool, setQuestionsPool] = useState<Question[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('lms_questions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [filterType, setFilterType] = useState<'all' | 'timed' | 'practice'>('all');
@@ -137,6 +147,7 @@ export default function ExamsPage() {
   const [newDuration, setNewDuration] = useState(90);
   const [newDescription, setNewDescription] = useState('Đề thi theo đúng cấu trúc đề minh họa mới nhất của Bộ GD&ĐT gồm 3 phần.');
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [saveNewExamQuestionsToBank, setSaveNewExamQuestionsToBank] = useState(false);
 
   // Danh sách câu hỏi được chọn cho đề mới
   const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
@@ -200,20 +211,30 @@ export default function ExamsPage() {
         localStorage.setItem('lms_classes', JSON.stringify(initialCls));
       }
 
-      // 2. Tải Ngân hàng câu hỏi
+      // 2. Tải Ngân hàng câu hỏi từ Cloud & Local cache
       const savedQuestions = localStorage.getItem('lms_questions');
       if (savedQuestions) {
         try {
           const parsed = JSON.parse(savedQuestions);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const existingIds = new Set(parsed.map((q: any) => q.id));
-            const missing = MOCK_QUESTIONS.filter((q) => !existingIds.has(q.id));
-            setQuestionsPool([...parsed, ...missing]);
+          if (Array.isArray(parsed)) {
+            setQuestionsPool(parsed);
           }
         } catch (e) {
           console.error(e);
         }
       }
+
+      fetch('/api/questions')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.questions)) {
+            setQuestionsPool(d.questions);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('lms_questions', JSON.stringify(d.questions));
+            }
+          }
+        })
+        .catch(() => {});
 
       // 3. Tải Danh sách đề thi thời gian thực từ Supabase Cloud API
       fetchExams();
@@ -285,36 +306,54 @@ export default function ExamsPage() {
   };
 
   const handleToggleLockExam = (examId: string) => {
+    let changedExam: Exam | null = null;
     const updated = exams.map((e) => {
       if (e.id === examId) {
         const isLocked = !e.is_locked;
-        return {
+        changedExam = {
           ...e,
           is_locked: isLocked,
           status: isLocked ? ('closed' as const) : ('published' as const),
+          updated_at: new Date().toISOString(),
         };
+        return changedExam;
       }
       return e;
     });
     saveExamsToStorage(updated);
     setCopyToast('Đã cập nhật trạng thái đề thi!');
     setTimeout(() => setCopyToast(null), 2500);
+
+    if (changedExam) {
+      fetch('/api/exams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changedExam),
+      }).catch((err) => console.warn('Lỗi đồng bộ trạng thái khóa đề thi:', err));
+    }
   };
 
   const handleDuplicateExam = (exam: Exam) => {
     const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     const duplicated: Exam = {
       ...exam,
-      id: `exam-${Date.now()}`,
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `exam-${Date.now()}`,
       code: newCode,
       title: `${exam.title} (Bản sao)`,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       submissions_count: 0,
     };
     const updated = [duplicated, ...exams];
     saveExamsToStorage(updated);
     setCopyToast(`Đã nhân bản đề thi! Mã đề mới: ${newCode}`);
     setTimeout(() => setCopyToast(null), 2500);
+
+    fetch('/api/exams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(duplicated),
+    }).catch((err) => console.warn('Lỗi đồng bộ đề thi nhân bản:', err));
   };
 
   const handleCreatePdfExamSubmit = async (e: React.FormEvent) => {
@@ -785,31 +824,34 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     setLatexParseNotice(null);
     router.push(`/exams/editor?id=${newId}`);
 
-    // 2. Đồng bộ ngầm lên Supabase (không làm treo giao diện)
-    if (user) {
-      (async () => {
-        try {
-          const supabase = createClient();
-          if (supabase) {
-            await supabase.from('exams').insert([
-              {
-                id: newId,
-                title: created.title,
-                description: created.description,
-                grade: created.grade,
-                duration_minutes: created.duration_minutes,
-                teacher_id: user.id,
-                passing_score: 5.0,
-                status: 'published',
-                shuffle_questions: shuffleQuestions,
-              },
-            ]);
-          }
-        } catch (err) {
-          console.warn('Lỗi lưu đề thi vào Supabase:', err);
+    // 2. Nếu tick chọn lưu câu hỏi vào Ngân hàng câu hỏi
+    if (saveNewExamQuestionsToBank && examQuestions.length > 0) {
+      try {
+        const savedQ = localStorage.getItem('lms_questions');
+        let qList: Question[] = savedQ ? JSON.parse(savedQ) : [];
+        const qIds = new Set(qList.map((q) => q.id));
+        const newItems = examQuestions.filter((q) => !qIds.has(q.id));
+        if (newItems.length > 0) {
+          const combined = [...newItems, ...qList];
+          localStorage.setItem('lms_questions', JSON.stringify(combined));
+          setQuestionsPool(combined);
+          fetch('/api/questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questions: newItems }),
+          }).catch((err) => console.warn('Lỗi lưu câu hỏi vào ngân hàng:', err));
         }
-      })();
+      } catch (e) {
+        console.warn(e);
+      }
     }
+
+    // 3. Đồng bộ đề thi thời gian thực lên Cloud API
+    fetch('/api/exams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(created),
+    }).catch((err) => console.warn('Lỗi lưu đề thi vào Supabase:', err));
   };
 
   // Mở modal sửa đề
@@ -828,42 +870,29 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     e.preventDefault();
     if (!editingExam || !editTitle.trim()) return;
 
-    const updated = exams.map((ex) => {
-      if (ex.id === editingExam.id) {
-        return {
-          ...ex,
-          title: editTitle.trim(),
-          grade: editGrade,
-          duration_minutes: Number(editDuration),
-          description: editDescription.trim(),
-          shuffle_questions: editShuffle,
-        };
-      }
-      return ex;
-    });
+    const targetExam = exams.find((ex) => ex.id === editingExam.id) || editingExam;
+    const updatedExam: Exam = {
+      ...targetExam,
+      title: editTitle.trim(),
+      grade: editGrade,
+      duration_minutes: Number(editDuration),
+      description: editDescription.trim(),
+      shuffle_questions: editShuffle,
+      updated_at: new Date().toISOString(),
+    };
 
+    const updated = exams.map((ex) => (ex.id === editingExam.id ? updatedExam : ex));
     saveExamsToStorage(updated);
-
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase
-          .from('exams')
-          .update({
-            title: editTitle.trim(),
-            grade: editGrade,
-            duration_minutes: Number(editDuration),
-            description: editDescription.trim(),
-            shuffle_questions: editShuffle,
-          })
-          .eq('id', editingExam.id);
-      }
-    } catch (err) {
-      console.warn('Lỗi cập nhật đề thi trên Supabase:', err);
-    }
-
     setShowEditModal(false);
     setEditingExam(null);
+    setCopyToast('Đã lưu các sửa đổi của đề thi thành công!');
+    setTimeout(() => setCopyToast(null), 2500);
+
+    fetch('/api/exams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedExam),
+    }).catch((err) => console.warn('Lỗi cập nhật đề thi trên Cloud:', err));
   };
 
   // Xóa vĩnh viễn đề thi (dành cho Giáo viên & Quản trị viên)
@@ -915,14 +944,16 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   // Lưu phân công đề thi cho các lớp học
   const handleSaveClassAssignment = () => {
     if (!assigningExam) return;
+    let changedExam: Exam | null = null;
     const updated = exams.map((e) => {
       if (e.id === assigningExam.id) {
-        return {
+        changedExam = {
           ...e,
           access_type: assignAccessType,
           assigned_classes: assignAccessType === 'public' ? [] : assignClassesSelection,
           updated_at: new Date().toISOString(),
         };
+        return changedExam;
       }
       return e;
     });
@@ -930,6 +961,14 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     setAssigningExam(null);
     setCopyToast(`Đã cập nhật phân công giao đề "${assigningExam.title}" cho lớp thành công!`);
     setTimeout(() => setCopyToast(null), 3000);
+
+    if (changedExam) {
+      fetch('/api/exams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changedExam),
+      }).catch((err) => console.warn('Lỗi lưu phân công lớp lên Cloud:', err));
+    }
   };
 
   // Lấy bài nộp của học sinh đối với đề thi cụ thể
@@ -2323,18 +2362,32 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             </div>
 
             {/* Modal Footer */}
-            <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="modalShuffle"
-                  checked={shuffleQuestions}
-                  onChange={(e) => setShuffleQuestions(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                />
-                <label htmlFor="modalShuffle" className="text-xs text-slate-700 font-medium cursor-pointer">
-                  Xáo trộn thứ tự câu hỏi ngẫu nhiên khi học sinh làm bài
-                </label>
+            <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="modalShuffle"
+                    checked={shuffleQuestions}
+                    onChange={(e) => setShuffleQuestions(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                  />
+                  <label htmlFor="modalShuffle" className="text-xs text-slate-700 font-medium cursor-pointer">
+                    Xáo trộn thứ tự câu hỏi ngẫu nhiên khi học sinh làm bài
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="saveNewQuestionsToBank"
+                    checked={saveNewExamQuestionsToBank}
+                    onChange={(e) => setSaveNewExamQuestionsToBank(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                  />
+                  <label htmlFor="saveNewQuestionsToBank" className="text-xs text-slate-700 font-medium cursor-pointer">
+                    Đồng thời lưu câu hỏi này vào Ngân hàng câu hỏi (để tái sử dụng cho đề khác)
+                  </label>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">

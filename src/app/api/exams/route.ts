@@ -4,8 +4,49 @@ import { getSupabaseAdmin } from '@/lib/supabase/adminClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Giải mã metadata đề thi từ cột description
+function unpackExam(exam: any) {
+  let extra: any = {};
+  let cleanDesc = exam.description || '';
+
+  if (typeof cleanDesc === 'string' && cleanDesc.startsWith('{"__lms_meta__":true')) {
+    try {
+      extra = JSON.parse(cleanDesc);
+      cleanDesc = extra.text || '';
+    } catch {}
+  }
+
+  return {
+    ...exam,
+    description: cleanDesc,
+    code: extra.code || exam.code || (exam.id ? exam.id.substring(0, 6).toUpperCase() : 'EXAM01'),
+    questions: Array.isArray(extra.questions) ? extra.questions : [],
+    format: extra.format || 'standard_3_parts',
+    part_structure: extra.part_structure || null,
+    assigned_classes: Array.isArray(extra.assigned_classes) ? extra.assigned_classes : [],
+    access_type: extra.access_type || 'restricted',
+    is_locked: extra.is_locked ?? (exam.status === 'closed'),
+    exam_mode: extra.exam_mode || 'standard',
+    pdf_url: extra.pdf_url || null,
+    solution_pdf_url: extra.solution_pdf_url || null,
+    pdf_total_pages: extra.pdf_total_pages || null,
+    pdf_cut_last_page: extra.pdf_cut_last_page ?? false,
+    part_points: extra.part_points || null,
+    true_false_scoring: extra.true_false_scoring || null,
+    submission_restriction: extra.submission_restriction || null,
+    submission_min_minutes: extra.submission_min_minutes || null,
+    violation_action: extra.violation_action || null,
+    max_violations: extra.max_violations || null,
+    view_answer_policy: extra.view_answer_policy || null,
+    view_score_allowed: extra.view_score_allowed ?? true,
+    view_leaderboard_allowed: extra.view_leaderboard_allowed ?? true,
+    shuffle_true_false: extra.shuffle_true_false ?? true,
+    no_time_limit: extra.no_time_limit ?? false,
+  };
+}
+
 // GET: Lấy danh sách toàn bộ đề thi thời gian thực từ Supabase Cloud
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -18,11 +59,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    const formattedExams = (data || []).map(unpackExam);
+
     return NextResponse.json(
-      { success: true, exams: data || [] },
+      { success: true, exams: formattedExams },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=30',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         },
       }
     );
@@ -38,6 +81,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       id,
+      code,
       title,
       description,
       grade,
@@ -48,33 +92,86 @@ export async function POST(req: NextRequest) {
       passing_score,
       shuffle_questions,
       shuffle_options,
+      shuffle_true_false,
       max_attempts,
       start_time,
       end_time,
       is_view_answer_allowed,
+      is_locked,
+      questions,
+      format,
+      exam_mode,
+      assigned_classes,
+      access_type,
+      no_time_limit,
+      pdf_url,
+      solution_pdf_url,
+      pdf_total_pages,
+      pdf_cut_last_page,
+      part_structure,
+      part_points,
+      true_false_scoring,
+      submission_restriction,
+      submission_min_minutes,
+      violation_action,
+      max_violations,
+      view_answer_policy,
+      view_score_allowed,
+      view_leaderboard_allowed,
     } = body;
 
-    if (!title) {
+    if (!title || !title.trim()) {
       return NextResponse.json({ success: false, error: 'Tiêu đề đề thi là bắt buộc' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();
+
+    // Chuẩn hóa UUID đề thi
     const examUuid =
       id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
         ? id
         : typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : undefined;
+        : '00000000-0000-0000-0000-' + Date.now().toString().padStart(12, '0');
+
+    // Đóng gói metadata để lưu vào description
+    const metadata = {
+      __lms_meta__: true,
+      text: typeof description === 'string' ? description.trim() : 'Đề kiểm tra Toán THPT Thầy Sơn.',
+      code: code || examUuid.substring(0, 6).toUpperCase(),
+      questions: Array.isArray(questions) ? questions : [],
+      format: format || 'standard_3_parts',
+      exam_mode: exam_mode || 'standard',
+      assigned_classes: Array.isArray(assigned_classes) ? assigned_classes : [],
+      access_type: access_type || 'restricted',
+      is_locked: is_locked ?? (status === 'closed'),
+      no_time_limit: no_time_limit ?? false,
+      pdf_url: pdf_url || null,
+      solution_pdf_url: solution_pdf_url || null,
+      pdf_total_pages: pdf_total_pages || null,
+      pdf_cut_last_page: pdf_cut_last_page ?? false,
+      part_structure: part_structure || null,
+      part_points: part_points || null,
+      true_false_scoring: true_false_scoring || null,
+      submission_restriction: submission_restriction || null,
+      submission_min_minutes: submission_min_minutes || null,
+      violation_action: violation_action || null,
+      max_violations: max_violations || null,
+      view_answer_policy: view_answer_policy || null,
+      view_score_allowed: view_score_allowed ?? true,
+      view_leaderboard_allowed: view_leaderboard_allowed ?? true,
+      shuffle_true_false: shuffle_true_false ?? true,
+    };
 
     const payload = {
-      ...(examUuid ? { id: examUuid } : {}),
+      id: examUuid,
       title: title.trim(),
-      description: description ? description.trim() : 'Đề kiểm tra Toán THPT Thầy Sơn.',
+      description: JSON.stringify(metadata),
       grade: Number(grade) || 12,
       duration_minutes: Number(duration_minutes) || 45,
       teacher_id: teacher_id || '11111111-1111-1111-1111-111111111111',
       class_id: class_id || null,
-      status: status || 'published',
+      status: status || (is_locked ? 'closed' : 'published'),
       passing_score: passing_score || 5.0,
       shuffle_questions: shuffle_questions ?? true,
       shuffle_options: shuffle_options ?? true,
@@ -92,11 +189,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error upserting exam:', error);
+      console.error('Error upserting exam in /api/exams:', error);
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, exam: data });
+    const formattedExam = unpackExam(data);
+
+    return NextResponse.json({ success: true, exam: formattedExam });
   } catch (err: any) {
     console.error('API /api/exams POST error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
