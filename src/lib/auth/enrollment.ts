@@ -538,32 +538,33 @@ export const isExamPermittedForStudent = (
   const enrolledNames = Array.from(new Set([...enrolledClasses.map((c) => c.name.trim().toLowerCase()), ...cleanEnrolledIds]));
   const enrolledCodes = Array.from(new Set([...enrolledClasses.map((c) => c.code?.trim().toLowerCase()).filter(Boolean) as string[], ...cleanEnrolledIds]));
 
+  // Hàm so khớp thông minh tên lớp (VD: '11' và '11 Anh 1' hay 'Lớp 11' đều khớp)
+  const isClassMatch = (target: string) => {
+    const t = target.trim().toLowerCase();
+    if (enrolledNames.includes(t) || enrolledCodes.includes(t) || cleanEnrolledIds.includes(t)) return true;
+    return enrolledNames.some((en) => {
+      if (en === t) return true;
+      if (en === '11' && (t.startsWith('11') || t.includes('11'))) return true;
+      if (t === '11' && (en.startsWith('11') || en.includes('11'))) return true;
+      if (en === '12' && (t.startsWith('12') || t.includes('12'))) return true;
+      if (t === '12' && (en.startsWith('12') || en.includes('12'))) return true;
+      if (en === '10' && (t.startsWith('10') || t.includes('10'))) return true;
+      if (t === '10' && (en.startsWith('10') || en.includes('10'))) return true;
+      return false;
+    });
+  };
+
   // 1. Kiểm tra trực tiếp theo class_id
-  if (exam.class_id && (enrolledIds.includes(exam.class_id) || cleanEnrolledIds.includes(exam.class_id.toLowerCase()))) return true;
+  if (exam.class_id && (enrolledIds.includes(exam.class_id) || cleanEnrolledIds.includes(exam.class_id.toLowerCase()) || isClassMatch(exam.class_id))) return true;
 
   // 2. Kiểm tra theo class_name
-  if (exam.class_name) {
-    const cleanClassName = exam.class_name.trim().toLowerCase();
-    if (
-      enrolledNames.includes(cleanClassName) ||
-      enrolledCodes.includes(cleanClassName) ||
-      cleanEnrolledIds.includes(cleanClassName)
-    ) {
-      return true;
-    }
+  if (exam.class_name && isClassMatch(exam.class_name)) {
+    return true;
   }
 
   // 3. Kiểm tra theo assigned_classes
   if (Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0) {
-    return exam.assigned_classes.some((cls) => {
-      if (!cls) return false;
-      const cleanCls = cls.trim().toLowerCase();
-      return (
-        enrolledNames.includes(cleanCls) ||
-        enrolledCodes.includes(cleanCls) ||
-        cleanEnrolledIds.includes(cleanCls)
-      );
-    });
+    return exam.assigned_classes.some((cls) => cls && isClassMatch(cls));
   }
 
   // Nếu đề không công khai và không được phân công cho lớp của học sinh -> Chặn

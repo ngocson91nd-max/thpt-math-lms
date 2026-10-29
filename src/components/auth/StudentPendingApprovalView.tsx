@@ -17,6 +17,7 @@ import {
   Loader2,
   Clock,
   ShieldAlert,
+  RefreshCw,
 } from 'lucide-react';
 
 export const StudentPendingApprovalView: React.FC = () => {
@@ -66,6 +67,50 @@ export const StudentPendingApprovalView: React.FC = () => {
     }
   };
 
+  const [isCheckingNow, setIsCheckingNow] = useState(false);
+  const [isApprovedSuccess, setIsApprovedSuccess] = useState(false);
+
+  const handleApplyApproved = (approvedList: string[]) => {
+    if (!user || approvedList.length === 0) return;
+    setIsApprovedSuccess(true);
+    const studentClassesKey = `lms_student_classes_${user.id}`;
+    localStorage.setItem(studentClassesKey, JSON.stringify(approvedList));
+    if (user.email) {
+      localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(approvedList));
+    }
+
+    // Xóa các lớp đã được duyệt khỏi danh sách chờ
+    const uPendKey = `lms_user_pending_requests_${user.id}`;
+    const uPend: string[] = JSON.parse(localStorage.getItem(uPendKey) || '[]');
+    const remainingPend = uPend.filter((id) => !approvedList.includes(id));
+    localStorage.setItem(uPendKey, JSON.stringify(remainingPend));
+    setPendingClasses([]);
+
+    window.dispatchEvent(new Event('lms_enrollment_changed'));
+    setTimeout(() => {
+      window.location.href = '/exams';
+    }, 400);
+  };
+
+  const triggerCheckApproval = async (manual = false) => {
+    if (!user) return;
+    if (manual) setIsCheckingNow(true);
+    try {
+      const r = await fetch(
+        `/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}&t=${Date.now()}`,
+        { cache: 'no-store' }
+      );
+      const res = await r.json();
+      if (res.success && Array.isArray(res.approvedClasses) && res.approvedClasses.length > 0) {
+        handleApplyApproved(res.approvedClasses);
+      }
+    } catch (e) {
+      console.warn('Lỗi kiểm tra duyệt:', e);
+    } finally {
+      if (manual) setIsCheckingNow(false);
+    }
+  };
+
   useEffect(() => {
     // 1. Tải danh sách lớp thực tế âm thầm từ Supabase Cloud để cập nhật cache mã lớp
     fetch('/api/classes')
@@ -83,44 +128,11 @@ export const StudentPendingApprovalView: React.FC = () => {
 
     loadPendingClasses();
 
-    // 2. Định kỳ kiểm tra (polling 3s/lần) xem Thầy Sơn đã duyệt học sinh chưa
+    // 2. Định kỳ kiểm tra (polling 2.5s/lần) xem Thầy Sơn đã duyệt học sinh chưa
     if (!user) return;
 
-    const checkApproval = () => {
-      fetch(`/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}&t=${Date.now()}`, { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((res) => {
-          if (res.success && Array.isArray(res.approvedClasses)) {
-            const studentClassesKey = `lms_student_classes_${user.id}`;
-            if (res.approvedClasses.length > 0) {
-              // Thầy đã bấm DUYỆT! Kích hoạt ngay
-              localStorage.setItem(studentClassesKey, JSON.stringify(res.approvedClasses));
-              if (user.email) {
-                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify(res.approvedClasses));
-              }
-
-              // Xóa các lớp đã được duyệt khỏi danh sách chờ
-              const uPendKey = `lms_user_pending_requests_${user.id}`;
-              const uPend: string[] = JSON.parse(localStorage.getItem(uPendKey) || '[]');
-              const remainingPend = uPend.filter((id) => !res.approvedClasses.includes(id));
-              localStorage.setItem(uPendKey, JSON.stringify(remainingPend));
-
-              window.dispatchEvent(new Event('lms_enrollment_changed'));
-              window.location.reload();
-            } else {
-              // Chưa được duyệt -> Đảm bảo xóa sạch cache active
-              localStorage.setItem(studentClassesKey, JSON.stringify([]));
-              if (user.email) {
-                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify([]));
-              }
-            }
-          }
-        })
-        .catch(() => {});
-    };
-
-    checkApproval();
-    const interval = setInterval(checkApproval, 3000);
+    triggerCheckApproval(false);
+    const interval = setInterval(() => triggerCheckApproval(false), 2500);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -174,12 +186,46 @@ export const StudentPendingApprovalView: React.FC = () => {
           </p>
         </div>
 
+        {/* Khối hiển thị khi đã được duyệt thành công */}
+        {isApprovedSuccess && (
+          <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center space-y-3 animate-in zoom-in-95">
+            <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
+              <CheckCircle2 className="h-7 w-7" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-base">Thầy Sơn đã phê duyệt vào lớp!</h3>
+              <p className="text-xs text-emerald-800 mt-1">Đang tự động chuyển hướng đến danh sách đề thi...</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = '/exams';
+              }}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition shadow-sm cursor-pointer"
+            >
+              <span>Vào làm bài thi ngay</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Khối hiển thị các lớp đang chờ Thầy Sơn duyệt */}
-        {pendingClasses.length > 0 && (
+        {!isApprovedSuccess && pendingClasses.length > 0 && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-left space-y-3 animate-in fade-in">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-              <Clock className="h-4 w-4 text-amber-600 animate-pulse shrink-0" />
-              <span>Yêu cầu đang chờ Thầy Sơn phê duyệt ({pendingClasses.length}):</span>
+            <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-600 animate-pulse shrink-0" />
+                <span>Yêu cầu đang chờ Thầy Sơn phê duyệt ({pendingClasses.length}):</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerCheckApproval(true)}
+                disabled={isCheckingNow}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${isCheckingNow ? 'animate-spin text-blue-600' : 'text-amber-600'}`} />
+                <span>{isCheckingNow ? 'Đang kiểm tra...' : 'Kiểm tra ngay'}</span>
+              </button>
             </div>
 
             <div className="space-y-2">
@@ -202,9 +248,18 @@ export const StudentPendingApprovalView: React.FC = () => {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 text-[11px] text-amber-700 pt-1 border-t border-amber-200/60">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />
-              <span>Hệ thống đang chờ Thầy Sơn duyệt. Trang sẽ tự động mở đề thi ngay khi Thầy duyệt!</span>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-amber-700 pt-1 border-t border-amber-200/60">
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />
+                <span>Hệ thống đang tự động kiểm tra mỗi 2.5s...</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerCheckApproval(true)}
+                className="text-blue-700 hover:underline font-bold cursor-pointer"
+              >
+                Tải lại trạng thái
+              </button>
             </div>
           </div>
         )}
