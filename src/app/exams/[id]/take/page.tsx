@@ -50,7 +50,17 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const router = useRouter();
   const { user, isTeacher, isStudent } = useAuth();
 
-  const [classes, setClasses] = useState<ClassItem[]>(MOCK_CLASSES);
+  const [classes, setClasses] = useState<ClassItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem('lms_classes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
 
   const [exam, setExam] = useState<Exam | undefined>(() => {
     if (typeof window !== 'undefined') {
@@ -172,23 +182,47 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       return;
     }
 
-    const supabase = createClient();
-    if (supabase) {
-      supabase
-        .from('exams')
-        .select('*')
-        .eq('id', resolvedParams.id)
-        .single()
-        .then(({ data, error }) => {
-          if (!error && data) {
-            const loaded = data as any;
-            setExam(loaded);
-            setTimeLeft(loaded.duration_minutes * 60);
-            checkAndLoadPdf(loaded);
+    // Nạp danh sách lớp học thực tế từ Cloud
+    fetch('/api/classes')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.classes)) {
+          setClasses(d.classes);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('lms_classes', JSON.stringify(d.classes));
           }
-        });
+        }
+      })
+      .catch(() => {});
+
+    // Đồng bộ trạng thái lớp học của học sinh từ Cloud
+    if (user && isStudent) {
+      fetch(`/api/cloud-sync?userId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.approvedClasses) && typeof window !== 'undefined') {
+            localStorage.setItem(`lms_student_classes_${user.id}`, JSON.stringify(d.approvedClasses));
+            window.dispatchEvent(new Event('lms_enrollment_changed'));
+          }
+        })
+        .catch(() => {});
     }
-  }, [resolvedParams.id]);
+
+    // Tải thông tin đề thi đầy đủ từ Cloud API
+    fetch('/api/exams')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.exams)) {
+          const found = d.exams.find((e: any) => e.id === resolvedParams.id);
+          if (found) {
+            setExam(found);
+            setTimeLeft(found.duration_minutes * 60);
+            checkAndLoadPdf(found);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [resolvedParams.id, user, isStudent]);
 
   // 2. KHÔI PHỤC TIẾN ĐỘ BÀI LÀM TỰ ĐỘNG (Crash Recovery / F5 Protection)
   useEffect(() => {

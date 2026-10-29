@@ -351,23 +351,60 @@ export const isExamPermittedForStudent = (
   }
 
   // BƯỚC 3: Đề thi giới hạn lớp -> Học sinh phải thuộc đúng lớp được phân công
-  const enrolledClasses = allClasses.filter((c) => enrolledIds.includes(c.id));
+  // Thu thập danh sách lớp học từ cả allClasses và localStorage lms_classes
+  const storage = typeof window !== 'undefined' ? window.localStorage : (globalThis as any).localStorage;
+  const classesMap = new Map<string, ClassItem>();
+
+  if (Array.isArray(allClasses)) {
+    allClasses.forEach((c) => {
+      if (c && c.id) classesMap.set(c.id, c);
+    });
+  }
+
+  if (storage) {
+    try {
+      const saved = storage.getItem('lms_classes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c: any) => {
+            if (c && c.id) classesMap.set(c.id, c);
+          });
+        }
+      }
+    } catch {}
+  }
+
+  const allClassesPool = Array.from(classesMap.values());
+  const enrolledClasses = allClassesPool.filter((c) => enrolledIds.includes(c.id));
   const enrolledNames = enrolledClasses.map((c) => c.name.trim().toLowerCase());
   const enrolledCodes = enrolledClasses.map((c) => c.code?.trim().toLowerCase()).filter(Boolean) as string[];
 
+  // 1. Kiểm tra trực tiếp theo class_id
   if (exam.class_id && enrolledIds.includes(exam.class_id)) return true;
-  if (
-    exam.class_name &&
-    (enrolledNames.includes(exam.class_name.trim().toLowerCase()) ||
-      enrolledCodes.includes(exam.class_name.trim().toLowerCase()))
-  ) {
-    return true;
+
+  // 2. Kiểm tra theo class_name
+  if (exam.class_name) {
+    const cleanClassName = exam.class_name.trim().toLowerCase();
+    if (
+      enrolledNames.includes(cleanClassName) ||
+      enrolledCodes.includes(cleanClassName) ||
+      enrolledIds.includes(exam.class_name.trim())
+    ) {
+      return true;
+    }
   }
 
+  // 3. Kiểm tra theo assigned_classes
   if (Array.isArray(exam.assigned_classes) && exam.assigned_classes.length > 0) {
     return exam.assigned_classes.some((cls) => {
+      if (!cls) return false;
       const cleanCls = cls.trim().toLowerCase();
-      return enrolledNames.includes(cleanCls) || enrolledCodes.includes(cleanCls);
+      return (
+        enrolledNames.includes(cleanCls) ||
+        enrolledCodes.includes(cleanCls) ||
+        enrolledIds.includes(cls.trim())
+      );
     });
   }
 
