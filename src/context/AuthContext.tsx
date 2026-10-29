@@ -6,7 +6,10 @@ import { MOCK_USERS } from '@/lib/supabase/mockStore';
 import { createClient } from '@/lib/supabase/client';
 
 export interface SignUpData {
-  email: string;
+  username?: string; // Tên đăng nhập (cho phép không cần email)
+  email?: string; // Email (tùy chọn)
+  candidateNumber?: string; // Số báo danh (SBD)
+  birthDate?: string; // Ngày sinh
   password: string;
   fullName: string;
   grade: 10 | 11 | 12;
@@ -24,10 +27,11 @@ interface AuthContextType {
   isStudent: boolean;
   switchDemoUser: (userId: string) => void;
   signUpWithPassword: (data: SignUpData) => Promise<{ success: boolean; error?: string }>;
-  signInWithPassword: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithPassword: (identifier: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signIn: (email: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
-  updateProfile: (updated: Partial<Profile>) => void;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (updated: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -144,7 +148,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUpWithPassword = async ({
+    username,
     email,
+    candidateNumber,
+    birthDate,
     password,
     fullName,
     grade,
@@ -154,10 +161,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }: SignUpData) => {
     setIsLoading(true);
     try {
+      const cleanUsername = (username || phone || fullName.replace(/\s+/g, '').toLowerCase() || `stu${Date.now()}`)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9_]/g, '');
+      const finalEmail = email?.trim() && email.includes('@')
+        ? email.trim().toLowerCase()
+        : `${cleanUsername}@thpt.sontoan.vn`;
+
       const supabase = createClient();
+      let registeredUserId: string | null = null;
+
       if (supabase) {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: finalEmail,
           password,
           options: {
             data: {
@@ -166,80 +183,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               grade,
               school_name: schoolName,
               phone,
+              username: cleanUsername,
+              candidate_number: candidateNumber,
+              birth_date: birthDate,
             },
           },
         });
 
-        let registeredUserId: string | null = null;
         if (error) {
           console.warn('Supabase Auth lưu ý (kích hoạt đăng ký trực tiếp):', error.message);
-          // Không chặn học sinh khi Supabase giới hạn email hoặc chưa xác thực
         } else if (data?.user) {
           registeredUserId = data.user.id;
         }
-
-        const studentId =
-          registeredUserId ||
-          (typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `student-${Date.now()}`);
-
-        const newProfile: Profile = {
-          id: studentId,
-          email,
-          full_name: fullName,
-          role,
-          grade,
-          school_name: schoolName,
-          phone,
-          created_at: new Date().toISOString(),
-        };
-
-        if (supabase && registeredUserId) {
-          try {
-            await supabase.from('profiles').upsert([newProfile]);
-          } catch (e) {
-            console.warn('Profile upsert note:', e);
-          }
-        }
-
-        setUser(newProfile);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('lms_current_user_id', newProfile.id);
-          localStorage.setItem(`custom_user_${newProfile.id}`, JSON.stringify(newProfile));
-
-          // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
-          const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
-          const cleanAccEmail = email.toLowerCase().trim();
-          const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
-          const accountToSave = { ...newProfile, password };
-          if (idx >= 0) registeredList[idx] = accountToSave;
-          else registeredList.push(accountToSave);
-          localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
-
-          localStorage.removeItem('lms_is_logged_out');
-        }
-        return { success: true };
       }
 
-      // Mock fallback khi chạy offline hoặc chưa cấu hình Supabase
-      const mockId =
-        typeof crypto !== 'undefined' && crypto.randomUUID
+      const studentId =
+        registeredUserId ||
+        (typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
-          : `student-${Date.now()}`;
+          : `student-${Date.now()}`);
 
       const newProfile: Profile = {
-        id: mockId,
-        email,
-        full_name: fullName,
+        id: studentId,
+        email: finalEmail,
+        username: cleanUsername,
+        candidate_number: candidateNumber || '',
+        birth_date: birthDate || '',
+        full_name: fullName.trim(),
         role,
         grade,
         school_name: schoolName,
-        phone,
+        phone: phone.trim(),
         created_at: new Date().toISOString(),
       };
 
-      MOCK_USERS.push(newProfile);
+      if (supabase && registeredUserId) {
+        try {
+          await supabase.from('profiles').upsert([newProfile]);
+        } catch (e) {
+          console.warn('Profile upsert note:', e);
+        }
+      }
+
       setUser(newProfile);
       if (typeof window !== 'undefined') {
         localStorage.setItem('lms_current_user_id', newProfile.id);
@@ -247,8 +232,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Lưu tài khoản và mật khẩu vào danh sách tài khoản học sinh đã đăng ký
         const registeredList = JSON.parse(localStorage.getItem('lms_registered_users') || '[]');
-        const cleanAccEmail = email.toLowerCase().trim();
-        const idx = registeredList.findIndex((u: any) => u.email.toLowerCase() === cleanAccEmail);
+        const cleanAccEmail = finalEmail.toLowerCase().trim();
+        const idx = registeredList.findIndex(
+          (u: any) =>
+            u.email.toLowerCase() === cleanAccEmail ||
+            (u.username && u.username.toLowerCase() === cleanUsername) ||
+            (phone && u.phone === phone)
+        );
         const accountToSave = { ...newProfile, password };
         if (idx >= 0) registeredList[idx] = accountToSave;
         else registeredList.push(accountToSave);
@@ -264,24 +254,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithPassword = async (email: string, password: string) => {
+  const signInWithPassword = async (identifier: string, password: string) => {
     setIsLoading(true);
     try {
-      const cleanEmail = email.toLowerCase().trim();
+      const cleanId = identifier.toLowerCase().trim();
       const cleanPassword = password.trim();
 
       // 1. Kiểm tra tài khoản Quản Trị Viên (Thầy Sơn)
       if (
-        (cleanEmail === 'admin' ||
-          cleanEmail === 'admin@sontoan.edu.vn' ||
-          cleanEmail === 'admin@sontoan.vn' ||
-          cleanEmail === 'admin@thpt-math-lms.vn' ||
-          cleanEmail.startsWith('admin@')) &&
+        (cleanId === 'admin' ||
+          cleanId === 'thayson' ||
+          cleanId === '0901234567' ||
+          cleanId === 'admin@sontoan.edu.vn' ||
+          cleanId === 'admin@sontoan.vn' ||
+          cleanId === 'admin@thpt-math-lms.vn' ||
+          cleanId.startsWith('admin@')) &&
         (cleanPassword === '123456' || cleanPassword === 'admin123' || cleanPassword === 'toan123')
       ) {
         const adminProfile: Profile = {
           id: '11111111-1111-1111-1111-111111111111',
-          email: cleanEmail.includes('@') ? cleanEmail : `${cleanEmail}@sontoan.edu.vn`,
+          email: cleanId.includes('@') ? cleanId : 'admin@sontoan.edu.vn',
+          username: 'admin',
           full_name: 'Thầy Sơn (Quản Trị Viên)',
           role: 'admin',
           avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
@@ -298,11 +291,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
 
-      // 2. Thử xác thực với Supabase Auth
+      // 2. Kiểm tra danh sách tài khoản học sinh đã đăng ký (khớp email, username, sđt hoặc SBD)
+      if (typeof window !== 'undefined') {
+        const registeredList: Array<Profile & { password?: string }> = JSON.parse(
+          localStorage.getItem('lms_registered_users') || '[]'
+        );
+        const found = registeredList.find((u) => {
+          if (u.email && u.email.toLowerCase() === cleanId) return true;
+          if (u.username && u.username.toLowerCase() === cleanId) return true;
+          if (u.phone && u.phone.trim() === cleanId) return true;
+          if (u.candidate_number && u.candidate_number.trim().toLowerCase() === cleanId) return true;
+          // Ánh xạ username nội bộ @thpt.sontoan.vn
+          if (u.email && u.email.toLowerCase() === `${cleanId}@thpt.sontoan.vn`) return true;
+          return false;
+        });
+
+        if (found && found.password === cleanPassword) {
+          const { password: _, ...cleanProfile } = found;
+          setUser(cleanProfile as Profile);
+          localStorage.setItem('lms_current_user_id', cleanProfile.id);
+          localStorage.removeItem('lms_is_logged_out');
+          return { success: true };
+        }
+      }
+
+      // 3. Thử xác thực với Supabase Auth nếu đầu vào là Email hoặc chuyển đổi
       const supabase = createClient();
-      if (supabase && cleanEmail.includes('@')) {
+      const targetEmail = cleanId.includes('@') ? cleanId : `${cleanId}@thpt.sontoan.vn`;
+      if (supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
+          email: targetEmail,
           password: cleanPassword,
         });
 
@@ -320,47 +338,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.removeItem('lms_is_logged_out');
             }
             return { success: true };
-          } else {
-            const meta = data.user.user_metadata || {};
-            const fallback: Profile = {
-              id: data.user.id,
-              email: data.user.email || cleanEmail,
-              full_name: meta.full_name || cleanEmail.split('@')[0],
-              role: (meta.role as UserRole) || 'student',
-              grade: ((Number(meta.grade) || 12) as 10 | 11 | 12),
-              school_name: meta.school_name || 'THPT Chuyên',
-              phone: meta.phone || '',
-            };
-            setUser(fallback);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('lms_current_user_id', fallback.id);
-              localStorage.removeItem('lms_is_logged_out');
-            }
-            return { success: true };
           }
         }
       }
 
-      // 3. Kiểm tra danh sách tài khoản học sinh đã đăng ký (lms_registered_users)
-      if (typeof window !== 'undefined') {
-        const registeredList: Array<Profile & { password?: string }> = JSON.parse(
-          localStorage.getItem('lms_registered_users') || '[]'
-        );
-        const found = registeredList.find(
-          (u) => u.email.toLowerCase() === cleanEmail
-        );
-        if (found && found.password === cleanPassword) {
-          const { password: _, ...cleanProfile } = found;
-          setUser(cleanProfile as Profile);
-          localStorage.setItem('lms_current_user_id', cleanProfile.id);
-          localStorage.removeItem('lms_is_logged_out');
-          return { success: true };
-        }
-      }
-
-      // 4. Kiểm tra danh sách người dùng mẫu, giáo viên và học sinh chuẩn
+      // 4. Kiểm tra danh sách người dùng mẫu (MOCK_USERS)
       const matched = MOCK_USERS.find(
-        (u) => u.email.toLowerCase() === cleanEmail
+        (u) =>
+          u.email.toLowerCase() === cleanId ||
+          (u.phone && u.phone.trim() === cleanId)
       );
       if (
         matched &&
@@ -379,7 +365,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return {
         success: false,
-        error: 'Tài khoản hoặc mật khẩu không chính xác. Thầy/học sinh vui lòng kiểm tra lại!',
+        error: 'Tên đăng nhập, số điện thoại hoặc mật khẩu không chính xác. Thầy/học sinh vui lòng kiểm tra lại!',
       };
     } catch (err: any) {
       return { success: false, error: err.message || 'Lỗi khi đăng nhập.' };
@@ -434,13 +420,101 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateProfile = (updated: Partial<Profile>) => {
-    if (!user) return;
-    const newProfile = { ...user, ...updated };
+  const changePassword = async (
+    oldPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Chưa đăng nhập.' };
+    if (!newPassword || newPassword.trim().length < 4) {
+      return { success: false, error: 'Mật khẩu mới phải có ít nhất 4 ký tự.' };
+    }
+
+    const cleanNewPass = newPassword.trim();
+    const cleanOldPass = oldPassword.trim();
+
+    // 1. Cập nhật mật khẩu trong danh sách tài khoản cục bộ
+    if (typeof window !== 'undefined') {
+      const registeredList: Array<Profile & { password?: string }> = JSON.parse(
+        localStorage.getItem('lms_registered_users') || '[]'
+      );
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      const idx = registeredList.findIndex(
+        (u) =>
+          u.id === user.id ||
+          (u.email && u.email.toLowerCase() === cleanEmail) ||
+          (user.username && u.username && u.username.toLowerCase() === user.username.toLowerCase())
+      );
+
+      if (idx >= 0) {
+        if (registeredList[idx].password && registeredList[idx].password !== cleanOldPass) {
+          return { success: false, error: 'Mật khẩu hiện tại không chính xác!' };
+        }
+        registeredList[idx].password = cleanNewPass;
+        localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+      } else {
+        registeredList.push({ ...user, password: cleanNewPass });
+        localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+      }
+    }
+
+    // 2. Cập nhật qua Supabase Auth nếu có phiên đăng nhập
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        await supabase.auth.updateUser({ password: cleanNewPass });
+      }
+    } catch (e) {
+      console.warn('Supabase change password note:', e);
+    }
+
+    return { success: true };
+  };
+
+  const updateProfile = async (
+    updated: Partial<Profile>
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Chưa đăng nhập.' };
+    const newProfile: Profile = {
+      ...user,
+      ...updated,
+      updated_at: new Date().toISOString(),
+    };
     setUser(newProfile);
+
     if (typeof window !== 'undefined') {
       localStorage.setItem(`custom_user_${user.id}`, JSON.stringify(newProfile));
+      localStorage.setItem('lms_current_user_id', user.id);
+
+      const registeredList: Array<Profile & { password?: string }> = JSON.parse(
+        localStorage.getItem('lms_registered_users') || '[]'
+      );
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      const idx = registeredList.findIndex(
+        (u) =>
+          u.id === user.id ||
+          (u.email && u.email.toLowerCase() === cleanEmail) ||
+          (user.username && u.username && u.username.toLowerCase() === user.username.toLowerCase())
+      );
+      if (idx >= 0) {
+        registeredList[idx] = { ...registeredList[idx], ...newProfile };
+        localStorage.setItem('lms_registered_users', JSON.stringify(registeredList));
+      }
     }
+
+    // Đồng bộ lên Supabase Cloud qua API
+    try {
+      fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_profile',
+          user: newProfile,
+          userId: user.id,
+        }),
+      }).catch(console.warn);
+    } catch {}
+
+    return { success: true };
   };
 
   const role: UserRole = user?.role || 'student';
@@ -462,6 +536,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInWithPassword,
         signIn,
         signOut,
+        changePassword,
         updateProfile,
       }}
     >

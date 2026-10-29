@@ -3,6 +3,9 @@ export type UserRole = 'admin' | 'teacher' | 'student';
 export interface Profile {
   id: string;
   email: string;
+  username?: string; // Tên đăng nhập không cần email
+  candidate_number?: string; // Số báo danh (SBD)
+  birth_date?: string; // Ngày sinh
   full_name: string;
   role: UserRole;
   avatar_url?: string;
@@ -33,6 +36,7 @@ export interface ClassMember {
   id: string;
   class_id: string;
   user_id: string;
+  candidate_number?: string; // Số báo danh (SBD) của học sinh trong lớp này
   role: 'teacher' | 'student';
   status: 'active' | 'pending' | 'blocked';
   joined_at?: string;

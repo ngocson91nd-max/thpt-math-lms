@@ -1121,16 +1121,27 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
-      {/* Dòng trạng thái tự động lưu & Cảnh báo an toàn */}
+      {/* Dòng trạng thái tự động lưu & Thông tin thí sinh */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-[11px] text-slate-500">
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          <span>
-            Tự động lưu bài làm {lastSavedTime ? `(vừa lưu lúc ${lastSavedTime})` : 'liên tục'} • Không lo mất bài khi F5
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 font-medium text-slate-700">
+            <span>Thí sinh: <strong className="text-slate-900">{user?.full_name || 'Học sinh'}</strong></span>
+            {user?.candidate_number && (
+              <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px]">
+                SBD: {user.candidate_number}
+              </span>
+            )}
+          </div>
+          <span className="text-slate-300 hidden sm:inline">•</span>
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span>
+              Tự động lưu bài {lastSavedTime ? `(vừa lưu ${lastSavedTime})` : 'liên tục'} • Không lo mất bài khi F5
+            </span>
+          </div>
         </div>
         {tabSwitchCount > 0 && (
           <div className="flex items-center gap-1.5 text-amber-600 font-semibold">

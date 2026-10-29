@@ -27,6 +27,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Hash,
+  Sparkles,
+  ArrowUpDown,
 } from 'lucide-react';
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -206,14 +209,20 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   // Add Member Form
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [newStudentCandidateNumber, setNewStudentCandidateNumber] = useState('');
   const [newStudentSchool, setNewStudentSchool] = useState('THPT Chuyên Lê Hồng Phong');
   const [newStudentPhone, setNewStudentPhone] = useState('');
 
   // Edit Member Form
   const [editStudentName, setEditStudentName] = useState('');
   const [editStudentEmail, setEditStudentEmail] = useState('');
+  const [editStudentCandidateNumber, setEditStudentCandidateNumber] = useState('');
   const [editStudentSchool, setEditStudentSchool] = useState('');
   const [editStudentPhone, setEditStudentPhone] = useState('');
+
+  // Auto Assign SBD Modal
+  const [showAutoAssignModal, setShowAutoAssignModal] = useState(false);
+  const [autoAssignPrefix, setAutoAssignPrefix] = useState(String(currentClass.grade || '12'));
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -494,16 +503,19 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
     const studentUserId = `stu-${Date.now()}`;
 
+    const cleanCandidate = newStudentCandidateNumber.trim();
     const newMember: ClassMember = {
       id: newId,
       class_id: currentClass.id,
       user_id: studentUserId,
+      candidate_number: cleanCandidate || undefined,
       role: 'student',
       status: 'active',
       joined_at: new Date().toISOString(),
       profile: {
         id: studentUserId,
         email: cleanEm,
+        candidate_number: cleanCandidate || undefined,
         full_name: newStudentName.trim(),
         role: 'student',
         grade: currentClass.grade,
@@ -542,6 +554,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     setShowAddMemberModal(false);
     setNewStudentName('');
     setNewStudentEmail('');
+    setNewStudentCandidateNumber('');
     setNewStudentPhone('');
   };
 
@@ -550,6 +563,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     setEditingMember(m);
     setEditStudentName(m.profile?.full_name || '');
     setEditStudentEmail(m.profile?.email || '');
+    setEditStudentCandidateNumber(m.candidate_number || m.profile?.candidate_number || '');
     setEditStudentSchool(m.profile?.school_name || '');
     setEditStudentPhone(m.profile?.phone || '');
     setShowEditMemberModal(true);
@@ -560,14 +574,17 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     e.preventDefault();
     if (!editingMember || !editStudentName.trim()) return;
 
+    const cleanCandidate = editStudentCandidateNumber.trim();
     const updated = members.map((m) => {
       if (m.id === editingMember.id) {
         return {
           ...m,
+          candidate_number: cleanCandidate || undefined,
           profile: {
             ...m.profile,
             id: m.profile?.id || m.user_id,
             email: editStudentEmail.trim().toLowerCase() || m.profile?.email || '',
+            candidate_number: cleanCandidate || undefined,
             full_name: editStudentName.trim(),
             role: 'student' as const,
             grade: currentClass.grade,
@@ -582,6 +599,58 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     saveMembersToStorage(updated);
     setShowEditMemberModal(false);
     setEditingMember(null);
+  };
+
+  // Tự động đánh số báo danh A-Z cho cả lớp
+  const handleAutoAssignSBD = (prefix: string) => {
+    const cleanPrefix = (prefix || String(currentClass.grade || '12')).trim();
+
+    // Sắp xếp học sinh theo Tên Tiếng Việt A-Z (tách tên từ chuỗi Họ và Tên)
+    const sorted = [...members].sort((a, b) => {
+      const getLastName = (fullName?: string) => {
+        if (!fullName) return '';
+        const parts = fullName.trim().split(/\s+/);
+        return parts[parts.length - 1] || '';
+      };
+      const nameA = getLastName(a.profile?.full_name);
+      const nameB = getLastName(b.profile?.full_name);
+      const cmp = nameA.localeCompare(nameB, 'vi');
+      if (cmp !== 0) return cmp;
+      return (a.profile?.full_name || '').localeCompare(b.profile?.full_name || '', 'vi');
+    });
+
+    const updated = sorted.map((m, idx) => {
+      const sbd = `${cleanPrefix}${String(idx + 1).padStart(3, '0')}`;
+      return {
+        ...m,
+        candidate_number: sbd,
+        profile: {
+          ...m.profile,
+          id: m.profile?.id || m.user_id,
+          email: m.profile?.email || '',
+          candidate_number: sbd,
+          full_name: m.profile?.full_name || '',
+          role: 'student' as const,
+        },
+      };
+    });
+
+    saveMembersToStorage(updated);
+
+    // Đồng bộ lên Cloud API
+    fetch('/api/cloud-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'auto_assign_sbd',
+        classId: currentClass.id,
+        members: updated.map((m) => ({ user_id: m.user_id, candidate_number: m.candidate_number })),
+      }),
+    }).catch(console.error);
+
+    setShowAutoAssignModal(false);
+    setAssignToast(`Đã tự động đánh số báo danh cho ${updated.length} học sinh thành công!`);
+    setTimeout(() => setAssignToast(null), 3000);
   };
 
   // Xóa học sinh khỏi lớp
@@ -708,13 +777,28 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           </div>
 
           {isTeacher && activeTab === 'members' && (
-            <button
-              onClick={() => setShowAddMemberModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-500 transition mb-2 sm:mb-0"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Thêm Học Sinh Vào Lớp
-            </button>
+            <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoAssignPrefix(String(currentClass.grade || '12'));
+                  setShowAutoAssignModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer shadow-2xs"
+                title="Tự động sắp xếp A-Z theo tên và gán số báo danh"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                <span>Đánh SBD Tự Động</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddMemberModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-500 transition cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Thêm Học Sinh Vào Lớp</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -816,6 +900,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase font-semibold">
                 <tr>
                   <th className="py-3.5 px-6">Học Sinh</th>
+                  <th className="py-3.5 px-6">Số Báo Danh (SBD)</th>
                   <th className="py-3.5 px-6">Email & SĐT</th>
                   <th className="py-3.5 px-6">Trường</th>
                   <th className="py-3.5 px-6">Trạng thái</th>
@@ -834,6 +919,16 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                           {m.profile?.full_name || 'Học sinh'}
                         </span>
                       </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      {m.candidate_number || m.profile?.candidate_number ? (
+                        <span className="inline-flex items-center gap-1 font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                          <Hash className="h-3 w-3 text-blue-500" />
+                          <span>{m.candidate_number || m.profile?.candidate_number}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-mono text-xs italic">Chưa có</span>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-slate-600">
                       <div className="flex items-center gap-1.5">
@@ -1085,15 +1180,28 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Email đăng nhập học sinh <span className="text-rose-500">*</span>
+                  Email hoặc Tên đăng nhập học sinh <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={newStudentEmail}
                   onChange={(e) => setNewStudentEmail(e.target.value)}
-                  placeholder="nguyenvanan@gmail.com"
+                  placeholder="nguyenvanan@gmail.com hoặc vanan12"
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Số Báo Danh (SBD - Tùy chọn)
+                </label>
+                <input
+                  type="text"
+                  value={newStudentCandidateNumber}
+                  onChange={(e) => setNewStudentCandidateNumber(e.target.value)}
+                  placeholder="VD: 12001"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-mono font-bold text-blue-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1167,15 +1275,28 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Email đăng nhập <span className="text-rose-500">*</span>
+                  Email / Tên đăng nhập <span className="text-rose-500">*</span>
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={editStudentEmail}
                   onChange={(e) => setEditStudentEmail(e.target.value)}
                   placeholder="nguyenvanan@gmail.com"
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Số Báo Danh (SBD)
+                </label>
+                <input
+                  type="text"
+                  value={editStudentCandidateNumber}
+                  onChange={(e) => setEditStudentCandidateNumber(e.target.value)}
+                  placeholder="VD: 12001"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-mono font-bold text-blue-700 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1210,18 +1331,82 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                     setShowEditMemberModal(false);
                     setEditingMember(null);
                   }}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm"
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-sm cursor-pointer"
                 >
                   Lưu Thay Đổi
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tự Động Đánh Số Báo Danh (SBD) A-Z */}
+      {showAutoAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95 space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Đánh Số Báo Danh Tự Động</h2>
+                <p className="text-xs text-slate-500">Sắp xếp học sinh theo Tên A-Z và tạo SBD chuẩn</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-blue-50/70 border border-blue-200 p-4 text-xs text-blue-800 space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span>Quy tắc đánh số:</span>
+              </div>
+              <ul className="list-disc pl-4 space-y-1 text-slate-600">
+                <li>Sắp xếp toàn bộ {members.length} học sinh theo thứ tự <strong>Tên tiếng Việt (A &rarr; Z)</strong>.</li>
+                <li>Gán số báo danh bắt đầu từ: <strong className="text-blue-700 font-mono">{autoAssignPrefix}001</strong>, <strong className="text-blue-700 font-mono">{autoAssignPrefix}002</strong>,...</li>
+                <li>Học sinh sẽ thấy SBD này trên phiếu làm bài và bảng điểm thi.</li>
+              </ul>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Tiền tố Số Báo Danh (Mã khối/lớp):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={autoAssignPrefix}
+                  onChange={(e) => setAutoAssignPrefix(e.target.value.trim().toUpperCase())}
+                  placeholder="VD: 12 hoặc TOAN12"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <span className="text-[11px] text-slate-400 mt-1 block">
+                Ví dụ mẫu: {autoAssignPrefix}001, {autoAssignPrefix}002, {autoAssignPrefix}003...
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowAutoAssignModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAutoAssignSBD(autoAssignPrefix)}
+                className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition shadow-md shadow-blue-600/20 cursor-pointer"
+              >
+                Tiến Hành Đánh SBD
+              </button>
+            </div>
           </div>
         </div>
       )}

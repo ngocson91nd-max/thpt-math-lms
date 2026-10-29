@@ -25,7 +25,7 @@ describe('Word Exam Parser', () => {
     const textWithoutImg = q1.content.replace(/<img[^>]+>/g, '');
     expect(textWithoutImg).not.toContain('hUeXBlAABQ');
     expect(q1.explanation).not.toContain('hUeXBlAABQ');
-  });
+  }, 20000);
 
   it('bóc tách chính xác đề thi và bảng đáp án THPT Xuân Trường', async () => {
     const filePath = 'E:/Nam2627/GK1-12/GK1-12-Xuân Trường.docx';

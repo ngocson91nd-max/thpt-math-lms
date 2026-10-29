@@ -21,6 +21,7 @@ import {
   UserPlus,
   LogOut,
   PanelLeftClose,
+  User,
 } from 'lucide-react';
 
 interface NavLinkItem {
@@ -224,8 +225,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
             {userDropdownOpen && (
               <div className="absolute bottom-full left-0 mb-2 w-full rounded-2xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 space-y-1">
                 <div className="px-3 py-1.5 text-[11px] text-slate-400 border-b border-slate-100">
-                  {user.email}
+                  <div className="font-semibold text-slate-700 truncate">{user.full_name}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
+                  {user.candidate_number && (
+                    <div className="text-[10px] text-blue-600 font-bold mt-0.5">SBD: {user.candidate_number}</div>
+                  )}
                 </div>
+                <Link
+                  href="/profile"
+                  onClick={() => setUserDropdownOpen(false)}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  <User className="h-4 w-4 text-blue-600" />
+                  <span>Hồ sơ & Đổi mật khẩu</span>
+                </Link>
                 <button
                   type="button"
                   onClick={handleSignOut}

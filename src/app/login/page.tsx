@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   GraduationCap,
   Award,
+  User,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -33,7 +34,7 @@ export default function LoginPage() {
     setSuccessMessage('');
 
     if (!email || !password) {
-      setErrorMessage('Vui lòng nhập đầy đủ Email và Mật khẩu.');
+      setErrorMessage('Vui lòng nhập Tên đăng nhập / Số điện thoại / Email và Mật khẩu.');
       return;
     }
 
@@ -82,18 +83,23 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                Tài khoản hoặc Email
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                  Tài khoản đăng nhập
+                </label>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Username / SĐT / Email
+                </span>
+              </div>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <Mail className="h-4 w-4" />
+                  <User className="h-4 w-4" />
                 </div>
                 <input
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin hoặc email của bạn..."
+                  placeholder="VD: vanan12, 0987654321, 12001 hoặc email..."
                   required
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition"
                 />
