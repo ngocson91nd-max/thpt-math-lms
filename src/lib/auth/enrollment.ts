@@ -512,6 +512,11 @@ export const rejectStudentJoinRequest = (classId: string, studentId: string): { 
     const userPending: string[] = JSON.parse(localStorage.getItem(userPendingKey) || '[]');
     localStorage.setItem(userPendingKey, JSON.stringify(userPending.filter((id) => id !== classId)));
 
+    // Xóa khỏi cache lớp đã tham gia nếu có
+    const studentClassesKey = `lms_student_classes_${studentId}`;
+    const enrolledClasses: string[] = JSON.parse(localStorage.getItem(studentClassesKey) || '[]');
+    localStorage.setItem(studentClassesKey, JSON.stringify(enrolledClasses.filter((id) => id !== classId)));
+
     window.dispatchEvent(new Event('lms_enrollment_changed'));
     return { success: true };
   } catch {

@@ -10,9 +10,6 @@ function resolveStudentUuid(rawId: string | null | undefined, email?: string | n
   if (s === 'user-an-toan-12' || em === 'an.toan12@gmail.com' || s === 'an.toan12@gmail.com') {
     return '48dc643d-1b47-4c4e-a473-ca2f622b761c';
   }
-  if (s === '33333333-3333-3333-3333-333333333333' || em === 'student.mai@thpt-math-lms.vn') {
-    return '33333333-3333-3333-3333-333333333333';
-  }
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidRegex.test(s)) return s;
   return s;
@@ -162,11 +159,6 @@ export async function GET(req: NextRequest) {
       if (resolved) possibleUserIds.add(resolved);
 
       const em = (emailParam || (userId && userId.includes('@') ? userId : '')).trim().toLowerCase();
-      if (em === 'an.toan12@gmail.com') {
-        possibleUserIds.add('48dc643d-1b47-4c4e-a473-ca2f622b761c');
-        possibleUserIds.add('33333333-3333-3333-3333-333333333333');
-        possibleUserIds.add('user-an-toan-12');
-      }
 
       if (em) {
         const { data: profs } = await supabase
@@ -213,27 +205,6 @@ export async function GET(req: NextRequest) {
           if (m.classes?.name) approvedClassesSet.add(m.classes.name);
         }
       });
-
-      // Nếu học sinh đã active trong bất kỳ ID nào, tự động kích hoạt cho các UUID còn lại
-      if (approvedClassesSet.size > 0 && validUuids.length > 1) {
-        const activeClassIds = Array.from(
-          new Set(userMembers.filter((m: any) => m.status === 'active').map((m: any) => m.class_id))
-        );
-        for (const cId of activeClassIds) {
-          for (const uId of validUuids) {
-            const hasRec = userMembers.some((m: any) => m.class_id === cId && m.user_id === uId && m.status === 'active');
-            if (!hasRec) {
-              try {
-                await supabase
-                  .from('class_members')
-                  .upsert([{ class_id: cId, user_id: uId, role: 'student', status: 'active' }], {
-                    onConflict: 'class_id,user_id',
-                  });
-              } catch {}
-            }
-          }
-        }
-      }
 
       return NextResponse.json({
         success: true,
@@ -379,34 +350,6 @@ export async function POST(req: NextRequest) {
         appErr = error;
       }
 
-      // Kích hoạt active đồng thời cho tất cả các ID liên quan (nếu có nhiều tài khoản cùng email hoặc alias)
-      try {
-        const em = (studentProfile?.email || '').trim().toLowerCase();
-        const extraIds = new Set<string>();
-        if (studentProfile?.id && studentProfile.id !== targetUserId) extraIds.add(studentProfile.id);
-        if (userId && userId !== targetUserId) extraIds.add(userId);
-        if (em === 'an.toan12@gmail.com') {
-          extraIds.add('48dc643d-1b47-4c4e-a473-ca2f622b761c');
-          extraIds.add('33333333-3333-3333-3333-333333333333');
-        }
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        for (const extId of Array.from(extraIds)) {
-          if (uuidRegex.test(extId) && extId !== targetUserId) {
-            await supabase.from('class_members').upsert([
-              {
-                class_id: targetClassId,
-                user_id: extId,
-                role: 'student',
-                status: 'active',
-                joined_at: new Date().toISOString(),
-              },
-            ], { onConflict: 'class_id,user_id' });
-          }
-        }
-      } catch (errSync) {
-        console.warn('Sync extra ids notice:', errSync);
-      }
-
       if (appErr) {
         console.error('Approve student cloud error:', appErr);
         return NextResponse.json({ success: false, error: appErr.message }, { status: 500 });
@@ -417,15 +360,43 @@ export async function POST(req: NextRequest) {
 
     // 4. Từ chối yêu cầu hoặc xóa học sinh khỏi lớp
     if (action === 'reject_student' || action === 'remove_student') {
-      const targetUserId = resolveStudentUuid(userId, (student || user)?.email);
+      const studentEmail = (student || user)?.email?.trim().toLowerCase();
+      const allUserIdsToDelete = new Set<string>();
 
-      await supabase
-        .from('class_members')
-        .delete()
-        .eq('class_id', targetClassId)
-        .eq('user_id', targetUserId);
+      if (userId && String(userId).trim()) allUserIdsToDelete.add(String(userId).trim());
+      const resolved = resolveStudentUuid(userId, studentEmail);
+      if (resolved) allUserIdsToDelete.add(resolved);
 
-      return NextResponse.json({ success: true, message: 'Đã xử lý học sinh trên Supabase Cloud!' });
+      // Tra cứu tất cả profile matching email này trong database
+      if (studentEmail) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('email', studentEmail);
+        if (profs && profs.length > 0) {
+          profs.forEach((p: any) => {
+            if (p.id) allUserIdsToDelete.add(p.id);
+          });
+        }
+      }
+
+      // Xóa khỏi class_members cho targetClassId và classId
+      const targetClasses = new Set<string>();
+      if (targetClassId) targetClasses.add(targetClassId);
+      if (classId && typeof classId === 'string' && classId.trim()) targetClasses.add(classId.trim());
+
+      const idList = Array.from(allUserIdsToDelete);
+      if (idList.length > 0 && targetClasses.size > 0) {
+        for (const cid of Array.from(targetClasses)) {
+          await supabase
+            .from('class_members')
+            .delete()
+            .eq('class_id', cid)
+            .in('user_id', idList);
+        }
+      }
+
+      return NextResponse.json({ success: true, message: 'Đã xóa học sinh khỏi lớp trên Supabase Cloud!' });
     }
 
     // 5. Tạo lớp học mới

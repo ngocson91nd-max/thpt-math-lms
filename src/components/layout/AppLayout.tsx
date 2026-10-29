@@ -190,21 +190,16 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
               setIsEnrolled(true);
             }
           } else {
-            // Kiểm tra xem máy cục bộ có xác nhận học sinh đã được duyệt bởi giáo viên không
-            const localEnrolled = getEnrolledClassIdsForUser(user.id, user.email);
-            if (localEnrolled.length === 0) {
-              localStorage.setItem(key, JSON.stringify([]));
-              if (user.email) {
-                localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify([]));
-              }
-              if (user.username) {
-                localStorage.setItem(`lms_student_classes_${user.username.toLowerCase()}`, JSON.stringify([]));
-              }
-              if (isMounted) {
-                setIsEnrolled(false);
-              }
-            } else if (isMounted) {
-              setIsEnrolled(true);
+            // Khi Cloud đã phản hồi thành công và approvedClasses rỗng (học sinh chưa vào lớp nào hoặc đã bị Thầy xóa)
+            localStorage.setItem(key, JSON.stringify([]));
+            if (user.email) {
+              localStorage.setItem(`lms_student_classes_${user.email.toLowerCase()}`, JSON.stringify([]));
+            }
+            if (user.username) {
+              localStorage.setItem(`lms_student_classes_${user.username.toLowerCase()}`, JSON.stringify([]));
+            }
+            if (isMounted) {
+              setIsEnrolled(false);
             }
           }
 

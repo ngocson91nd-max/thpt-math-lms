@@ -198,7 +198,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 JSON.stringify(res.pending)
               );
             }
-            if (res.success && Array.isArray(res.members) && res.members.length > 0) {
+            if (res.success && Array.isArray(res.members)) {
               setMembers(res.members);
               localStorage.setItem(
                 `lms_class_members_${currentClass.id}`,
@@ -328,7 +328,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     return () => window.removeEventListener('lms_enrollment_changed', loadPendingStudents);
   }, [currentClass.id, currentClass.name, currentClass.code, isClassDeleted, router]);
 
-  const saveMembersToStorage = (updated: ClassMember[]) => {
+  const saveMembersToStorage = (updated: ClassMember[], skipEnrollmentBroadcast = false) => {
     setMembers(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`lms_class_members_${currentClass.id}`, JSON.stringify(updated));
@@ -349,7 +349,9 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       }
       window.dispatchEvent(new Event('lms_classes_updated'));
       broadcastDataChange('CLASSES_UPDATED');
-      broadcastDataChange('ENROLLMENT_UPDATED');
+      if (!skipEnrollmentBroadcast) {
+        broadcastDataChange('ENROLLMENT_UPDATED');
+      }
     }
   };
 
@@ -394,21 +396,27 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     setPendingStudents((prev) => prev.filter((p) => p.user_id !== studentProfile.id && p.id !== req.id));
   };
 
-  const handleRejectStudent = (userId: string) => {
+  const handleRejectStudent = async (userId: string) => {
     rejectStudentJoinRequest(currentClass.id, userId);
 
-    // Đồng bộ lên Cloud API
-    fetch('/api/cloud-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'reject_student',
-        classId: currentClass.id,
-        userId,
-      }),
-    }).catch(console.error);
-
     setPendingStudents((prev) => prev.filter((p) => p.user_id !== userId));
+
+    // Đồng bộ lên Cloud API
+    try {
+      await fetch('/api/cloud-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reject_student',
+          classId: currentClass.id,
+          userId,
+        }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+
+    broadcastDataChange('ENROLLMENT_UPDATED');
   };
 
   const copyCode = () => {
@@ -702,7 +710,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   // Xóa học sinh khỏi lớp & đưa vào Thùng rác "Học sinh đã xóa" (chuẩn ảnh 1 của iExam)
-  const handleDeleteMember = (memberId: string, studentName: string) => {
+  const handleDeleteMember = async (memberId: string, studentName: string) => {
     const isConfirmed = confirm(
       `Thầy có chắc chắn muốn xóa học sinh "${studentName}" ra khỏi lớp này không? Học sinh sẽ được chuyển vào mục "Học sinh đã xóa" để Thầy có thể khôi phục lại khi cần.`
     );
@@ -710,7 +718,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
     const targetMember = members.find((m) => m.id === memberId);
     const updated = members.filter((m) => m.id !== memberId);
-    saveMembersToStorage(updated);
+    // Lưu local và hoãn phát ENROLLMENT_UPDATED cho tới khi Cloud đã xóa xong
+    saveMembersToStorage(updated, true);
 
     if (targetMember) {
       const updatedDeleted = [
@@ -723,18 +732,38 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           `lms_class_deleted_members_${currentClass.id}`,
           JSON.stringify(updatedDeleted)
         );
+
+        // Xóa sạch quyền lớp học của học sinh này trong cache trình duyệt nếu có
+        if (targetMember.user_id) {
+          const uKey = `lms_student_classes_${targetMember.user_id}`;
+          const currentU: string[] = JSON.parse(localStorage.getItem(uKey) || '[]');
+          localStorage.setItem(uKey, JSON.stringify(currentU.filter((id) => id !== currentClass.id && id !== currentClass.code)));
+        }
+        if (targetMember.profile?.email) {
+          const emKey = `lms_student_classes_${targetMember.profile.email.toLowerCase()}`;
+          const currentEm: string[] = JSON.parse(localStorage.getItem(emKey) || '[]');
+          localStorage.setItem(emKey, JSON.stringify(currentEm.filter((id) => id !== currentClass.id && id !== currentClass.code)));
+        }
       }
 
-      fetch('/api/cloud-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'remove_student',
-          classId: currentClass.id,
-          userId: targetMember.user_id,
-          student: targetMember.profile,
-        }),
-      }).catch(console.error);
+      // ĐỢI CLOUD XÓA TRIỆT ĐỂ KHỎI SUPABASE XONG XUÔI
+      try {
+        await fetch('/api/cloud-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'remove_student',
+            classId: currentClass.id,
+            userId: targetMember.user_id,
+            student: targetMember.profile,
+          }),
+        });
+      } catch (err) {
+        console.error('Lỗi khi xóa học sinh trên Cloud:', err);
+      }
+
+      // Sau khi Supabase đã xóa sạch mới thông báo realtime tới các tab/máy khác
+      broadcastDataChange('ENROLLMENT_UPDATED');
     }
   };
 
