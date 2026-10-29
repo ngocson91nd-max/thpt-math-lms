@@ -226,31 +226,52 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     }
 
     // Tải thông tin đề thi đầy đủ câu hỏi trực tiếp theo ID từ Cloud API
-    fetch(`/api/exams?id=${encodeURIComponent(resolvedParams.id)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && d.exam) {
+    const loadExamWithFallback = async () => {
+      try {
+        const r = await fetch(`/api/exams?id=${encodeURIComponent(resolvedParams.id)}`);
+        const d = await r.json();
+        if (d.success && d.exam && Array.isArray(d.exam.questions) && d.exam.questions.length > 0) {
           setExam(d.exam);
           setTimeLeft(d.exam.duration_minutes * 60);
           checkAndLoadPdf(d.exam);
-        }
-      })
-      .catch(() => {
-        // Fallback tải nếu mạng chập chờn
-        fetch('/api/exams?full=true')
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success && Array.isArray(d.exams)) {
-              const found = d.exams.find((e: any) => e.id === resolvedParams.id);
-              if (found) {
-                setExam(found);
-                setTimeLeft(found.duration_minutes * 60);
-                checkAndLoadPdf(found);
+
+          // Cập nhật câu hỏi vào cache để lần sau nạp ngay 0ms
+          if (typeof window !== 'undefined') {
+            try {
+              const saved = localStorage.getItem('lms_exams');
+              if (saved) {
+                const list: Exam[] = JSON.parse(saved);
+                const idx = list.findIndex((e) => e.id === d.exam.id);
+                if (idx >= 0) list[idx] = d.exam;
+                else list.unshift(d.exam);
+                localStorage.setItem('lms_exams', JSON.stringify(list));
               }
-            }
-          })
-          .catch(() => {});
-      });
+            } catch {}
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Lỗi tải đề thi theo id, thử fallback:', err);
+      }
+
+      // Fallback: Tải từ danh sách đầy đủ ?full=true
+      try {
+        const r2 = await fetch('/api/exams?full=true');
+        const d2 = await r2.json();
+        if (d2.success && Array.isArray(d2.exams)) {
+          const found = d2.exams.find((e: any) => e.id === resolvedParams.id);
+          if (found && Array.isArray(found.questions) && found.questions.length > 0) {
+            setExam(found);
+            setTimeLeft(found.duration_minutes * 60);
+            checkAndLoadPdf(found);
+          }
+        }
+      } catch (err2) {
+        console.error('Lỗi fallback đề thi:', err2);
+      }
+    };
+
+    loadExamWithFallback();
   }, [resolvedParams.id, user, isStudent]);
 
   // 2. KHÔI PHỤC TIẾN ĐỘ BÀI LÀM TỰ ĐỘNG (Crash Recovery / F5 Protection)
@@ -686,7 +707,30 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   }
 
   if (!exam || questions.length === 0 || !currentQ) {
-    return <div className="p-8 text-center text-slate-500">Đang chuẩn bị đề thi...</div>;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center space-y-4">
+        <div className="h-10 w-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+        <div>
+          <h2 className="text-base font-bold text-slate-800">Đang chuẩn bị đề thi...</h2>
+          <p className="text-xs text-slate-500 mt-1">Đang nạp toàn bộ câu hỏi và công thức Toán từ máy chủ...</p>
+        </div>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer shadow-sm"
+          >
+            Tải lại
+          </button>
+          <Link
+            href="/exams"
+            className="px-4 py-2 border border-slate-200 bg-white text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition"
+          >
+            Về danh sách đề
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const isLowTime = timeLeft < 300; // Dưới 5 phút

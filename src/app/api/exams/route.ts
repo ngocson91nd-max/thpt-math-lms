@@ -59,11 +59,37 @@ export async function GET(req: NextRequest) {
 
     // 1. Nếu lấy chi tiết 1 đề thi cụ thể: Luôn trả về đầy đủ toàn bộ câu hỏi (questions)
     if (targetId) {
-      const { data, error } = await supabase
-        .from('exams')
-        .select('*')
-        .or(`id.eq.${targetId},code.eq.${targetId}`)
-        .maybeSingle();
+      let data: any = null;
+      let error: any = null;
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(targetId)) {
+        const res = await supabase
+          .from('exams')
+          .select('*')
+          .eq('id', targetId)
+          .maybeSingle();
+        data = res.data;
+        error = res.error;
+      }
+
+      // Nếu không tìm thấy theo UUID hoặc targetId là mã code
+      if (!data && !error) {
+        const { data: allExams } = await supabase.from('exams').select('*');
+        if (allExams && allExams.length > 0) {
+          data =
+            allExams.find((e: any) => {
+              if (e.id === targetId) return true;
+              if (e.description && typeof e.description === 'string' && e.description.includes(targetId)) {
+                try {
+                  const meta = JSON.parse(e.description);
+                  if (meta.code && meta.code.toLowerCase() === targetId.toLowerCase()) return true;
+                } catch {}
+              }
+              return false;
+            }) || null;
+        }
+      }
 
       if (error) {
         console.error('API /api/exams GET by id error:', error);
