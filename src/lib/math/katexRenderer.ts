@@ -258,6 +258,13 @@ export function renderMathToHtml(content: string): string {
     return savePlaceholder(listHtml);
   });
 
+  // 7b. XỬ LÝ \includegraphics[...]{src}
+  text = text.replace(/\\includegraphics(?:\[.*?\])?\{([^}]+)\}/g, (_m, src) => {
+    const cleanSrc = src.trim();
+    const imgHtml = `<img src="${cleanSrc}" alt="Hình minh họa" class="max-w-full h-auto mx-auto my-2 rounded-xl border border-slate-200 shadow-2xs block" />`;
+    return savePlaceholder(imgHtml);
+  });
+
   // 8. XỬ LÝ KHỐI TIKZ \begin{tikzpicture} ... \end{tikzpicture}
   // Bóc tách trước và lưu thành placeholder để không bị bất kỳ regex nào làm hỏng cú pháp TeX
   text = text.replace(/\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g, (_m, body) => {

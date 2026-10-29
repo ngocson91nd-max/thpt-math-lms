@@ -91,13 +91,19 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       // B. KIỂM TRA LOCALSTORAGE -> HIỂN THỊ TỨC THÌ 0ms!
       try {
         const cachedSvg = localStorage.getItem(cacheKey);
-        if (cachedSvg && cachedSvg.includes('<svg') && cachedSvg.length > 200 && !cachedSvg.includes('animate-spin')) {
+        // Loại bỏ ngay lập tức bất kỳ bản cache nào bị lỗi trước đây (chứa chữ \p, \pos hoặc spinner rác)
+        if (
+          cachedSvg &&
+          (cachedSvg.includes('animate-spin') ||
+            cachedSvg.includes('>\\p<') ||
+            cachedSvg.includes('>\\pos<') ||
+            cachedSvg.includes('>\\x<'))
+        ) {
+          localStorage.removeItem(cacheKey);
+        } else if (cachedSvg && cachedSvg.includes('<svg') && cachedSvg.length > 200) {
           inMemoryTikzCache.set(cacheKey, cachedSvg);
           target.innerHTML = cachedSvg;
           return;
-        }
-        if (cachedSvg && cachedSvg.includes('animate-spin')) {
-          localStorage.removeItem(cacheKey);
         }
       } catch {}
 

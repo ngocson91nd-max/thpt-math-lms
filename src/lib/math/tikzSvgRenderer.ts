@@ -146,6 +146,20 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   // 0. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
   rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
 
+  // 0b. Kiểm tra nghiêm ngặt: Nếu TikZ chứa các cấu trúc hình học 3D phức tạp, elip, arc,
+  // hoặc vòng lặp \foreach với biến node (\p, \pos, v.v.):
+  // TUYỆT ĐỐI KHÔNG xuất hình lỗi cụt ngủn hoặc chữ rác như "\p", trả về null ngay!
+  if (
+    rawTikz.includes('ellipse') ||
+    rawTikz.includes('arc') ||
+    rawTikz.includes('3d') ||
+    /\\foreach\s*\\(?:p|pos|i|pt|name|u|v)\b/i.test(rawTikz) ||
+    /\\foreach[^{]*\/[^{]*in/i.test(rawTikz) ||
+    /node[^}]*\\(?:p|pos)\b/i.test(rawTikz)
+  ) {
+    return null;
+  }
+
   const defs: DefMap = {};
   const coords: CoordMap = {};
   const drawItems: DrawItem[] = [];
@@ -387,6 +401,13 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   }
 
   if (minX === Infinity || maxX === -Infinity || drawItems.length === 0) {
+    return null;
+  }
+
+  // Đếm số lệnh vẽ trong mã nguồn:
+  const totalDrawCommands = (rawTikz.match(/\\draw|\\fill|\\node|\\path/g) || []).length;
+  // Nếu đề bài có nhiều lệnh vẽ phức tạp (>= 3) mà parser chỉ nhặt được dưới 40% thì chắc chắn là vẽ thiếu
+  if (totalDrawCommands >= 3 && drawItems.length < totalDrawCommands * 0.4) {
     return null;
   }
 

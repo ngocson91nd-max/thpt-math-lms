@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import MathRenderer from './MathRenderer';
 import { THPT_MATH_SYMBOLS } from '@/lib/math/katexRenderer';
-import { Eye, Code, Sparkles } from 'lucide-react';
+import { Eye, Code, Sparkles, Image as ImageIcon } from 'lucide-react';
 
 interface MathEditorProps {
   value: string;
@@ -25,6 +25,34 @@ export const MathEditor: React.FC<MathEditorProps> = ({
   onAiHelpClick,
 }) => {
   const [activeTab, setActiveTab] = useState<'edit' | 'preview' | 'split'>('split');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        const imgTag = `\n\\includegraphics[scale=0.55]{${base64}}\n`;
+        onChange(value ? `${value}${imgTag}` : imgTag);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          handleImageFile(file);
+          return;
+        }
+      }
+    }
+  };
 
   const insertSymbol = (latex: string) => {
     // Tabular là môi trường bảng văn bản, không bọc $; các môi trường toán khác bọc $$ hoặc $
@@ -93,22 +121,48 @@ export const MathEditor: React.FC<MathEditorProps> = ({
         )}
       </div>
 
-      {/* Thanh phím tắt công thức Toán THPT */}
-      <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-100 bg-white px-3 py-1.5 scrollbar-thin">
-        <span className="shrink-0 text-[11px] font-semibold text-slate-400 mr-1 uppercase tracking-wider">
-          Chèn nhanh:
-        </span>
-        {THPT_MATH_SYMBOLS.map((sym, i) => (
+      {/* Thanh phím tắt công thức Toán THPT & Nút Chèn ảnh */}
+      <div className="flex items-center justify-between gap-2 overflow-x-auto border-b border-slate-100 bg-white px-3 py-1.5 scrollbar-thin">
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="shrink-0 text-[11px] font-semibold text-slate-400 mr-1 uppercase tracking-wider">
+            Chèn nhanh:
+          </span>
+          {THPT_MATH_SYMBOLS.map((sym, i) => (
+            <button
+              key={i}
+              type="button"
+              title={`${sym.label} (${sym.latex})`}
+              onClick={() => insertSymbol(sym.latex)}
+              className="shrink-0 rounded px-2 py-1 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-600 border border-transparent hover:border-blue-200 transition"
+            >
+              {sym.preview}
+            </button>
+          ))}
+        </div>
+
+        {/* Nút chèn ảnh / dán ảnh */}
+        <div className="shrink-0 flex items-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImageFile(file);
+              e.target.value = '';
+            }}
+          />
           <button
-            key={i}
             type="button"
-            title={`${sym.label} (${sym.latex})`}
-            onClick={() => insertSymbol(sym.latex)}
-            className="shrink-0 rounded px-2 py-1 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-600 border border-transparent hover:border-blue-200 transition"
+            onClick={() => fileInputRef.current?.click()}
+            title="Tải ảnh từ máy tính hoặc nhấn Ctrl+V trực tiếp vào ô soạn thảo"
+            className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
           >
-            {sym.preview}
+            <ImageIcon className="h-3.5 w-3.5 text-blue-600" />
+            <span>Chèn ảnh (Ctrl+V)</span>
           </button>
-        ))}
+        </div>
       </div>
 
       {/* Khung nội dung soạn thảo và hiển thị */}
@@ -118,12 +172,14 @@ export const MathEditor: React.FC<MathEditorProps> = ({
             <textarea
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onPaste={handlePaste}
               rows={rows}
               placeholder={placeholder}
               className="w-full resize-y rounded-lg border border-slate-200 p-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 font-sans"
             />
-            <span className="mt-1 text-[11px] text-slate-400">
-              Gõ công thức giữa <code>$f(x)$</code> cho cùng dòng và <code>$$...$$</code> cho khối riêng.
+            <span className="mt-1 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>Gõ công thức giữa <code>$f(x)$</code> cho cùng dòng và <code>$$...$$</code> cho khối riêng.</span>
+              <span className="text-blue-600 font-semibold">Mẹo: Nhấn Ctrl+V để dán trực tiếp ảnh chụp màn hình hình vẽ!</span>
             </span>
           </div>
         )}

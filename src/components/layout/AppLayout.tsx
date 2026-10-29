@@ -72,7 +72,8 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
             (key.startsWith('my_submissions_') ||
              key.startsWith('submission_') ||
              key.startsWith('exam_answers_') ||
-             key.startsWith('exam_draft_'))
+             key.startsWith('exam_draft_') ||
+             key.startsWith('tikz_'))
           ) {
             localStorage.removeItem(key);
           }
