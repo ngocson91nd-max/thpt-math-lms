@@ -243,17 +243,16 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     /node[^}]*\\(?:p|pos)\b/i.test(rawTikz) ||
     /\\shade\b/.test(rawTikz);
 
-  // Nhận diện khối đa diện / hình học không gian khi KHÔNG CÓ plot đồ thị:
-  // - Chứa chu trình mặt phẳng 'cycle'
-  // - Chứa tọa độ tương đối ++(
-  // - Chứa tọa độ góc phối cảnh 30: hoặc 150:
-  // - Chứa tô màu mặt khối che khuất fill=... từ 2 lần trở lên
+  // Nhận diện khối đa diện / hình học không gian 3D phức tạp khi KHÔNG CÓ plot đồ thị:
+  // - Chứa từ 3 chu trình 'cycle' trở lên (vẽ nhiều mặt của khối hộp / đa diện 3D)
+  // - Chứa tọa độ tương đối ++( lặp lại
+  // - Chứa tô màu mặt khối che khuất fill=... từ 3 lần trở lên
+  const cycleCount = (rawTikz.match(/cycle/g) || []).length;
   const hasPolyhedronGeometry =
     !hasPlot &&
-    (rawTikz.includes('cycle') ||
-      /\+\+\s*\(/.test(rawTikz) ||
-      /\([0-9.-]+:[0-9.-]+\)/.test(rawTikz) ||
-      (rawTikz.match(/fill\s*=/g) || []).length >= 2);
+    (cycleCount >= 3 ||
+      (rawTikz.match(/\+\+\s*\(/g) || []).length >= 2 ||
+      (rawTikz.match(/fill\s*=/g) || []).length >= 3);
 
   // Nhận diện hình đa diện nét đứt
   const dashedMatches = rawTikz.match(/dashed/g) || [];

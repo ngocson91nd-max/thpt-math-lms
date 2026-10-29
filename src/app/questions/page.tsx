@@ -38,7 +38,14 @@ export default function QuestionsPage() {
     return [];
   });
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const saved = localStorage.getItem('lms_questions');
+      if (saved && JSON.parse(saved).length > 0) return false;
+    } catch {}
+    return true;
+  });
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
@@ -90,9 +97,8 @@ export default function QuestionsPage() {
   }, []);
 
   const fetchQuestions = async () => {
-    setIsLoading(true);
     try {
-      const res = await fetch(`/api/questions?t=${Date.now()}`);
+      const res = await fetch('/api/questions');
       const data = await res.json();
       if (data.success && Array.isArray(data.questions)) {
         setQuestions(data.questions);

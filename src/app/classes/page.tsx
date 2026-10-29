@@ -85,10 +85,10 @@ export default function ClassesPage() {
   const [joinInput, setJoinInput] = useState('');
   const [joinSuccess, setJoinSuccess] = useState(false);
 
-  // Tải danh sách lớp học thời gian thực trực tiếp từ Supabase Cloud (chống cache)
+  // Tải danh sách lớp học thời gian thực trực tiếp từ Supabase Cloud
   const fetchClasses = async () => {
     try {
-      const res = await fetch(`/api/classes?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch('/api/classes');
       const data = await res.json();
       if (data.success && Array.isArray(data.classes)) {
         setClasses(data.classes);

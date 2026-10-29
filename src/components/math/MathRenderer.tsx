@@ -169,9 +169,10 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       });
       observer.observe(target, { childList: true, subtree: true });
 
-      // F. TIMEOUT AN TOÀN (6 GIÂY): NẾU TIKZJAX HOẶC CDN LỖI THÌ HIỂN THỊ HỘP MÃ TIKZ GỌN GÀNG, KHÔNG TREO SPINNER
+      // F. TIMEOUT AN TOÀN (3.5 GIÂY): NẾU TIKZJAX HOẶC CDN LỖI THÌ HIỂN THỊ HỘP MÃ TIKZ GỌN GÀNG, KHÔNG TREO SPINNER
       setTimeout(() => {
-        if (!isRendered && target.querySelector('.tikz-loading')) {
+        const hasRealSvg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
+        if (!isRendered && !hasRealSvg) {
           observer.disconnect();
           const cleanSnippet = rawTikz
             .replace(/</g, '&lt;')
@@ -187,7 +188,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             </div>
           `;
         }
-      }, 6000);
+      }, 3500);
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao châu Á

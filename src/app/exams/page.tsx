@@ -243,7 +243,7 @@ export default function ExamsPage() {
 
   const fetchExams = async () => {
     try {
-      const res = await fetch(`/api/exams?t=${Date.now()}`);
+      const res = await fetch('/api/exams');
       const data = await res.json();
       if (data.success && Array.isArray(data.exams)) {
         setExams(data.exams);
@@ -989,7 +989,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
   const getExamCountForClass = (clsName: string, clsGrade?: number) => {
     const target = clsName.trim().toLowerCase();
     return exams.filter((e) => {
-      if (!isTeacher && !isExamPermittedForStudent(e, user?.id, classes)) return false;
+      if (!isTeacher && !isExamPermittedForStudent(e, user?.id, classes, user?.email)) return false;
       const inAssigned = e.assigned_classes?.some(
         (c) => c.trim().toLowerCase() === target
       );
@@ -1002,7 +1002,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     // Phân quyền Học sinh: BẮT BUỘC phải vào lớp mới xem được đề
     if (!isTeacher) {
       if (!isUserEnrolledInAnyClass(user)) return false;
-      const isPermitted = isExamPermittedForStudent(e, user?.id, classes);
+      const isPermitted = isExamPermittedForStudent(e, user?.id, classes, user?.email);
       if (!isPermitted) return false;
     }
 
