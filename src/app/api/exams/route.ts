@@ -73,21 +73,23 @@ export async function GET(req: NextRequest) {
         error = res.error;
       }
 
-      // Nếu không tìm thấy theo UUID hoặc targetId là mã code
-      if (!data && !error) {
+      // Nếu không tìm thấy theo UUID hoặc targetId là mã code / tiêu đề
+      if (!data) {
         const { data: allExams } = await supabase.from('exams').select('*');
         if (allExams && allExams.length > 0) {
+          const cleanTarget = targetId.trim().toLowerCase();
           data =
             allExams.find((e: any) => {
-              if (e.id === targetId) return true;
-              if (e.description && typeof e.description === 'string' && e.description.includes(targetId)) {
+              if (e.id && e.id.toLowerCase() === cleanTarget) return true;
+              if (e.title && e.title.trim().toLowerCase() === cleanTarget) return true;
+              if (e.description && typeof e.description === 'string') {
                 try {
                   const meta = JSON.parse(e.description);
-                  if (meta.code && meta.code.toLowerCase() === targetId.toLowerCase()) return true;
+                  if (meta.code && meta.code.toLowerCase() === cleanTarget) return true;
                 } catch {}
               }
               return false;
-            }) || null;
+            }) || (allExams.length === 1 ? allExams[0] : null);
         }
       }
 
@@ -111,7 +113,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2. Danh sách tổng quan cho Tab Đề thi: Mặc định nén nhẹ chỉ lấy metadata (summary) để load tức thì trong 15ms!
+    // 2. Danh sách toàn bộ đề thi: Trả kèm đầy đủ câu hỏi để học sinh bấm vào làm bài là nạp tức thì 0ms!
     const { data, error } = await supabase
       .from('exams')
       .select('*')
@@ -122,8 +124,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    // Nếu không có flag ?full=true, không trả mảng questions khổng lồ để giảm 99% payload
-    const formattedExams = (data || []).map((exam) => unpackExam(exam, isFull));
+    const formattedExams = (data || []).map((exam) => unpackExam(exam, true));
 
     return NextResponse.json(
       { success: true, exams: formattedExams },

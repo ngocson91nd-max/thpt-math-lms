@@ -74,13 +74,23 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     return [];
   });
 
+  const [notFound, setNotFound] = useState(false);
+
   const [exam, setExam] = useState<Exam | undefined>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('lms_exams');
         if (saved) {
           const list = JSON.parse(saved);
-          return list.find((e: any) => e.id === resolvedParams.id);
+          const cleanTarget = (resolvedParams.id || '').trim().toLowerCase();
+          const found =
+            list.find((e: any) => {
+              if (e.id && e.id.toLowerCase() === cleanTarget) return true;
+              if (e.code && e.code.toLowerCase() === cleanTarget) return true;
+              if (e.title && e.title.trim().toLowerCase() === cleanTarget) return true;
+              return false;
+            }) || (list.length === 1 ? list[0] : undefined);
+          return found;
         }
       } catch {}
     }
@@ -175,7 +185,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       if (savedExams) {
         try {
           const parsed: Exam[] = JSON.parse(savedExams);
-          const found = parsed.find((e) => e.id === resolvedParams.id);
+          const cleanTarget = (resolvedParams.id || '').trim().toLowerCase();
+          const found =
+            parsed.find((e) => {
+              if (e.id && e.id.toLowerCase() === cleanTarget) return true;
+              if (e.code && e.code.toLowerCase() === cleanTarget) return true;
+              if (e.title && e.title.trim().toLowerCase() === cleanTarget) return true;
+              return false;
+            }) || (parsed.length === 1 ? parsed[0] : null);
+
           // Nếu trong cache đã có sẵn câu hỏi đầy đủ thì nạp tức thì 0ms
           if (found && Array.isArray(found.questions) && found.questions.length > 0) {
             setExam(found);
@@ -259,16 +277,31 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         const r2 = await fetch('/api/exams?full=true');
         const d2 = await r2.json();
         if (d2.success && Array.isArray(d2.exams)) {
-          const found = d2.exams.find((e: any) => e.id === resolvedParams.id);
+          const cleanTarget = (resolvedParams.id || '').trim().toLowerCase();
+          const found =
+            d2.exams.find((e: any) => {
+              if (e.id && e.id.toLowerCase() === cleanTarget) return true;
+              if (e.code && e.code.toLowerCase() === cleanTarget) return true;
+              if (e.title && e.title.trim().toLowerCase() === cleanTarget) return true;
+              return false;
+            }) || (d2.exams.length === 1 ? d2.exams[0] : null);
+
           if (found && Array.isArray(found.questions) && found.questions.length > 0) {
             setExam(found);
             setTimeLeft(found.duration_minutes * 60);
             checkAndLoadPdf(found);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('lms_exams', JSON.stringify(d2.exams));
+            }
+            return;
           }
         }
       } catch (err2) {
         console.error('Lỗi fallback đề thi:', err2);
       }
+
+      // Nếu quét mọi cách vẫn không tìm thấy đề
+      setNotFound(true);
     };
 
     loadExamWithFallback();
@@ -702,6 +735,26 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             </Link>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (notFound && (!exam || questions.length === 0)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center space-y-4">
+        <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+          <AlertTriangle className="h-7 w-7" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-800">Không tìm thấy đề thi này</h2>
+        <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+          Đề thi này không còn khả dụng hoặc Thầy Sơn vừa cập nhật đề mới. Em vui lòng bấm nút bên dưới để quay lại danh sách đề thi nhé!
+        </p>
+        <Link
+          href="/exams"
+          className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition shadow-md shadow-blue-500/20"
+        >
+          Về danh sách đề thi
+        </Link>
       </div>
     );
   }
