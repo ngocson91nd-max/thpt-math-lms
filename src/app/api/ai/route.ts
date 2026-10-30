@@ -83,8 +83,11 @@ Chủ đề: ${body.topic || 'Toán THPT'}
 Lớp: ${body.grade || 12}`;
         }
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        const selectedModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+        let activeModel = selectedModel;
+
+        let res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -102,6 +105,30 @@ Lớp: ${body.grade || 12}`;
           }
         );
 
+        // Tự động dự phòng nếu tài khoản/API key chưa mở quyền model 3.8-flash
+        if (!res.ok && activeModel === 'gemini-3.8-flash') {
+          console.warn('Gemini 3.8 Flash gặp lỗi hoặc chưa kích hoạt trên API key này, tự động thử gemini-1.5-flash...');
+          activeModel = 'gemini-1.5-flash';
+          res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+                  },
+                ],
+                generationConfig: {
+                  temperature: 0.2,
+                },
+              }),
+            }
+          );
+        }
+
         if (res.ok) {
           const data = await res.json();
           const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -113,7 +140,7 @@ Lớp: ${body.grade || 12}`;
               if (parsed.content && Array.isArray(parsed.options) && parsed.correct_answer) {
                 return NextResponse.json({
                   success: true,
-                  provider: 'gemini',
+                  provider: `gemini-${activeModel}`,
                   similarQuestion: parsed,
                 });
               }
@@ -124,7 +151,7 @@ Lớp: ${body.grade || 12}`;
 
           return NextResponse.json({
             success: true,
-            provider: 'gemini',
+            provider: `gemini-${activeModel}`,
             result: rawText,
           });
         }
