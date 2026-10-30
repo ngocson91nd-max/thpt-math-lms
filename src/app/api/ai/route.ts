@@ -21,13 +21,17 @@ export async function POST(req: NextRequest) {
     const body: AIRequestBody = await req.json();
     const { action } = body;
 
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const rawKeys = process.env.GEMINI_API_KEY || '';
+    const geminiKeys = rawKeys
+      .split(',')
+      .map((k) => k.trim())
+      .filter((k) => k && !k.includes('your-google-gemini-api-key'));
     const openaiKey = process.env.OPENAI_API_KEY;
 
     // =========================================================================
-    // 1. NẾU CÓ GEMINI API KEY
+    // 1. NẾU CÓ GEMINI API KEY (HỖ TRỢ POOL NHIỀU KEY & TỰ ĐỘNG CÂN BẰNG TẢI / FAILOVER)
     // =========================================================================
-    if (geminiKey && !geminiKey.includes('your-google-gemini-api-key')) {
+    if (geminiKeys.length > 0) {
       try {
         let systemPrompt = '';
         let userPrompt = '';
@@ -94,46 +98,66 @@ Lớp: ${body.grade || 12}`;
           generationConfig.response_mime_type = 'application/json';
         }
 
-        let res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
-                },
-              ],
-              generationConfig,
-            }),
-          }
-        );
+        // Cân bằng tải xoay vòng và tự động failover qua các key trong pool
+        const startIndex = Math.floor(Math.random() * geminiKeys.length);
+        let res: Response | null = null;
 
-        // Tự động dự phòng nếu tài khoản/API key chưa mở quyền model 3.8-flash
-        if (!res.ok && activeModel === 'gemini-3.8-flash') {
-          console.warn('Gemini 3.8 Flash gặp lỗi hoặc chưa kích hoạt trên API key này, tự động thử gemini-2.5-flash...');
-          activeModel = 'gemini-2.5-flash';
-          res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: 'user',
-                    parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
-                  },
-                ],
-                generationConfig,
-              }),
-            }
-          );
+        for (let attempt = 0; attempt < geminiKeys.length; attempt++) {
+          const currentKey = geminiKeys[(startIndex + attempt) % geminiKeys.length];
+
+          try {
+            res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${currentKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: 'user',
+                      parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+                    },
+                  ],
+                  generationConfig,
+                }),
+              }
+            );
+
+            if (res.ok) break;
+
+            console.warn(`Key #${(startIndex + attempt) % geminiKeys.length + 1} gặp lỗi HTTP ${res.status}, chuyển sang key tiếp theo...`);
+          } catch (fetchErr) {
+            console.warn(`Lỗi mạng key #${(startIndex + attempt) % geminiKeys.length + 1}, chuyển sang key tiếp theo...`);
+          }
         }
 
-        if (res.ok) {
+        // Nếu tất cả các key đều lỗi với 3.8-flash, thử dự phòng với gemini-2.5-flash
+        if ((!res || !res.ok) && activeModel === 'gemini-3.8-flash') {
+          activeModel = 'gemini-2.5-flash';
+          for (const key of geminiKeys) {
+            try {
+              res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${key}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [
+                      {
+                        role: 'user',
+                        parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+                      },
+                    ],
+                    generationConfig,
+                  }),
+                }
+              );
+              if (res.ok) break;
+            } catch {}
+          }
+        }
+
+        if (res && res.ok) {
           const data = await res.json();
           const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
