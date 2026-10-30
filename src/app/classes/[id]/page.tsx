@@ -754,6 +754,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           body: JSON.stringify({
             action: 'remove_student',
             classId: currentClass.id,
+            className: currentClass.name,
+            classCode: currentClass.code,
             userId: targetMember.user_id,
             student: targetMember.profile,
           }),

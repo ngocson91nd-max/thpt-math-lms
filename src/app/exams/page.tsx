@@ -245,12 +245,17 @@ export default function ExamsPage() {
 
   const fetchSubmissions = async () => {
     try {
+      const deletedSubIds =
+        typeof window !== 'undefined'
+          ? new Set(JSON.parse(localStorage.getItem('lms_deleted_submission_ids') || '[]'))
+          : new Set();
       const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
       const d = await res.json();
       if (d.success && Array.isArray(d.submissions)) {
-        setAllSubmissions(d.submissions);
+        const cleanSubs = d.submissions.filter((s: any) => !deletedSubIds.has(s.id));
+        setAllSubmissions(cleanSubs);
         if (typeof window !== 'undefined') {
-          localStorage.setItem('lms_all_submissions', JSON.stringify(d.submissions));
+          localStorage.setItem('lms_all_submissions', JSON.stringify(cleanSubs));
         }
       }
     } catch (e) {
@@ -1410,7 +1415,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     (Boolean(exam.title?.includes('11-1')) && (s.exam?.title?.includes('11-1') || s.exam_id?.includes('11-1') || s.exam_title?.includes('11-1')));
                   return matchId || matchCode || matchTitle;
                 });
-                const actualSubCount = Math.max(exam.submissions_count || 0, examSubmissions.length);
+                const actualSubCount = examSubmissions.length;
                 const pendingEssaySubs = examSubmissions.filter((s: any) => s.status === 'grading');
 
                 return (

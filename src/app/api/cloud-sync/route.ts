@@ -28,42 +28,31 @@ async function resolveClassUuid(
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidRegex.test(s)) return s;
 
-  // 1. Tìm theo mã code
-  const targetCode = (code || s).trim();
-  if (targetCode) {
-    const { data: byCode } = await supabase
-      .from('classes')
-      .select('id')
-      .ilike('code', targetCode)
-      .maybeSingle();
-    if (byCode?.id) return byCode.id;
-  }
+  // Lấy toàn bộ danh sách lớp thực tế trong Supabase Cloud
+  const { data: allClasses } = await supabase.from('classes').select('id, name, code, grade');
+  if (!allClasses || allClasses.length === 0) return null;
+  if (allClasses.length === 1) return allClasses[0].id;
 
-  // 2. Tìm theo tên lớp (ví dụ: '1' hoặc '12 Toán 1')
-  const targetName = (name || s).trim();
-  if (targetName) {
-    const { data: byName } = await supabase
-      .from('classes')
-      .select('id')
-      .ilike('name', targetName)
-      .maybeSingle();
-    if (byName?.id) return byName.id;
-  }
+  const cleanRaw = s.toLowerCase().replace(/^class-/, '').trim();
+  const targetCode = (code || s).toLowerCase().trim();
+  const targetName = (name || s).toLowerCase().trim();
 
-  // 3. Tìm kiếm mờ theo code
-  if (s) {
-    const { data: byLike } = await supabase
-      .from('classes')
-      .select('id')
-      .ilike('code', `%${s}%`)
-      .limit(1);
-    if (byLike && byLike.length > 0) return byLike[0].id;
-  }
+  // Khớp chính xác hoặc khớp mờ theo code, name, id, grade
+  const matched = allClasses.find((c: any) => {
+    const cId = (c.id || '').toLowerCase();
+    const cCode = (c.code || '').toLowerCase();
+    const cName = (c.name || '').toLowerCase();
+    const cGrade = String(c.grade || '');
 
-  // 4. Nếu database chỉ có đúng 1 lớp duy nhất
-  const { data: allClasses } = await supabase.from('classes').select('id').limit(2);
-  if (allClasses && allClasses.length === 1) return allClasses[0].id;
+    if (cId === s.toLowerCase()) return true;
+    if (cCode === targetCode || cCode === cleanRaw) return true;
+    if (cName === targetName || cName === cleanRaw) return true;
+    if (cCode.includes(cleanRaw) || cleanRaw.includes(cName)) return true;
+    if (cleanRaw === cGrade) return true;
+    return false;
+  });
 
+  if (matched) return matched.id;
   return null;
 }
 
@@ -382,10 +371,16 @@ export async function POST(req: NextRequest) {
 
       // Xóa khỏi class_members cho targetClassId và classId
       const targetClasses = new Set<string>();
-      if (targetClassId) targetClasses.add(targetClassId);
-      if (classId && typeof classId === 'string' && classId.trim()) targetClasses.add(classId.trim());
+      if (targetClassId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetClassId)) {
+        targetClasses.add(targetClassId);
+      }
+      if (classId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(classId)) {
+        targetClasses.add(classId);
+      }
 
-      const idList = Array.from(allUserIdsToDelete);
+      const idList = Array.from(allUserIdsToDelete).filter((uid) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)
+      );
       if (idList.length > 0 && targetClasses.size > 0) {
         for (const cid of Array.from(targetClasses)) {
           await supabase
