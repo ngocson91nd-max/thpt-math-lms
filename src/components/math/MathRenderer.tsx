@@ -65,7 +65,7 @@ if (typeof window !== 'undefined') {
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v8_')) {
+      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v9_')) {
         localStorage.removeItem(k);
       }
     }
@@ -130,7 +130,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v8_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v9_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {
@@ -141,7 +141,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       // B. KIỂM TRA LOCALSTORAGE -> HIỂN THỊ TỨC THÌ 0ms!
       try {
         const cachedSvg = localStorage.getItem(cacheKey);
-        // Loại bỏ ngay lập tức bất kỳ bản cache nào bị lỗi trước đây (chứa chữ \p, \pos, \mathrm cụt, hoặc spinner)
+        // Loại bỏ ngay lập tức bất kỳ bản cache nào bị lỗi trước đây
         if (
           cachedSvg &&
           (cachedSvg.includes('animate-spin') ||
@@ -152,14 +152,14 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             cachedSvg.includes('\\text'))
         ) {
           localStorage.removeItem(cacheKey);
-        } else if (cachedSvg && cachedSvg.includes('<svg') && cachedSvg.length > 200) {
+        } else if (cachedSvg && (cachedSvg.includes('<svg') || cachedSvg.includes('<img')) && cachedSvg.length > 50) {
           inMemoryTikzCache.set(cacheKey, cachedSvg);
           target.innerHTML = cachedSvg;
           return;
         }
       } catch {}
 
-      // C. THỬ RENDER BẰNG PURE TS TIKZ-TO-SVG ENGINE TRỰC TIẾP (0.1ms, KHÔNG CẦN CHỜ CDN)
+      // C. THỬ RENDER BẰNG PURE TS TIKZ-TO-SVG ENGINE TRỰC TIẾP (0.1ms, KHÔNG CẦN CHỜ MẠNG)
       const pureSvg = renderTikzToSvg(rawTikz);
       if (pureSvg) {
         target.innerHTML = pureSvg;
@@ -170,7 +170,8 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         return;
       }
 
-      // D. NẾU CHƯA CÓ SVG THUẦN: TẠO THẺ SCRIPT SỐNG CHO TIKZJAX WEBASSEMBLY
+      // D. NẾU ENGINE THUẦN KHÔNG XỬ LÝ ĐƯỢC (3D tdplot, tkz-euclide, hình phức tạp):
+      // GỌI SERVER TE-X API /api/render-tikz (CÓ ĐỦ TIKZ-3DPLOT, TKZ-EUCLIDE, PGFPLOTS)
       target.innerHTML = '';
       const loaderDiv = document.createElement('div');
       loaderDiv.className = 'tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2';
@@ -179,94 +180,94 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <span>Đang dựng hình vẽ TikZ...</span>
+        <span>Đang dựng hình vẽ TikZ qua TeX Server...</span>
       `;
       target.appendChild(loaderDiv);
 
-      const scriptTag = document.createElement('script');
-      scriptTag.type = 'text/tikz';
-      scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
-      scriptTag.textContent = rawTikz;
-      target.appendChild(scriptTag);
+      let isFinished = false;
 
-      // Kích hoạt TikzJax WebAssembly quét và render thẻ script mới vừa chèn (Tự động nạp script nếu chưa có)
-      if (typeof window !== 'undefined') {
+      // Hàm Fallback TikzJax (WebAssembly chạy client khi offline)
+      const runTikzJaxFallback = () => {
+        if (isFinished) return;
+        target.innerHTML = '';
+        target.appendChild(loaderDiv);
+
+        const scriptTag = document.createElement('script');
+        scriptTag.type = 'text/tikz';
+        scriptTag.setAttribute('data-tikz-libraries', 'arrows.meta,arrows,calc,positioning,shapes,through,intersections,patterns,decorations.pathmorphing,backgrounds');
+        scriptTag.textContent = rawTikz;
+        target.appendChild(scriptTag);
+
         ensureTikzJaxLoaded().then(() => {
           try {
             if (typeof (window as any).tikzjax === 'function') {
               (window as any).tikzjax();
             } else if (typeof (window as any).tikzjax?.process === 'function') {
               (window as any).tikzjax.process();
-            } else {
-              window.dispatchEvent(new Event('DOMContentLoaded'));
             }
           } catch {}
         });
-      }
 
-      // E. MUTATION OBSERVER ĐỂ LƯU VÀO CACHE NGAY KHI TIKZJAX VẼ XONG SVG
-      let isRendered = false;
-      const observer = new MutationObserver((_mutations, obs) => {
-        const svg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
-        if (svg && !svg.classList.contains('animate-spin') && !svg.closest('.tikz-loading')) {
-          isRendered = true;
-          const loader = target.querySelector('.tikz-loading');
-          if (loader) loader.remove();
+        const observer = new MutationObserver((_mutations, obs) => {
+          const svg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
+          if (svg && !svg.classList.contains('animate-spin') && !svg.closest('.tikz-loading')) {
+            isFinished = true;
+            const loader = target.querySelector('.tikz-loading');
+            if (loader) loader.remove();
 
-          const svgOuter = svg.outerHTML;
-          inMemoryTikzCache.set(cacheKey, svgOuter);
-          try {
-            localStorage.setItem(cacheKey, svgOuter);
-          } catch {}
-          obs.disconnect();
-        }
-      });
-      observer.observe(target, { childList: true, subtree: true });
-
-      // F. TIMEOUT AN TOÀN (20 GIÂY): Đủ thời gian cho CDN và WebAssembly biên dịch hình vẽ lớn
-      setTimeout(() => {
-        const hasRealSvg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
-        if (!isRendered && !hasRealSvg) {
-          observer.disconnect();
-          const cleanSnippet = rawTikz
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .trim();
-
-          // Nhận diện loại hình vẽ để hiển thị tiêu đề sư phạm
-          let shapeLabel = 'Hình vẽ hình học';
-          if (/\\widehat\{|góc|tam giác|trạm/i.test(rawTikz)) shapeLabel = 'Hình học tam giác & góc';
-          else if (/lap_phuong|khối|lập phương|cube/i.test(rawTikz)) shapeLabel = 'Hình khối lập phương 3D';
-          else if (/chóp|pyramid|nón|trụ/i.test(rawTikz)) shapeLabel = 'Hình không gian 3D';
-
-          target.innerHTML = `
-            <div class="my-2 rounded-2xl border border-blue-200/90 bg-gradient-to-b from-blue-50/60 to-slate-50 p-3.5 text-center shadow-2xs max-w-sm mx-auto">
-              <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-blue-100 text-xs font-bold text-blue-900">
-                <span class="flex items-center gap-1.5">📐 ${shapeLabel}</span>
-                <button type="button" class="retry-tikz-btn text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs cursor-pointer hover:bg-blue-50 transition">
-                  🔄 Dựng lại
-                </button>
-              </div>
-              <pre class="text-[10.5px] text-slate-700 font-mono text-left bg-white p-2 rounded-xl border border-slate-200 overflow-x-auto max-h-32 leading-relaxed">${cleanSnippet}</pre>
-            </div>
-          `;
-
-          // Gắn sự kiện cho nút Dựng lại
-          const retryBtn = target.querySelector('.retry-tikz-btn');
-          if (retryBtn) {
-            retryBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              try {
-                if (typeof (window as any).tikzjax === 'function') {
-                  (window as any).tikzjax();
-                } else if (typeof (window as any).tikzjax?.process === 'function') {
-                  (window as any).tikzjax.process();
-                }
-              } catch {}
-            });
+            const svgOuter = svg.outerHTML;
+            inMemoryTikzCache.set(cacheKey, svgOuter);
+            try {
+              localStorage.setItem(cacheKey, svgOuter);
+            } catch {}
+            obs.disconnect();
           }
-        }
-      }, 20000);
+        });
+        observer.observe(target, { childList: true, subtree: true });
+
+        setTimeout(() => {
+          const hasRealSvg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
+          if (!isFinished && !hasRealSvg) {
+            observer.disconnect();
+            const cleanSnippet = rawTikz.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+            target.innerHTML = `
+              <div class="my-2 rounded-2xl border border-blue-200/90 bg-gradient-to-b from-blue-50/60 to-slate-50 p-3.5 text-center shadow-2xs max-w-sm mx-auto">
+                <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-blue-100 text-xs font-bold text-blue-900">
+                  <span class="flex items-center gap-1.5">📐 Hình vẽ TikZ</span>
+                  <button type="button" class="retry-tikz-btn text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-2xs cursor-pointer hover:bg-blue-50 transition">
+                    🔄 Dựng lại
+                  </button>
+                </div>
+                <pre class="text-[10.5px] text-slate-700 font-mono text-left bg-white p-2 rounded-xl border border-slate-200 overflow-x-auto max-h-32 leading-relaxed">${cleanSnippet}</pre>
+              </div>
+            `;
+          }
+        }, 15000);
+      };
+
+      // Gọi Server API trước
+      fetch('/api/render-tikz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tikz: rawTikz }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.url) {
+            isFinished = true;
+            const imgHtml = `<img src="${data.url}" alt="Hình vẽ TikZ" class="max-w-full h-auto mx-auto block my-2 select-none pointer-events-none rounded-lg" style="max-height: 360px;" />`;
+            target.innerHTML = imgHtml;
+            inMemoryTikzCache.set(cacheKey, imgHtml);
+            try {
+              localStorage.setItem(cacheKey, imgHtml);
+            } catch {}
+          } else {
+            runTikzJaxFallback();
+          }
+        })
+        .catch(() => {
+          runTikzJaxFallback();
+        });
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao với CDN Unpkg dự phòng

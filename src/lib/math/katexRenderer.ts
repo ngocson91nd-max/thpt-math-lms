@@ -288,12 +288,12 @@ export function renderMathToHtml(content: string): string {
 
     // 8c. Nếu đã có pureSvg: nhúng TRỰC TIẾP DUY NHẤT SVG (0ms, tuyệt đối không chèn script để tránh TikzJax vẽ thêm hình thứ 2 ở góc)
     if (pureSvg) {
-      const pureWrapper = `<div class="tikz-wrapper my-3 w-full flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${pureSvg}</div></div>`;
+      const pureWrapper = `<div class="tikz-wrapper my-2 w-full flex flex-col items-center justify-center max-w-full overflow-hidden select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${pureSvg}</div></div>`;
       return savePlaceholder(pureWrapper);
     }
 
-    // 8d. Fallback cho TikzJax (WebAssembly) đối với các hình vẽ đặc thù ngoài phạm vi parser thuần
-    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-x-auto select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"></div></div>`;
+    // 8d. Fallback cho Server TeX Engine & TikzJax đối với các hình vẽ đặc thù ngoài phạm vi parser thuần
+    const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-hidden select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"></div></div>`;
 
     return savePlaceholder(tikzWrapper);
   });

@@ -20,6 +20,15 @@ interface CoordMap {
   [key: string]: Point2D;
 }
 
+export function hashTikz(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 interface DrawItem {
   type: 'line' | 'grid' | 'plot' | 'point' | 'node' | 'ellipse' | 'arc' | 'arc_sector';
   p1?: Point2D;
@@ -199,7 +208,15 @@ function evalPlotExpr(expr: string, xVal: number, defs: DefMap = {}): number | n
     clean = clean.replace(new RegExp(`\\\\${k}\\b`, 'g'), String(v));
   }
 
+  // Hỗ trợ phân số \frac{a}{b} hoặc \dfrac{a}{b}
+  let prevFrac = '';
+  while (prevFrac !== clean) {
+    prevFrac = clean;
+    clean = clean.replace(/\\d?frac\{([^{}]+)\}\{([^{}]+)\}/g, '(($1)/($2))');
+  }
+
   clean = clean
+    .replace(/\\cdot|\\times/g, '*')
     .replace(/\^/g, '**')
     .replace(/exp\(/g, 'Math.exp(')
     .replace(/ln\(/g, 'Math.log(')
@@ -216,6 +233,12 @@ function evalPlotExpr(expr: string, xVal: number, defs: DefMap = {}): number | n
     .replace(/\{\s*\\x\s*\}/g, `(${xVal})`)
     .replace(/\\x\b/g, `(${xVal})`)
     .replace(/(?<![a-zA-Z_])x(?![a-zA-Z_])/g, `(${xVal})`);
+
+  // Hỗ trợ phép nhân ẩn: 3(x) -> 3*(x) hoặc (x)(x-1) -> (x)*(x-1)
+  clean = clean
+    .replace(/([0-9.]+)\s*\(/g, '$1*(')
+    .replace(/\)\s*\(/g, ')*(')
+    .replace(/\)\s*([0-9.]+)/g, ')*$1');
 
   // Xử lý toán tử lũy thừa với dấu trừ đứng trước trong JavaScript:
   // JS ném SyntaxError khi gặp -2**2 hoặc -(-0.5)**3 vì cần ngoặc đơn
@@ -422,6 +445,11 @@ function expandForeachLoops(tikz: string): string {
  */
 export function renderTikzToSvg(rawTikz: string): string | null {
   if (!rawTikz || !rawTikz.includes('\\begin{tikzpicture}')) {
+    return null;
+  }
+
+  // 0. Nếu sử dụng các gói mở rộng chuyên sâu (tikz-3dplot, tkz-euclide), nhường quyền cho Server TeX Engine để đạt độ chuẩn xác 100%
+  if (/tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw/i.test(rawTikz)) {
     return null;
   }
 
@@ -678,7 +706,7 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
     if (hasRectangle) continue;
 
-    const normalizedBody = bodyWithoutNodes.replace(/\s+to\s+/g, ' -- ');
+    const normalizedBody = bodyWithoutNodes.replace(/\s+to(?:\s*\[[^\]]*\])?\s+/g, ' -- ');
 
     // Tách các chuỗi subpaths: "(A) -- (B) -- (C)" hoặc "(A) -- (B) -- cycle"
     const subpaths = normalizedBody.match(/(?:\([^)]+\)\s*--\s*)+(?:\([^)]+\)|cycle)/g) || [];
@@ -865,6 +893,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
 
   const svgElements: string[] = [];
 
+  const uniqueClipId = `tikz-clip-${hashTikz(rawTikz)}`;
+
   // Mũi tên trục tọa độ stealth sắc nét chuẩn LaTeX
   let defsBlock = `
     <defs>
@@ -878,7 +908,7 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     const clipW = Math.max(1, toSvgX(clipRect.x2) - clipX);
     const clipH = Math.max(1, toSvgY(clipRect.y1) - clipY);
     defsBlock += `
-      <clipPath id="tikz-clip-bounds">
+      <clipPath id="${uniqueClipId}">
         <rect x="${clipX.toFixed(1)}" y="${clipY.toFixed(1)}" width="${clipW.toFixed(1)}" height="${clipH.toFixed(1)}" />
       </clipPath>`;
   }
@@ -920,7 +950,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       for (let i = 0; i <= steps; i++) {
         const x = item.startX + i * dx;
         const y = evalPlotExpr(item.expr, x, defs);
-        const hasAsymptote = item.expr.includes('/') || item.expr.includes('tan');
+        // Chỉ coi là có tiệm cận đứng nếu biểu thức thực sự có chia cho ẩn số biến thiên (ví dụ: /((\x)...) hoặc tan
+        const hasAsymptote = (/\/\s*\(?[^)]*(?:\\x|\bx\b)/.test(item.expr)) || item.expr.includes('tan');
         const isDiscontinuous = hasAsymptote && prevY !== null && y !== null && Math.abs(y - prevY) > spanY * 1.5;
 
         if (y !== null && isFinite(y) && y >= boundMinY - spanY * 2 && y <= boundMaxY + spanY * 2 && !isDiscontinuous) {
@@ -939,7 +970,7 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       }
 
       if (pathD) {
-        const clipAttr = clipRect ? 'clip-path="url(#tikz-clip-bounds)"' : '';
+        const clipAttr = clipRect ? `clip-path="url(#${uniqueClipId})"` : '';
         svgElements.push(`<path d="${pathD}" fill="none" stroke="${item.color || '#2563eb'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" ${clipAttr} />`);
       }
     } else if (item.type === 'point' && item.pt) {
@@ -1030,5 +1061,5 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
   }
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="tikz-svg-pure mx-auto block select-none my-2" style="max-width: 100%; height: auto; min-width: 320px; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="tikz-svg-pure mx-auto block select-none my-2" style="max-width: 100%; height: auto; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
 }
