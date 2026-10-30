@@ -519,23 +519,66 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     setIsAutoSaved(false);
   };
 
-  // Tải ảnh bài làm tự luận viết tay
-  const handleUploadEssayImage = (qId: string, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    Array.from(files).forEach((file) => {
+  // Nén ảnh thông minh phía client để tải siêu tốc, không tràn bộ nhớ và chống nghẽn server
+  const compressImageFile = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> => {
+    return new Promise((resolve) => {
+      // Nếu file không phải ảnh hoặc quá nhỏ (< 200KB), đọc trực tiếp
+      if (!file.type.startsWith('image/') || file.size < 200 * 1024) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string;
-        if (base64) {
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', quality);
+            resolve(compressed);
+          } else {
+            resolve((event.target?.result as string) || '');
+          }
+        };
+        img.onerror = () => resolve((event.target?.result as string) || '');
+        img.src = (event.target?.result as string) || '';
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Tải ảnh bài làm tự luận viết tay (được tự động nén tối ưu dung lượng)
+  const handleUploadEssayImage = async (qId: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    for (const file of fileArray) {
+      try {
+        const compressedBase64 = await compressImageFile(file);
+        if (compressedBase64) {
           setEssayImages((prev) => ({
             ...prev,
-            [qId]: [...(prev[qId] || []), base64],
+            [qId]: [...(prev[qId] || []), compressedBase64],
           }));
           setIsAutoSaved(false);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.warn('Lỗi xử lý ảnh tự luận:', err);
+      }
+    }
   };
 
   const handleRemoveEssayImage = (qId: string, imgIdx: number) => {
