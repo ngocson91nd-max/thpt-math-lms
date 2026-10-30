@@ -4,6 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import MathRenderer from '@/components/math/MathRenderer';
+import TeacherDashboard from '@/components/dashboard/TeacherDashboard';
+import StudentDashboard from '@/components/dashboard/StudentDashboard';
 import {
   GraduationCap,
   Sparkles,
@@ -20,6 +22,16 @@ import {
 
 export default function HomePage() {
   const { user, isTeacher } = useAuth();
+
+  // 1. Nếu là Giáo viên / Quản trị viên: Hiển thị ngay Dashboard Giáo viên chuyên nghiệp
+  if (user && isTeacher) {
+    return <TeacherDashboard />;
+  }
+
+  // 2. Nếu là Học sinh đã đăng nhập: Hiển thị ngay Bàn học Học sinh (Student Dashboard)
+  if (user && !isTeacher) {
+    return <StudentDashboard />;
+  }
 
   const previewMathFormula =
     '\\int_0^1 \\frac{2x + 1}{x^2 + x + 1} \\, \\mathrm{d}x = \\ln 3, \\quad \\lim_{x \\to +\\infty} \\left( \\sqrt{x^2 + 2x} - x \\right) = 1';

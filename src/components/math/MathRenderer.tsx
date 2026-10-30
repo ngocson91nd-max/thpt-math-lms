@@ -118,7 +118,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v4_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v5_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {

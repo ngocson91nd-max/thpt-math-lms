@@ -49,6 +49,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
+  // Chỉ số thông báo động (Badge notifications)
+  const [pendingGrading, setPendingGrading] = useState<number>(0);
+  const [pendingApproval, setPendingApproval] = useState<number>(0);
+  const [pendingTasks, setPendingTasks] = useState<number>(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (isTeacher) {
+        // Đếm bài thi đang chờ chấm điểm
+        const subRaw = localStorage.getItem('lms_all_submissions');
+        if (subRaw) {
+          const subs: any[] = JSON.parse(subRaw);
+          const count = subs.filter((s) => s.status === 'submitted' || s.status === 'grading').length;
+          setPendingGrading(count);
+        }
+        // Đếm học sinh chờ duyệt vào lớp
+        const clsRaw = localStorage.getItem('lms_classes');
+        if (clsRaw) {
+          const clss: any[] = JSON.parse(clsRaw);
+          const pCount = clss.reduce((sum, c) => sum + (c.pending_count || 0), 0);
+          setPendingApproval(pCount);
+        }
+      } else if (user) {
+        // Đếm bài tập/đề thi cần làm của học sinh
+        const exRaw = localStorage.getItem('lms_exams');
+        const subRaw = localStorage.getItem('lms_all_submissions');
+        if (exRaw) {
+          const exList: any[] = JSON.parse(exRaw);
+          const subList: any[] = subRaw ? JSON.parse(subRaw) : [];
+          const myExamIds = new Set(
+            subList
+              .filter((s: any) => s.student_id === user.id || (s.student?.email && user.email && s.student.email.toLowerCase() === user.email.toLowerCase()))
+              .map((s: any) => s.exam_id)
+          );
+          const uncompleted = exList.filter((e: any) => !myExamIds.has(e.id) && e.status === 'published').length;
+          setPendingTasks(uncompleted);
+        }
+      }
+    } catch {}
+  }, [isTeacher, user, pathname]);
+
   // Đóng sidebar di động khi chuyển route
   useEffect(() => {
     setMobileOpen(false);
@@ -60,35 +102,72 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
     return null;
   }
 
-  const navGroups: NavGroup[] = [
-    {
-      title: 'HỌC TẬP & LUYỆN THI',
-      links: [
-        { href: '/', label: 'Trang chủ', icon: Home, exact: true },
-        { href: '/exams', label: 'Đề thi & Luyện tập', icon: ClipboardList },
-        ...(isTeacher
-          ? [
-              { href: '/questions', label: 'Ngân hàng câu hỏi', icon: FileQuestion },
-              { href: '/gradebook', label: 'Sổ điểm & Chấm thi', icon: Award },
-            ]
-          : [{ href: '/gradebook', label: 'Điểm số của tôi', icon: Award }]),
-      ],
-    },
-    {
-      title: isTeacher ? 'LỚP HỌC & HỌC LIỆU' : 'HỌC LIỆU & TÀI LIỆU',
-      links: [
-        ...(isTeacher ? [{ href: '/classes', label: 'Quản lý lớp học', icon: GraduationCap }] : []),
-        { href: '/courses', label: 'Khóa học THPT', icon: BookOpen },
-        { href: '/materials', label: 'Học liệu & PDF', icon: FolderDown },
-      ],
-    },
-    {
-      title: 'TRỢ LÝ THÔNG MINH',
-      links: [
-        { href: '/ai-assistant', label: 'AI Trợ lý Toán', icon: Sparkles, badge: 'AI 2025' },
-      ],
-    },
-  ];
+  // Cấu trúc Menu Điều Hướng Riêng Biệt Cho Giáo Viên vs Học Sinh
+  const navGroups: NavGroup[] = isTeacher
+    ? [
+        {
+          title: 'QUẢN LÝ & GIẢNG DẠY',
+          links: [
+            { href: '/', label: 'Bàn làm việc Thầy', icon: Home, exact: true },
+            {
+              href: '/classes',
+              label: 'Quản lý lớp học',
+              icon: GraduationCap,
+              badge: pendingApproval > 0 ? `${pendingApproval} chờ` : undefined,
+            },
+            { href: '/exams', label: 'Đề thi & Kiểm tra', icon: ClipboardList },
+            { href: '/questions', label: 'Ngân hàng câu hỏi', icon: FileQuestion },
+            {
+              href: '/gradebook',
+              label: 'Sổ điểm & Chấm bài',
+              icon: Award,
+              badge: pendingGrading > 0 ? `${pendingGrading} bài` : undefined,
+            },
+          ],
+        },
+        {
+          title: 'HỌC LIỆU & BÀI GIẢNG',
+          links: [
+            { href: '/courses', label: 'Khóa học THPT', icon: BookOpen },
+            { href: '/materials', label: 'Học liệu & PDF', icon: FolderDown },
+          ],
+        },
+        {
+          title: 'TRỢ LÝ SƯ PHẠM',
+          links: [
+            { href: '/ai-assistant', label: 'AI Trợ lý Toán', icon: Sparkles, badge: 'AI 2025' },
+          ],
+        },
+      ]
+    : [
+        {
+          title: 'HỌC TẬP & LUYỆN THI',
+          links: [
+            { href: '/', label: 'Bàn học của em', icon: Home, exact: true },
+            {
+              href: '/exams',
+              label: 'Bài tập & Đề thi',
+              icon: ClipboardList,
+              badge: pendingTasks > 0 ? `${pendingTasks} bài` : undefined,
+            },
+            { href: '/classes', label: 'Lớp học của em', icon: GraduationCap },
+            { href: '/gradebook', label: 'Kết quả & Điểm số', icon: Award },
+          ],
+        },
+        {
+          title: 'TỰ HỌC & TÀI LIỆU',
+          links: [
+            { href: '/courses', label: 'Khóa học THPT', icon: BookOpen },
+            { href: '/materials', label: 'Tài liệu học tập', icon: FolderDown },
+          ],
+        },
+        {
+          title: 'HỖ TRỢ HỌC TẬP',
+          links: [
+            { href: '/ai-assistant', label: 'Hỏi bài Thầy AI', icon: Sparkles, badge: '24/7' },
+          ],
+        },
+      ];
 
   const handleSignOut = async () => {
     setUserDropdownOpen(false);
@@ -176,8 +255,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
 
                       {link.badge && (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                            isActive ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            isActive
+                              ? 'bg-white/20 text-white'
+                              : link.badge.includes('chờ')
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : link.badge.includes('bài')
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-indigo-100 text-indigo-700'
                           }`}
                         >
                           {link.badge}

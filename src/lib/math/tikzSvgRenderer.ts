@@ -8,6 +8,8 @@
 interface Point2D {
   x: number;
   y: number;
+  offsetX?: number;
+  offsetY?: number;
 }
 
 interface DefMap {
@@ -121,15 +123,55 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
     }
   }
 
-  // Tọa độ thường (x, y)
+  // Tọa độ thường (x, y) hoặc tọa độ có bù trừ độ dài pixel (vd: 2pt, -2pt cho vạch chia trục)
   const commaIdx = s.indexOf(',');
   if (commaIdx !== -1) {
-    const xPart = s.substring(0, commaIdx);
-    const yPart = s.substring(commaIdx + 1);
+    const xPart = s.substring(0, commaIdx).trim();
+    const yPart = s.substring(commaIdx + 1).trim();
+
+    let offsetX = 0;
+    let offsetY = 0;
+    let xVal = 0;
+    let yVal = 0;
+
+    if (xPart.endsWith('pt')) {
+      offsetX = (parseFloat(xPart) || 0) * 1.33;
+      xVal = 0;
+    } else {
+      xVal = parseNumber(xPart, defs);
+    }
+
+    if (yPart.endsWith('pt')) {
+      offsetY = (parseFloat(yPart) || 0) * 1.33;
+      yVal = 0;
+    } else {
+      yVal = parseNumber(yPart, defs);
+    }
+
     return {
-      x: parseNumber(xPart, defs),
-      y: parseNumber(yPart, defs),
+      x: xVal,
+      y: yVal,
+      offsetX,
+      offsetY,
     };
+  }
+
+  // Tọa độ cực (polar): (angle:radius) hoặc (angle:rx and ry)
+  const colonIdx = s.indexOf(':');
+  if (colonIdx !== -1 && commaIdx === -1) {
+    const anglePart = s.substring(0, colonIdx).trim();
+    const radPart = s.substring(colonIdx + 1).trim();
+    const angleDeg = parseNumber(anglePart, defs);
+    const rad = (angleDeg * Math.PI) / 180;
+    if (radPart.includes(' and ')) {
+      const [rxStr, ryStr] = radPart.split(' and ');
+      const rx = parseNumber(rxStr, defs);
+      const ry = parseNumber(ryStr, defs);
+      return { x: rx * Math.cos(rad), y: ry * Math.sin(rad) };
+    } else {
+      const r = parseNumber(radPart, defs);
+      return { x: r * Math.cos(rad), y: r * Math.sin(rad) };
+    }
   }
 
   return { x: 0, y: 0 };
@@ -158,6 +200,14 @@ function evalPlotExpr(expr: string, xVal: number, defs: DefMap = {}): number | n
     .replace(/\{\s*\\x\s*\}/g, `(${xVal})`)
     .replace(/\\x\b/g, `(${xVal})`)
     .replace(/(?<![a-zA-Z_])x(?![a-zA-Z_])/g, `(${xVal})`);
+
+  // Xử lý toán tử lũy thừa với dấu trừ đứng trước trong JavaScript:
+  // JS ném SyntaxError khi gặp -2**2 hoặc -(-0.5)**3 vì cần ngoặc đơn
+  let prevClean = '';
+  while (prevClean !== clean) {
+    prevClean = clean;
+    clean = clean.replace(/(^|[(,+=*/-])\s*-\s*([a-zA-Z0-9_.]+|\([^)]+\))\s*\*\*\s*([a-zA-Z0-9_.]+|\([^)]+\))/g, '$1((-1)*($2**$3))');
+  }
 
   try {
     const val = Function(`"use strict"; return (${clean});`)();
@@ -212,6 +262,12 @@ function cleanTikzNodeText(raw: string): string {
   }
 
   // Số mũ và chỉ số dưới thường gặp trong toán học
+  // Dấu phẩy đạo hàm / đỉnh: A' -> A′
+  text = text.replace(/\\prime/g, '′');
+  text = text.replace(/([A-Za-z0-9])''/g, '$1″');
+  text = text.replace(/([A-Za-z0-9])'/g, '$1′');
+
+  // Số mũ toán học
   text = text
     .replace(/\^3/g, '³')
     .replace(/\^2/g, '²')
@@ -222,17 +278,17 @@ function cleanTikzNodeText(raw: string): string {
     .replace(/\^\{4\}/g, '⁴')
     .replace(/\^\{0\}/g, '⁰')
     .replace(/\^\{\\circ\}/g, '°')
-    .replace(/\^\\circ/g, '°')
-    .replace(/_0/g, '₀')
-    .replace(/_1/g, '₁')
-    .replace(/_2/g, '₂')
-    .replace(/_3/g, '₃')
-    .replace(/_\{0\}/g, '₀')
-    .replace(/_\{1\}/g, '₁')
-    .replace(/_\{2\}/g, '₂')
-    .replace(/_\{3\}/g, '₃')
-    .replace(/_x/g, 'ₓ')
-    .replace(/_y/g, 'ᵧ');
+    .replace(/\^\\circ/g, '°');
+
+  // Chỉ số dưới (subscript) toán học: A_1 -> A₁, x_0 -> x₀, G_1 -> G₁
+  const subscriptMap: { [k: string]: string } = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+    '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+    'x': 'ₓ', 'y': 'ᵧ',
+  };
+  text = text.replace(/_\{([0-9xy])\}/g, (_m, d) => subscriptMap[d] || d);
+  text = text.replace(/_([0-9xy])/g, (_m, d) => subscriptMap[d] || d);
+  text = text.replace(/([A-Za-z])([0-9])\b/g, (_m, l, d) => l + (subscriptMap[d] || d));
 
   // Ký tự Hy Lạp & Toán học
   text = text
@@ -391,21 +447,47 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   let minY = typeof defs.ymin === 'number' ? (defs.ymin as number) : Infinity;
   let maxY = typeof defs.ymax === 'number' ? (defs.ymax as number) : -Infinity;
 
-  const updateBounds = (x: number, y: number) => {
+  const updateBounds = (x: number, y: number, pt?: Point2D) => {
     if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) return;
+    if (pt && ((pt.offsetX !== undefined && pt.offsetX !== 0) || (pt.offsetY !== undefined && pt.offsetY !== 0))) {
+      return;
+    }
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
     if (y < minY) minY = y;
     if (y > maxY) maxY = y;
   };
 
-  // 3. Phân tích tọa độ: \coordinate (A) at (x, y);
-  const coordRegex = /\\coordinate\s*\(([^)]+)\)\s*at\s*(\([^;]+\));/g;
+  // 2b. Phân tích vùng clip nếu có: \clip (xmin, ymin) rectangle (xmax, ymax);
+  let clipRect: { x1: number; y1: number; x2: number; y2: number } | null = null;
+  const clipMatch = rawTikz.match(/\\clip\s*(\([^)]+\))\s*rectangle\s*(\([^)]+\));/);
+  if (clipMatch) {
+    const cp1 = parsePoint(clipMatch[1], coords, defs);
+    const cp2 = parsePoint(clipMatch[2], coords, defs);
+    clipRect = {
+      x1: Math.min(cp1.x, cp2.x),
+      y1: Math.min(cp1.y, cp2.y),
+      x2: Math.max(cp1.x, cp2.x),
+      y2: Math.max(cp1.y, cp2.y),
+    };
+  }
+
+  // 3. Phân tích tọa độ: \coordinate (A) at (x, y); hoặc \coordinate[label=...] (A) at (x, y);
+  const coordRegex = /\\coordinate(?:\s*\[([^\]]*)\])?\s*\(([^)]+)\)\s*at\s*(\([^;]+\));/g;
   while ((m = coordRegex.exec(rawTikz)) !== null) {
-    const name = m[1].trim();
-    const pt = parsePoint(m[2], coords, defs);
+    const opts = m[1] || '';
+    const name = m[2].trim();
+    const pt = parsePoint(m[3], coords, defs);
     coords[name] = pt;
     updateBounds(pt.x, pt.y);
+
+    // Nếu có label ví dụ label=above:$S$ hoặc label=below right:$A$
+    const labelMatch = opts.match(/label=([^:]+):\{?\$?([^$}]+)\$?\}?/);
+    if (labelMatch) {
+      const pos = labelMatch[1].trim();
+      const text = cleanTikzNodeText(labelMatch[2].trim());
+      drawItems.push({ type: 'node', pt, text, pos });
+    }
   }
 
   // 4. Phân tích lưới tọa độ: \draw[thick] (0,0) grid (5,5);
@@ -497,6 +579,9 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     cleanLines = cleanLines.substring(0, start) + cleanLines.substring(end);
   }
 
+  // Loại bỏ các câu lệnh \foreach vạch chia trục khỏi cleanLines để Section 7 không phân tích nhầm
+  cleanLines = cleanLines.replace(/\\foreach\s*\\([xy])\s*in\s*\{[^}]+\}\s*\\draw\s*\([^)]+\)\s*--\s*\([^)]+\);/g, '');
+
   // 6. PHÂN TÍCH NHÃN VĂN BẢN (CẢ \node VÀ INLINE node TRONG \draw)
   let nodeSearchIdx = 0;
   while (nodeSearchIdx < cleanLines.length) {
@@ -545,8 +630,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
   }
 
-  // 7. PHÂN TÍCH ĐOẠN THẲNG & MŨI TÊN: \draw[options] (A) -- (B) ... ;
-  const lineStmtRegex = /\\draw(\[[^\]]*\])?\s*([^(;]*\([^;]+);/g;
+  // 7. PHÂN TÍCH ĐOẠN THẲNG, MŨI TÊN & HÌNH CHỮ NHẬT: \draw[options] ... ;
+  const lineStmtRegex = /\\(?:draw|filldraw|path)(\[[^\]]*\])?\s*([^(;]*\([^;]+);/g;
   while ((m = lineStmtRegex.exec(cleanLines)) !== null) {
     const opts = m[1] || '';
     const body = m[2];
@@ -558,22 +643,56 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     const isDashed = opts.includes('dashed');
     const isThick = opts.includes('thick');
 
-    // Tách các cặp đoạn thẳng: "(C) -- (A)" hoặc "(B) -- (A)"
-    const segMatches = Array.from(bodyWithoutNodes.matchAll(/\(([^)]+)\)\s*--\s*\(([^)]+)\)/g));
-    if (segMatches.length > 0) {
-      for (const sm of segMatches) {
-        const p1 = parsePoint(sm[1], coords, defs);
-        const p2 = parsePoint(sm[2], coords, defs);
+    // Kiểm tra lệnh rectangle: (p1) rectangle (p2)
+    const rectRegex = /\(([^)]+)\)\s*rectangle\s*\(([^)]+)\)/g;
+    let rectMatch;
+    let hasRectangle = false;
+    while ((rectMatch = rectRegex.exec(bodyWithoutNodes)) !== null) {
+      hasRectangle = true;
+      const p1 = parsePoint(rectMatch[1], coords, defs);
+      const p2 = parsePoint(rectMatch[2], coords, defs);
+      const c1 = { x: p1.x, y: p1.y };
+      const c2 = { x: p2.x, y: p1.y };
+      const c3 = { x: p2.x, y: p2.y };
+      const c4 = { x: p1.x, y: p2.y };
+      const corners = [c1, c2, c3, c4];
+      for (let i = 0; i < 4; i++) {
         drawItems.push({
           type: 'line',
-          p1,
-          p2,
-          isArrow,
+          p1: corners[i],
+          p2: corners[(i + 1) % 4],
+          isArrow: false,
           isDashed,
           isThick,
         });
-        updateBounds(p1.x, p1.y);
-        updateBounds(p2.x, p2.y);
+      }
+      corners.forEach((c) => updateBounds(c.x, c.y, c));
+    }
+    if (hasRectangle) continue;
+
+    const normalizedBody = bodyWithoutNodes.replace(/\s+to\s+/g, ' -- ');
+
+    // Tách các chuỗi subpaths: "(A) -- (B) -- (C)" hoặc "(A) -- (B) -- cycle"
+    const subpaths = normalizedBody.match(/(?:\([^)]+\)\s*--\s*)+(?:\([^)]+\)|cycle)/g) || [];
+    if (subpaths.length > 0) {
+      for (const sp of subpaths) {
+        const rawPts = Array.from(sp.matchAll(/\(([^)]+)\)|cycle/g)).map((match) => match[1] || match[0]);
+        for (let i = 0; i < rawPts.length - 1; i++) {
+          const p1Str = rawPts[i];
+          const p2Str = rawPts[i + 1] === 'cycle' ? rawPts[0] : rawPts[i + 1];
+          const p1 = parsePoint(p1Str, coords, defs);
+          const p2 = parsePoint(p2Str, coords, defs);
+          drawItems.push({
+            type: 'line',
+            p1,
+            p2,
+            isArrow: isArrow && (i === rawPts.length - 2),
+            isDashed,
+            isThick,
+          });
+          updateBounds(p1.x, p1.y, p1);
+          updateBounds(p2.x, p2.y, p2);
+        }
       }
     } else {
       const ptMatches = bodyWithoutNodes.match(/\(([^)]+)\)/g) || [];
@@ -588,8 +707,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
           isDashed,
           isThick,
         });
-        updateBounds(p1.x, p1.y);
-        updateBounds(p2.x, p2.y);
+        updateBounds(p1.x, p1.y, p1);
+        updateBounds(p2.x, p2.y, p2);
       }
     }
   }
@@ -689,16 +808,16 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       if (axis === 'x') {
         drawItems.push({
           type: 'line',
-          p1: { x: v, y: 0.1 },
-          p2: { x: v, y: -0.1 },
+          p1: { x: v, y: 0, offsetY: 3 },
+          p2: { x: v, y: 0, offsetY: -3 },
           isThick: false,
         });
         updateBounds(v, 0);
       } else {
         drawItems.push({
           type: 'line',
-          p1: { x: -0.1, y: v },
-          p2: { x: 0.1, y: v },
+          p1: { x: 0, y: v, offsetX: -3 },
+          p2: { x: 0, y: v, offsetX: 3 },
           isThick: false,
         });
         updateBounds(0, v);
@@ -719,12 +838,12 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   // Thiết lập kích thước SVG thoáng rộng, to rõ và sắc nét
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const marginX = Math.max(0.3, spanX * 0.12);
-  const marginY = Math.max(0.3, spanY * 0.12);
-  const boundMinX = minX - marginX;
-  const boundMaxX = maxX + marginX;
-  const boundMinY = minY - marginY;
-  const boundMaxY = maxY + marginY;
+  const marginX = (defs.xmin !== undefined && defs.xmax !== undefined) ? 0.25 : Math.max(0.3, spanX * 0.12);
+  const marginY = (defs.ymin !== undefined && defs.ymax !== undefined) ? 0.25 : Math.max(0.3, spanY * 0.12);
+  const boundMinX = (typeof defs.xmin === 'number' ? defs.xmin : minX) - marginX;
+  const boundMaxX = (typeof defs.xmax === 'number' ? defs.xmax : maxX) + marginX;
+  const boundMinY = (typeof defs.ymin === 'number' ? defs.ymin : minY) - marginY;
+  const boundMaxY = (typeof defs.ymax === 'number' ? defs.ymax : maxY) + marginY;
 
   const pad = 28;
   const targetW = Math.max(340, Math.round(380 * globalScale));
@@ -733,29 +852,48 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   const width = Math.max(340, Math.round((boundMaxX - boundMinX) * scale + 2 * pad));
   const height = Math.max(220, Math.round((boundMaxY - boundMinY) * scale + 2 * pad));
 
-  const toSvgX = (x: number) => pad + (x - boundMinX) * scale;
-  const toSvgY = (y: number) => height - (pad + (y - boundMinY) * scale);
+  const toSvgX = (pt: Point2D | number) => {
+    if (typeof pt === 'number') return pad + (pt - boundMinX) * scale;
+    return pad + (pt.x - boundMinX) * scale + (pt.offsetX || 0);
+  };
+  const toSvgY = (pt: Point2D | number) => {
+    if (typeof pt === 'number') return height - (pad + (pt - boundMinY) * scale);
+    return height - (pad + (pt.y - boundMinY) * scale) - (pt.offsetY || 0);
+  };
 
   const svgElements: string[] = [];
 
-  // Mũi tên trục tọa độ sắc nét
-  svgElements.push(`
+  // Mũi tên trục tọa độ stealth sắc nét chuẩn LaTeX
+  let defsBlock = `
     <defs>
       <marker id="tikz-arrow-pure" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#334155" />
-      </marker>
-    </defs>
-  `);
+        <path d="M 0 1.5 Q 4 5 0 8.5 L 10 5 Z" fill="#0f172a" />
+      </marker>`;
+
+  if (clipRect) {
+    const clipX = toSvgX(clipRect.x1);
+    const clipY = toSvgY(clipRect.y2);
+    const clipW = Math.max(1, toSvgX(clipRect.x2) - clipX);
+    const clipH = Math.max(1, toSvgY(clipRect.y1) - clipY);
+    defsBlock += `
+      <clipPath id="tikz-clip-bounds">
+        <rect x="${clipX.toFixed(1)}" y="${clipY.toFixed(1)}" width="${clipW.toFixed(1)}" height="${clipH.toFixed(1)}" />
+      </clipPath>`;
+  }
+
+  defsBlock += `
+    </defs>`;
+  svgElements.push(defsBlock);
 
   // Render các thành phần
   for (const item of drawItems) {
     if (item.type === 'line' && item.p1 && item.p2) {
-      const x1 = toSvgX(item.p1.x).toFixed(1);
-      const y1 = toSvgY(item.p1.y).toFixed(1);
-      const x2 = toSvgX(item.p2.x).toFixed(1);
-      const y2 = toSvgY(item.p2.y).toFixed(1);
-      const stroke = item.isArrow ? '#334155' : item.isDashed ? '#64748b' : '#1e293b';
-      const strokeWidth = item.isThick ? '2.0' : '1.4';
+      const x1 = toSvgX(item.p1).toFixed(1);
+      const y1 = toSvgY(item.p1).toFixed(1);
+      const x2 = toSvgX(item.p2).toFixed(1);
+      const y2 = toSvgY(item.p2).toFixed(1);
+      const stroke = item.isArrow ? '#0f172a' : item.isDashed ? '#64748b' : '#1e293b';
+      const strokeWidth = item.isThick ? '1.8' : '1.3';
       const dash = item.isDashed ? 'stroke-dasharray="4,4"' : '';
       const marker = item.isArrow ? 'marker-end="url(#tikz-arrow-pure)"' : '';
       svgElements.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dash} ${marker} stroke-linecap="round" />`);
@@ -780,7 +918,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       for (let i = 0; i <= steps; i++) {
         const x = item.startX + i * dx;
         const y = evalPlotExpr(item.expr, x, defs);
-        const isDiscontinuous = prevY !== null && y !== null && Math.abs(y - prevY) > spanY * 1.5;
+        const hasAsymptote = item.expr.includes('/') || item.expr.includes('tan');
+        const isDiscontinuous = hasAsymptote && prevY !== null && y !== null && Math.abs(y - prevY) > spanY * 1.5;
 
         if (y !== null && isFinite(y) && y >= boundMinY - spanY * 2 && y <= boundMaxY + spanY * 2 && !isDiscontinuous) {
           const sx = toSvgX(x).toFixed(1);
@@ -798,15 +937,16 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       }
 
       if (pathD) {
-        svgElements.push(`<path d="${pathD}" fill="none" stroke="${item.color || '#2563eb'}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />`);
+        const clipAttr = clipRect ? 'clip-path="url(#tikz-clip-bounds)"' : '';
+        svgElements.push(`<path d="${pathD}" fill="none" stroke="${item.color || '#2563eb'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" ${clipAttr} />`);
       }
     } else if (item.type === 'point' && item.pt) {
-      const cx = toSvgX(item.pt.x).toFixed(1);
-      const cy = toSvgY(item.pt.y).toFixed(1);
-      svgElements.push(`<circle cx="${cx}" cy="${cy}" r="${item.radius || 2.8}" fill="#0f172a" />`);
+      const cx = toSvgX(item.pt).toFixed(1);
+      const cy = toSvgY(item.pt).toFixed(1);
+      svgElements.push(`<circle cx="${cx}" cy="${cy}" r="${item.radius || 2.4}" fill="#0f172a" />`);
     } else if (item.type === 'ellipse' && item.pt && item.rx && item.ry) {
-      const cx = toSvgX(item.pt.x).toFixed(1);
-      const cy = toSvgY(item.pt.y).toFixed(1);
+      const cx = toSvgX(item.pt).toFixed(1);
+      const cy = toSvgY(item.pt).toFixed(1);
       const rx = (item.rx * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
       const ry = (item.ry * ((height - 2 * pad) / (boundMaxY - boundMinY))).toFixed(1);
       svgElements.push(`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${item.fill || '#cffafe'}" stroke="${item.stroke || '#0f172a'}" stroke-width="1.8" />`);
@@ -819,10 +959,10 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const endPtX = centerX + r * Math.cos(endRad);
       const endPtY = centerY + r * Math.sin(endRad);
 
-      const ox = toSvgX(item.origin.x).toFixed(1);
-      const oy = toSvgY(item.origin.y).toFixed(1);
-      const sx = toSvgX(item.startPt.x).toFixed(1);
-      const sy = toSvgY(item.startPt.y).toFixed(1);
+      const ox = toSvgX(item.origin).toFixed(1);
+      const oy = toSvgY(item.origin).toFixed(1);
+      const sx = toSvgX(item.startPt).toFixed(1);
+      const sy = toSvgY(item.startPt).toFixed(1);
       const ex = toSvgX(endPtX).toFixed(1);
       const ey = toSvgY(endPtY).toFixed(1);
       const rSvg = (r * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
@@ -839,8 +979,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const endPtX = centerX + r * Math.cos(endRad);
       const endPtY = centerY + r * Math.sin(endRad);
 
-      const sx = toSvgX(item.startPt.x).toFixed(1);
-      const sy = toSvgY(item.startPt.y).toFixed(1);
+      const sx = toSvgX(item.startPt).toFixed(1);
+      const sy = toSvgY(item.startPt).toFixed(1);
       const ex = toSvgX(endPtX).toFixed(1);
       const ey = toSvgY(endPtY).toFixed(1);
       const rSvg = (r * ((width - 2 * pad) / (boundMaxX - boundMinX))).toFixed(1);
@@ -849,8 +989,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const pathD = `M ${sx} ${sy} A ${rSvg} ${rSvg} 0 0 ${sweep} ${ex} ${ey}`;
       svgElements.push(`<path d="${pathD}" fill="none" stroke="${item.stroke || '#0f172a'}" stroke-width="1.6" />`);
     } else if (item.type === 'node' && item.pt && item.text) {
-      const cx = toSvgX(item.pt.x);
-      const cy = toSvgY(item.pt.y);
+      const cx = toSvgX(item.pt);
+      const cy = toSvgY(item.pt);
       let dx = 0, dy = 0;
       let anchor = 'middle';
       const pos = item.pos || '';
@@ -861,27 +1001,30 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const isRight = pos.includes('right');
 
       if (isBelow && isLeft) {
-        dx = -9; dy = 15; anchor = 'end';
+        dx = -8; dy = 13; anchor = 'end';
       } else if (isBelow && isRight) {
-        dx = 9; dy = 15; anchor = 'start';
+        dx = 8; dy = 13; anchor = 'start';
       } else if (isAbove && isLeft) {
-        dx = -9; dy = -9; anchor = 'end';
+        dx = -8; dy = -8; anchor = 'end';
       } else if (isAbove && isRight) {
-        dx = 9; dy = -9; anchor = 'start';
+        dx = 8; dy = -8; anchor = 'start';
       } else if (isBelow) {
-        dy = 15; anchor = 'middle';
+        dy = 13; anchor = 'middle';
       } else if (isAbove) {
-        dy = -9; anchor = 'middle';
+        dy = -8; anchor = 'middle';
       } else if (isLeft) {
-        dx = -10; dy = 5; anchor = 'end';
+        dx = -9; dy = 4; anchor = 'end';
       } else if (isRight) {
-        dx = 10; dy = 5; anchor = 'start';
+        dx = 9; dy = 4; anchor = 'start';
       } else {
-        dy = 5; anchor = 'middle';
+        dy = 4; anchor = 'middle';
       }
 
-      // Font size to rõ (15.5px) kèm viền stroke trắng chống đè nét
-      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15.5" font-style="italic" font-weight="bold" fill="#0f172a" paint-order="stroke fill" stroke="#ffffff" stroke-width="4.2" stroke-linejoin="round" text-anchor="${anchor}">${item.text}</text>`);
+      const isPureNumber = /^-?[0-9]+(?:\.[0-9]+)?$/.test(item.text);
+      const fontStyle = isPureNumber ? 'normal' : 'italic';
+      const fontFamily = "KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif";
+
+      svgElements.push(`<text x="${(cx + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="${fontFamily}" font-size="14.5" font-style="${fontStyle}" font-weight="normal" fill="#0f172a" paint-order="stroke fill" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" text-anchor="${anchor}">${item.text}</text>`);
     }
   }
 

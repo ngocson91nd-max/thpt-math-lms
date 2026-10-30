@@ -30,11 +30,18 @@ export function cleanLatexSymbol(s: string): string {
     .replace(/\\infty/g, '∞')
     .replace(/\\dfrac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
     .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛$1')
     .replace(/\\sqrt\{([^}]+)\}/g, '√$1')
     .replace(/\\cdot/g, '·')
     .replace(/\\pm/g, '±')
     .replace(/\\mp/g, '∓')
     .replace(/\\pi/g, 'π')
+    .replace(/\\prime/g, '′')
+    .replace(/'/g, '′')
+    .replace(/\^2/g, '²')
+    .replace(/\^3/g, '³')
+    .replace(/_\{([0-9])\}/g, (_m, d) => ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'][parseInt(d, 10)] || d)
+    .replace(/_([0-9])/g, (_m, d) => ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'][parseInt(d, 10)] || d)
     .replace(/\{/g, '')
     .replace(/\}/g, '')
     .replace(/[\$]/g, '')
@@ -192,7 +199,7 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
         doubleBarLines += `<line x1="${sx - 2.5}" y1="${row2Y}" x2="${sx - 2.5}" y2="${totalH}" stroke="#334155" stroke-width="1.3" /><line x1="${sx + 2.5}" y1="${row2Y}" x2="${sx + 2.5}" y2="${totalH}" stroke="#334155" stroke-width="1.3" />`;
       } else {
         const color = s === '+' ? '#16a34a' : s === '-' ? '#dc2626' : '#475569';
-        signsElements += `<text x="${sx}" y="${sy}" fill="${color}" font-size="18" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(s)}</text>`;
+        signsElements += `<text x="${sx}" y="${sy}" fill="${color}" font-size="18" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(s)}</text>`;
       }
     }
   }
@@ -215,16 +222,16 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
       // Bên trái vạch đôi
       const leftY = (item.leftPos || item.pos).includes('+') ? highY : lowY;
       const leftText = item.leftVal || item.val || '-\\infty';
-      variationElements += `<text x="${x - 24}" y="${leftY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(leftText)}</text>`;
+      variationElements += `<text x="${x - 24}" y="${leftY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(leftText)}</text>`;
 
       // Bên phải vạch đôi
       const rightY = (item.rightPos || '+').includes('+') ? highY : lowY;
       const rightText = item.rightVal || '+\\infty';
-      variationElements += `<text x="${x + 24}" y="${rightY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(rightText)}</text>`;
+      variationElements += `<text x="${x + 24}" y="${rightY + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(rightText)}</text>`;
     } else {
       // ĐIỂM CỰC TRỊ / ĐIỂM BÌNH THƯỜNG
       const y = item.pos.includes('+') ? highY : lowY;
-      variationElements += `<text x="${x}" y="${y + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(item.val)}</text>`;
+      variationElements += `<text x="${x}" y="${y + 6}" fill="#0f172a" font-size="16.5" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(item.val)}</text>`;
     }
   }
 
@@ -273,8 +280,8 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   let xPointsElements = '';
   for (let i = 0; i < xVals.length; i++) {
     const xPos = xCoords[i];
-    xPointsElements += `<text x="${xPos}" y="${row1Y + 31}" fill="#0f172a" font-size="17" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>`;
+    xPointsElements += `<text x="${xPos}" y="${row1Y + 31}" fill="#0f172a" font-size="17" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(xVals[i])}</text>`;
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-3 bg-white rounded-2xl shadow-xs border border-slate-300 select-none" style="max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M 1 2 L 11 6 L 1 10 L 3.5 6 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-3 bg-white rounded-2xl shadow-xs border border-slate-300 select-none" style="max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M 1 2.5 L 11 6 L 1 9.5 L 3.2 6 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
 }

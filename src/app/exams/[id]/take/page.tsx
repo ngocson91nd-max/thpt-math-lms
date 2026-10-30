@@ -1296,58 +1296,88 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
         {/* 3. Trắc nghiệm Đúng / Sai (Phần II) */}
         {q.type === 'true_false' && (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-2xs">
-            <table className="w-full text-left text-sm sm:text-base border-collapse bg-white">
-              <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500 border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-4 w-12 text-center">Ý</th>
-                  <th className="py-3 px-4">Nội dung mệnh đề</th>
-                  <th className="py-3 px-4 w-28 text-center">Đúng</th>
-                  <th className="py-3 px-4 w-28 text-center">Sai</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {q.options?.map((stmt: any) => {
-                  const val = (answers[q.id] || {})[stmt.id];
-                  return (
-                    <tr key={stmt.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-center text-slate-700 uppercase text-sm sm:text-base">
-                        {stmt.id})
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-800 text-[15.5px] sm:text-[16.5px] leading-relaxed">
-                        <MathRenderer content={stmt.text} />
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleTrueFalseSelect(q.id, stmt.id, true)}
-                          className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-                            val === true
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          Đúng
-                        </button>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleTrueFalseSelect(q.id, stmt.id, false)}
-                          className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-                            val === false
-                              ? 'bg-rose-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          Sai
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* Danh sách 4 mệnh đề a), b), c), d) bên trái */}
+            <div className="flex-1 min-w-0 space-y-3.5 w-full">
+              {q.options?.map((stmt: any, sIdx: number) => {
+                const rawId = stmt.id || ['a', 'b', 'c', 'd'][sIdx];
+                const letter = String(rawId).toLowerCase();
+                return (
+                  <div
+                    key={stmt.id}
+                    className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="font-bold text-slate-900 shrink-0 text-base sm:text-[17px] mt-0.5">
+                      {letter})
+                    </span>
+                    <div className="flex-1 min-w-0 text-slate-800 text-[15.5px] sm:text-[16.5px] leading-relaxed">
+                      <MathRenderer content={stmt.text} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bảng câu trả lời bên phải */}
+            <div className="w-full lg:w-72 shrink-0 rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <span className="font-bold text-xs uppercase tracking-wider text-slate-700">
+                  Bảng câu trả lời
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400">
+                  Chọn Đúng / Sai
+                </span>
+              </div>
+              <table className="w-full text-center border-collapse">
+                <thead className="bg-slate-50/70 text-xs font-semibold text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="py-2.5 px-3 w-14 text-center">Ý</th>
+                    <th className="py-2.5 px-3 text-center">Đúng</th>
+                    <th className="py-2.5 px-3 text-center">Sai</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {q.options?.map((stmt: any, sIdx: number) => {
+                    const rawId = stmt.id || ['a', 'b', 'c', 'd'][sIdx];
+                    const letter = String(rawId).toLowerCase();
+                    const val = (answers[q.id] || {})[stmt.id];
+                    return (
+                      <tr key={stmt.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-3 font-bold text-center text-slate-800 text-sm sm:text-base">
+                          {letter})
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleTrueFalseSelect(q.id, stmt.id, true)}
+                            className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                              val === true
+                                ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/20'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            Đúng
+                          </button>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleTrueFalseSelect(q.id, stmt.id, false)}
+                            className={`h-9 w-20 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                              val === false
+                                ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/20'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            Sai
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1895,8 +1925,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                                       key={sub}
                                       className="flex items-center justify-between bg-slate-50 rounded-xl px-2.5 py-1.5 border border-slate-200"
                                     >
-                                      <span className="text-xs font-bold text-slate-700 uppercase">
-                                        Ý {sub})
+                                      <span className="text-xs font-bold text-slate-900 lowercase">
+                                        {sub})
                                       </span>
                                       <div className="flex items-center gap-1.5">
                                         <button
@@ -2390,11 +2420,43 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
                               {/* Đúng / Sai cho Phần II */}
                               {q.type === 'true_false' && (
-                                <div
-                                  onClick={() => jumpToQuestion(idx, q.id)}
-                                  className="text-center py-1 text-[11px] text-indigo-600 font-semibold cursor-pointer hover:underline"
-                                >
-                                  {isAnswered ? '✓ Đã chọn 4 ý' : 'Bấm để chọn 4 ý Đúng/Sai'}
+                                <div className="space-y-1 pt-1">
+                                  <div className="grid grid-cols-4 gap-1 text-center">
+                                    {['a', 'b', 'c', 'd'].map((sub) => {
+                                      const currentVal = (answers[q.id] || {})[sub];
+                                      return (
+                                        <div key={sub} className="flex flex-col items-center gap-0.5">
+                                          <span className="text-[10px] font-bold text-slate-700">{sub})</span>
+                                          <div className="flex flex-col gap-0.5 w-full">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleTrueFalseSelect(q.id, sub, true)}
+                                              className={`h-5 w-full rounded text-[10px] font-bold transition cursor-pointer ${
+                                                currentVal === true
+                                                  ? 'bg-emerald-600 text-white shadow-2xs font-extrabold'
+                                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                              }`}
+                                              title={`Ý ${sub} Đúng`}
+                                            >
+                                              Đ
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleTrueFalseSelect(q.id, sub, false)}
+                                              className={`h-5 w-full rounded text-[10px] font-bold transition cursor-pointer ${
+                                                currentVal === false
+                                                  ? 'bg-rose-600 text-white shadow-2xs font-extrabold'
+                                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                              }`}
+                                              title={`Ý ${sub} Sai`}
+                                            >
+                                              S
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               )}
 
