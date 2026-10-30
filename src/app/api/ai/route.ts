@@ -151,7 +151,7 @@ Lớp: ${body.grade || 12}`;
               if (parsed.content && Array.isArray(parsed.options) && parsed.correct_answer) {
                 return NextResponse.json({
                   success: true,
-                  provider: `gemini-${activeModel}`,
+                  provider: activeModel,
                   similarQuestion: parsed,
                 });
               }
@@ -162,7 +162,7 @@ Lớp: ${body.grade || 12}`;
 
           return NextResponse.json({
             success: true,
-            provider: `gemini-${activeModel}`,
+            provider: activeModel,
             result: rawText,
           });
         }
