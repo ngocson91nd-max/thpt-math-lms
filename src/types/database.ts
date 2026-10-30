@@ -185,6 +185,7 @@ export interface Exam {
   shuffle_true_false?: boolean;
   is_locked?: boolean;
   submissions_count?: number;
+  questions_count?: number;
   questions?: (Question & { custom_points?: number; order_index?: number })[];
   created_at?: string;
   updated_at?: string;
@@ -217,6 +218,7 @@ export interface Submission {
   score?: number;
   max_score: number;
   status: SubmissionStatus;
+  tab_switch_count?: number;
   teacher_feedback?: string;
   ai_feedback?: string;
   answers?: SubmissionAnswer[];

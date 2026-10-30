@@ -1613,7 +1613,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                           </button>
 
                           <Link
-                            href={`/exams/${exam.id}/take`}
+                            href={`/exams/${exam.id}/monitor`}
                             className="inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition"
                             title="Giám sát phòng thi thời gian thực"
                           >

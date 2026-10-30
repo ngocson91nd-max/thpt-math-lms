@@ -371,6 +371,23 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       const now = new Date();
       setLastSavedTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
       setIsAutoSaved(true);
+
+      // Cập nhật tín hiệu Live Presence tới Phòng giám sát thi của Giáo viên
+      const stuId = user?.id || 'demo-student';
+      const ansCount = Object.keys(answers).length;
+      const presencePayload = {
+        studentId: stuId,
+        fullName: user?.full_name || 'Học sinh',
+        email: user?.email || '',
+        schoolName: user?.school_name || 'THPT Chuyên',
+        status: tabSwitchCount > 0 ? 'violation' : 'taking',
+        answeredCount: ansCount,
+        totalCount: questions.length,
+        tabSwitchCount,
+        lastPing: Date.now(),
+      };
+      localStorage.setItem(`lms_presence_${exam.id}_${stuId}`, JSON.stringify(presencePayload));
+      broadcastDataChange('ALL_UPDATED', { type: 'PRESENCE', data: presencePayload });
     } catch (e) {
       console.warn('Lỗi tự động lưu:', e);
     }

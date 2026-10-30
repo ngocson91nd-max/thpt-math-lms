@@ -3,6 +3,7 @@
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
+import { useAuth } from '@/context/AuthContext';
 import { MOCK_SUBMISSIONS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import MathRenderer from '@/components/math/MathRenderer';
 import {
@@ -15,6 +16,8 @@ import {
   Sparkles,
   HelpCircle,
   BookOpen,
+  Pencil,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function ExamResultPage({
@@ -23,6 +26,7 @@ export default function ExamResultPage({
   params: Promise<{ id: string; submissionId: string }>;
 }) {
   const resolvedParams = use(params);
+  const { user, isTeacher, isAdmin } = useAuth();
 
   // Khởi tạo submission từ cache nếu có
   const [submission, setSubmission] = useState<any>(() => {
@@ -67,6 +71,25 @@ export default function ExamResultPage({
           }
           if (d.submission.exam) {
             setExam(d.submission.exam);
+            if (!d.submission.exam.questions || d.submission.exam.questions.length === 0) {
+              fetch(`/api/exams?id=${d.submission.exam_id || resolvedParams.id}`)
+                .then((r) => r.json())
+                .then((ed) => {
+                  if (ed.success && ed.exam) {
+                    setExam(ed.exam);
+                  }
+                })
+                .catch(() => {});
+            }
+          } else {
+            fetch(`/api/exams?id=${resolvedParams.id}`)
+              .then((r) => r.json())
+              .then((ed) => {
+                if (ed.success && ed.exam) {
+                  setExam(ed.exam);
+                }
+              })
+              .catch(() => {});
           }
         }
       })

@@ -26,9 +26,13 @@ export interface GradeExamResult {
 export function normalizeShortAnswer(val: any): string {
   if (val === null || val === undefined) return '';
   let str = String(val).trim().toLowerCase();
-  // Thay thế dấu phẩy thập phân
+  // Bỏ dấu $ nếu học sinh gõ LaTeX: $14$ -> 14
+  str = str.replace(/\$/g, '');
+  // Bỏ các tiền tố như "x=", "s=", "d="
+  str = str.replace(/^[a-z]\s*=\s*/, '');
+  // Thay thế dấu phẩy thập phân kiểu Việt Nam
   str = str.replace(',', '.');
-  return str;
+  return str.trim();
 }
 
 /**
@@ -148,13 +152,27 @@ export function gradeSingleQuestion(
     const correctMap = (question.correct_answer || {}) as Record<string, boolean>;
     const studentMap = (studentAnswer || {}) as Record<string, boolean>;
 
+    // Chuẩn hóa keys về chữ thường (hỗ trợ cả a, b, c, d lẫn A, B, C, D)
+    const normCorrect: Record<string, boolean> = {};
+    if (correctMap && typeof correctMap === 'object') {
+      Object.keys(correctMap).forEach((k) => {
+        normCorrect[k.toLowerCase().trim()] = Boolean(correctMap[k]);
+      });
+    }
+    const normStudent: Record<string, boolean> = {};
+    if (studentMap && typeof studentMap === 'object') {
+      Object.keys(studentMap).forEach((k) => {
+        normStudent[k.toLowerCase().trim()] = Boolean(studentMap[k]);
+      });
+    }
+
     const statementKeys = ['a', 'b', 'c', 'd'];
     let correctCount = 0;
 
     for (const key of statementKeys) {
       if (
-        studentMap[key] !== undefined &&
-        Boolean(studentMap[key]) === Boolean(correctMap[key])
+        normStudent[key] !== undefined &&
+        normStudent[key] === normCorrect[key]
       ) {
         correctCount++;
       }
@@ -213,11 +231,12 @@ export function gradeSingleQuestion(
 }
 
 /**
- * Chấm điểm toàn bộ đề thi phía máy chủ, quy đổi sang thang điểm 10 chuẩn
+ * Chấm điểm toàn bộ đề thi phía máy chủ, quy đổi sang thang điểm chuẩn
  */
 export function gradeExamSubmission(
   questions: (Question & { custom_points?: number })[],
-  studentAnswersMap: Record<string, any>
+  studentAnswersMap: Record<string, any>,
+  targetMaxScore: number = 10
 ): GradeExamResult {
   let rawEarnedPoints = 0;
   let rawMaxPoints = 0;
@@ -240,11 +259,14 @@ export function gradeExamSubmission(
     }
   }
 
-  // Quy đổi điểm về thang 10
-  const normalizedScore =
-    rawMaxPoints > 0
-      ? Number(((rawEarnedPoints / rawMaxPoints) * 10).toFixed(2))
-      : 0;
+  // Nếu đề thi đã được thiết kế sẵn điểm số theo thang 10 (tổng điểm các câu từ 9.0 đến 11.5 điểm):
+  // Điểm đạt được là tổng điểm trực tiếp của các câu đã làm đúng, không bị ép chia giảm tỷ lệ
+  let normalizedScore = 0;
+  if (rawMaxPoints >= 9.0 && rawMaxPoints <= 11.5) {
+    normalizedScore = Math.min(targetMaxScore, Number(rawEarnedPoints.toFixed(2)));
+  } else if (rawMaxPoints > 0) {
+    normalizedScore = Number(((rawEarnedPoints / rawMaxPoints) * targetMaxScore).toFixed(2));
+  }
 
   return {
     score: normalizedScore,

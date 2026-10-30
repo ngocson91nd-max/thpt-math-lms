@@ -22,7 +22,10 @@ import {
   Sparkles,
   Plus,
   Trash2,
+  Eye,
+  X,
 } from 'lucide-react';
+import MathRenderer from '@/components/math/MathRenderer';
 
 export default function GradebookPage() {
   const { user, isTeacher, isStudent } = useAuth();
@@ -44,6 +47,7 @@ export default function GradebookPage() {
   const [showEditScoreModal, setShowEditScoreModal] = useState(false);
   const [showAddGradeModal, setShowAddGradeModal] = useState(false);
   const [editingSub, setEditingSub] = useState<Submission | null>(null);
+  const [viewingSub, setViewingSub] = useState<Submission | null>(null);
 
   // Edit score form
   const [editScoreValue, setEditScoreValue] = useState<number>(10);
@@ -305,13 +309,15 @@ export default function GradebookPage() {
 
   const filtered = submissions.filter((s) => {
     // Lọc theo đề thi cụ thể nếu được chuyển từ nút [Kết quả] của đề thi
-    if (
-      filterExamId !== 'all' &&
-      s.exam_id !== filterExamId &&
-      s.exam?.id !== filterExamId &&
-      s.exam?.code !== filterExamId
-    ) {
-      return false;
+    if (filterExamId !== 'all') {
+      const target = filterExamId.trim().toLowerCase();
+      const matchesId = s.exam_id && s.exam_id.toLowerCase() === target;
+      const matchesExamObjId = s.exam?.id && s.exam.id.toLowerCase() === target;
+      const matchesCode = s.exam?.code && s.exam.code.toLowerCase() === target;
+      const matchesTitle = s.exam?.title && s.exam.title.trim().toLowerCase() === target;
+      if (!matchesId && !matchesExamObjId && !matchesCode && !matchesTitle) {
+        return false;
+      }
     }
 
     if (!search.trim()) return true;
@@ -577,6 +583,16 @@ export default function GradebookPage() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setViewingSub(s)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                        title="Xem chi tiết toàn bộ bài làm của học sinh"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-blue-600" />
+                        <span>Xem bài làm</span>
+                      </button>
+
                       {isTeacher && (
                         <Link
                           href={`/gradebook/grade/${s.id}`}
@@ -596,7 +612,7 @@ export default function GradebookPage() {
                         href={`/exams/${s.exam_id}/result/${s.id}`}
                         className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition"
                       >
-                        Xem Lời Giải KaTeX
+                        KaTeX
                       </Link>
 
                       {isTeacher && (
@@ -770,6 +786,193 @@ export default function GradebookPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Xem Chi Tiết Toàn Bộ Bài Thi Học Sinh (Admin / Giáo Viên) */}
+      {viewingSub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl animate-in fade-in zoom-in-95 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/70">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-sm shadow-md shadow-blue-500/20">
+                  {viewingSub.student?.full_name?.charAt(0) || 'H'}
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Bài Làm Chi Tiết: {viewingSub.student?.full_name || 'Học sinh'}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {viewingSub.student?.email || ''} • Đề thi:{' '}
+                    <strong className="text-slate-800">{viewingSub.exam?.title || 'Đề thi'}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-black text-blue-700 shadow-2xs">
+                  <span>Điểm: {viewingSub.score ?? '--'} / {viewingSub.max_score || 10}</span>
+                </div>
+                {(viewingSub.tab_switch_count ?? 0) > 0 && (
+                  <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-700">
+                    ⚠️ Rời tab: {viewingSub.tab_switch_count} lần
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setViewingSub(null)}
+                  className="rounded-xl border border-slate-200 p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {viewingSub.teacher_feedback && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-900">
+                  <strong className="block mb-1">📝 Lời phê & Nhật ký giám sát thi:</strong>
+                  {viewingSub.teacher_feedback}
+                </div>
+              )}
+
+              {(!viewingSub.exam?.questions || viewingSub.exam.questions.length === 0) ? (
+                <div className="py-8 text-center text-xs text-slate-400 space-y-3">
+                  <p>Học sinh đã hoàn thành {viewingSub.answers?.length || 0} câu hỏi trong đề thi này.</p>
+                  <Link
+                    href={`/exams/${viewingSub.exam_id}/result/${viewingSub.id}`}
+                    className="inline-flex items-center gap-1.5 text-blue-600 font-bold hover:underline"
+                  >
+                    Mở trang xem lời giải KaTeX toàn bài <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              ) : (
+                viewingSub.exam.questions.map((q: any, idx: number) => {
+                  const ans = viewingSub.answers?.find((a: any) => a.question_id === q.id);
+                  const isCorrect = ans?.is_correct;
+                  const isEssay = q.type === 'essay';
+
+                  return (
+                    <div
+                      key={q.id || idx}
+                      className={`rounded-2xl border p-5 transition ${
+                        isEssay
+                          ? 'border-indigo-200 bg-indigo-50/20'
+                          : isCorrect
+                          ? 'border-emerald-200 bg-emerald-50/10'
+                          : 'border-rose-200 bg-rose-50/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold text-white ${
+                              isEssay
+                                ? 'bg-indigo-600'
+                                : isCorrect
+                                ? 'bg-emerald-600'
+                                : 'bg-rose-600'
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
+                          <span className="font-bold text-xs text-slate-800">
+                            Câu {idx + 1} {q.topic ? `• ${q.topic}` : ''}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-700">
+                            Điểm: {ans?.earned_points ?? 0} / {ans?.max_points ?? q.points ?? 1}
+                          </span>
+                          {isEssay ? (
+                            <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+                              Tự luận
+                            </span>
+                          ) : isCorrect ? (
+                            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                              ✓ Đúng
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                              ✗ Sai
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Đề bài */}
+                      <div className="text-sm font-medium text-slate-900 leading-relaxed mb-4">
+                        <MathRenderer content={q.content} />
+                      </div>
+
+                      {/* So sánh Đáp án */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
+                        <div>
+                          <span className="text-slate-400 font-bold uppercase text-[10px] block mb-1">
+                            Bài làm của học sinh:
+                          </span>
+                          <div className="font-bold text-slate-800">
+                            {ans?.student_answer !== undefined && ans?.student_answer !== null ? (
+                              typeof ans.student_answer === 'object' ? (
+                                <pre className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200">
+                                  {JSON.stringify(ans.student_answer, null, 2)}
+                                </pre>
+                              ) : (
+                                String(ans.student_answer)
+                              )
+                            ) : (
+                              <span className="text-slate-400 italic">Chưa làm câu này</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 font-bold uppercase text-[10px] block mb-1">
+                            Đáp án chuẩn của đề:
+                          </span>
+                          <div className="font-bold text-emerald-700">
+                            {typeof q.correct_answer === 'object'
+                              ? JSON.stringify(q.correct_answer)
+                              : String(q.correct_answer || 'Xem lời giải')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lời giải chi tiết */}
+                      {q.explanation && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600">
+                          <strong className="text-slate-800 block mb-1">💡 Lời giải KaTeX chi tiết:</strong>
+                          <MathRenderer content={q.explanation} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 bg-slate-50/70">
+              <Link
+                href={`/gradebook/grade/${viewingSub.id}`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 text-xs font-bold shadow-xs transition"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Chấm điểm lại / Nhận xét chi tiết</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setViewingSub(null)}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
