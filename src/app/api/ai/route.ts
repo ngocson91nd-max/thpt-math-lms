@@ -86,6 +86,14 @@ Lớp: ${body.grade || 12}`;
         const selectedModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
         let activeModel = selectedModel;
 
+        const isJsonAction = action === 'generate_similar_question' || action === 'generate_question';
+        const generationConfig: Record<string, any> = {
+          temperature: 0.2,
+        };
+        if (isJsonAction) {
+          generationConfig.response_mime_type = 'application/json';
+        }
+
         let res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
           {
@@ -98,17 +106,15 @@ Lớp: ${body.grade || 12}`;
                   parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
                 },
               ],
-              generationConfig: {
-                temperature: 0.2,
-              },
+              generationConfig,
             }),
           }
         );
 
         // Tự động dự phòng nếu tài khoản/API key chưa mở quyền model 3.8-flash
         if (!res.ok && activeModel === 'gemini-3.8-flash') {
-          console.warn('Gemini 3.8 Flash gặp lỗi hoặc chưa kích hoạt trên API key này, tự động thử gemini-1.5-flash...');
-          activeModel = 'gemini-1.5-flash';
+          console.warn('Gemini 3.8 Flash gặp lỗi hoặc chưa kích hoạt trên API key này, tự động thử gemini-2.5-flash...');
+          activeModel = 'gemini-2.5-flash';
           res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${geminiKey}`,
             {
@@ -121,9 +127,7 @@ Lớp: ${body.grade || 12}`;
                     parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
                   },
                 ],
-                generationConfig: {
-                  temperature: 0.2,
-                },
+                generationConfig,
               }),
             }
           );
@@ -135,8 +139,15 @@ Lớp: ${body.grade || 12}`;
 
           if (action === 'generate_similar_question') {
             try {
-              const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-              const parsed = JSON.parse(cleanJson);
+              const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+              let parsed: any;
+              try {
+                parsed = JSON.parse(cleanJson);
+              } catch {
+                const repaired = cleanJson.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+                parsed = JSON.parse(repaired);
+              }
+
               if (parsed.content && Array.isArray(parsed.options) && parsed.correct_answer) {
                 return NextResponse.json({
                   success: true,
