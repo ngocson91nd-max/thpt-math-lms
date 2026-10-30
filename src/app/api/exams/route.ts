@@ -103,16 +103,26 @@ export async function GET(req: NextRequest) {
       }
 
       let subCount = 0;
+      let pendingCount = 0;
+      let firstPendingId: string | null = null;
       try {
-        const { count } = await supabase
+        const { data: subs } = await supabase
           .from('submissions')
-          .select('id', { count: 'exact', head: true })
-          .eq('exam_id', data.id);
-        subCount = count || 0;
+          .select('id, status')
+          .eq('exam_id', data.id)
+          .order('submitted_at', { ascending: false });
+        if (subs && Array.isArray(subs)) {
+          subCount = subs.length;
+          const pendingSubs = subs.filter((s: any) => s.status === 'grading' || s.status === 'pending');
+          pendingCount = pendingSubs.length;
+          firstPendingId = pendingSubs[0]?.id || null;
+        }
       } catch {}
 
       const formattedExam = unpackExam(data, true);
       formattedExam.submissions_count = subCount;
+      formattedExam.pending_grading_count = pendingCount;
+      formattedExam.first_pending_submission_id = firstPendingId;
 
       return NextResponse.json(
         { success: true, exam: formattedExam },
@@ -135,13 +145,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    // Đếm số lượng bài nộp cho từng đề thi từ Supabase Cloud
+    // Đếm số lượng bài nộp và bài chờ chấm tự luận cho từng đề thi từ Supabase Cloud
     const countMap: Record<string, number> = {};
+    const pendingMap: Record<string, number> = {};
+    const firstPendingMap: Record<string, string> = {};
     try {
-      const { data: subsData } = await supabase.from('submissions').select('exam_id');
+      const { data: subsData } = await supabase
+        .from('submissions')
+        .select('id, exam_id, status')
+        .order('submitted_at', { ascending: false });
       if (subsData && Array.isArray(subsData)) {
         subsData.forEach((s: any) => {
-          if (s.exam_id) countMap[s.exam_id] = (countMap[s.exam_id] || 0) + 1;
+          if (s.exam_id) {
+            countMap[s.exam_id] = (countMap[s.exam_id] || 0) + 1;
+            if (s.status === 'grading' || s.status === 'pending') {
+              pendingMap[s.exam_id] = (pendingMap[s.exam_id] || 0) + 1;
+              if (!firstPendingMap[s.exam_id]) {
+                firstPendingMap[s.exam_id] = s.id;
+              }
+            }
+          }
         });
       }
     } catch {}
@@ -149,6 +172,8 @@ export async function GET(req: NextRequest) {
     const formattedExams = (data || []).map((exam) => {
       const unpacked = unpackExam(exam, true);
       unpacked.submissions_count = countMap[unpacked.id] || 0;
+      unpacked.pending_grading_count = pendingMap[unpacked.id] || 0;
+      unpacked.first_pending_submission_id = firstPendingMap[unpacked.id] || null;
       return unpacked;
     });
 

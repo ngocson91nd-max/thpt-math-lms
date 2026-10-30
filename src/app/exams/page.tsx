@@ -1413,8 +1413,19 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     (Boolean(exam.title?.includes('11-1')) && (s.exam?.title?.includes('11-1') || s.exam_id?.includes('11-1') || s.exam_title?.includes('11-1')));
                   return matchId || matchCode || matchTitle;
                 });
-                const actualSubCount = examSubmissions.length;
-                const pendingEssaySubs = examSubmissions.filter((s: any) => s.status === 'grading');
+                const actualSubCount = Math.max(
+                  typeof (exam as any).submissions_count === 'number' ? (exam as any).submissions_count : 0,
+                  examSubmissions.length
+                );
+                const pendingEssaySubs = examSubmissions.filter((s: any) => s.status === 'grading' || s.status === 'pending');
+                const pendingCount = Math.max(
+                  (exam as any).pending_grading_count || 0,
+                  pendingEssaySubs.length
+                );
+                const pendingSubId =
+                  pendingEssaySubs[0]?.id ||
+                  (exam as any).first_pending_submission_id ||
+                  '';
 
                 return (
                   <div
@@ -1575,14 +1586,14 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                     {isTeacher ? (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
                         {/* Nút Cảnh Báo Có Bài Tự Luận Cần Chấm Ngay */}
-                        {pendingEssaySubs.length > 0 && (
+                        {pendingCount > 0 && (
                           <Link
-                            href={`/gradebook/grade/${pendingEssaySubs[0].id}`}
+                            href={pendingSubId ? `/gradebook/grade/${pendingSubId}` : `/gradebook?examId=${exam.id}`}
                             className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 transition active:scale-95 animate-pulse"
                             title="Đề thi có bài tự luận của học sinh đang chờ Thầy chấm"
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            <span>✍️ Chấm tự luận ({pendingEssaySubs.length} bài chờ)</span>
+                            <span>✍️ Chấm tự luận ({pendingCount} bài chờ)</span>
                           </Link>
                         )}
 

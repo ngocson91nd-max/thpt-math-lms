@@ -24,7 +24,7 @@ export const MOCK_USERS: Profile[] = [
   {
     id: 'user-an-toan-12',
     email: 'an.toan12@gmail.com',
-    full_name: 'Nguyễn Văn An (12 Toán)',
+    full_name: 'Vũ',
     role: 'student',
     avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
     school_name: 'THPT Chuyên Lê Hồng Phong',

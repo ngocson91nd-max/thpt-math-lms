@@ -232,14 +232,30 @@ export async function POST(req: NextRequest) {
     // 2. Đảm bảo profile học sinh tồn tại (nếu ID là UUID hợp lệ)
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalStudentId)) {
       try {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', finalStudentId)
+          .maybeSingle();
+
+        const candidateName = student?.full_name?.trim();
+        const isValidName =
+          candidateName &&
+          candidateName !== 'Học sinh' &&
+          !candidateName.includes('Nguyễn Văn An');
+
+        const resolvedName = isValidName
+          ? candidateName
+          : (existingProfile?.full_name || 'Vũ');
+
         await supabase.from('profiles').upsert([
           {
             id: finalStudentId,
             email: student?.email || `${finalStudentId}@thpt-math-lms.vn`,
-            full_name: student?.full_name || 'Học sinh',
+            full_name: resolvedName,
             role: 'student',
             grade: student?.grade || 12,
-            school_name: student?.school_name || 'THPT Chuyên',
+            school_name: student?.school_name || 'THPT Chuyên Lê Hồng Phong',
             updated_at: new Date().toISOString(),
           },
         ]);
