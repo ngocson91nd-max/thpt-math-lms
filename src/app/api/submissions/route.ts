@@ -339,3 +339,28 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+// DELETE: Giáo viên xóa kết quả bài thi khỏi Supabase Cloud
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Thiếu ID bài làm cần xóa' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('submissions').delete().eq('id', id);
+
+    if (error) {
+      console.error('API /api/submissions DELETE error:', error);
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    console.error('API /api/submissions DELETE error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

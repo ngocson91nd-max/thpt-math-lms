@@ -64,66 +64,89 @@ export default function GradebookPage() {
     }
   }, []);
 
-  // 2. Tải bài thi thời gian thực từ Supabase Cloud API và LocalStorage
+  // 2. Tải bài thi thời gian thực từ Supabase Cloud API (Source of Truth)
   const fetchSubmissions = async () => {
     let combined: Submission[] = [];
 
-    // A. Nạp từ cache nội bộ
+    // A. Nạp từ cache nội bộ (đã loại bỏ sạch sẽ các bản ghi giả định / mock cũ)
     if (typeof window !== 'undefined') {
       const globalSaved = localStorage.getItem('lms_all_submissions');
       if (globalSaved) {
         try {
           const parsed = JSON.parse(globalSaved);
-          if (Array.isArray(parsed)) combined = parsed;
+          if (Array.isArray(parsed)) {
+            combined = parsed.filter(
+              (s) =>
+                s &&
+                s.id &&
+                !s.id.startsWith('sub-') &&
+                !s.id.startsWith('mock-') &&
+                s.exam_id !== 'exam-1' &&
+                !s.exam?.title?.includes('12-1')
+            );
+          }
         } catch {}
-      }
-      if (user) {
-        const mySaved = localStorage.getItem(`my_submissions_${user.id}`);
-        if (mySaved) {
-          try {
-            const parsed = JSON.parse(mySaved);
-            if (Array.isArray(parsed)) {
-              const existingIds = new Set(combined.map((s) => s.id));
-              parsed.forEach((sub: Submission) => {
-                if (!existingIds.has(sub.id)) {
-                  combined.unshift(sub);
-                }
-              });
-            }
-          } catch {}
-        }
       }
     }
 
     if (!isTeacher && user) {
       const studentOnly = combined.filter(
-        (s) => s.student_id === user.id || s.student?.email === user.email
+        (s) =>
+          s.student_id === user.id ||
+          s.student?.id === user.id ||
+          (user.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase())
       );
       setSubmissions(studentOnly);
     } else {
       setSubmissions(combined);
     }
 
-    // B. Đồng bộ từ Cloud Supabase API
+    // B. Đồng bộ từ Cloud Supabase API (Chân lý nguồn)
     try {
-      const res = await fetch('/api/submissions');
+      const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (data.success && Array.isArray(data.submissions) && data.submissions.length > 0) {
+      if (data.success && Array.isArray(data.submissions)) {
         const cloudList: Submission[] = data.submissions;
+
+        // Chỉ kết hợp thêm các bài vừa nộp cục bộ trong 60 giây (nếu có bài thi mới chưa kịp đồng bộ)
+        const now = Date.now();
+        const recentLocal = combined.filter((s) => {
+          if (!s || !s.id) return false;
+          if (s.id.startsWith('sub-') || s.id.startsWith('mock-') || s.exam_id === 'exam-1' || s.exam?.title?.includes('12-1')) {
+            return false;
+          }
+          const subTime = s.submitted_at ? new Date(s.submitted_at).getTime() : 0;
+          return now - subTime < 60 * 1000;
+        });
+
         const mergedMap = new Map<string, Submission>();
         cloudList.forEach((s) => mergedMap.set(s.id, s));
-        combined.forEach((s) => {
+        recentLocal.forEach((s) => {
           if (!mergedMap.has(s.id)) mergedMap.set(s.id, s);
         });
         const finalMerged = Array.from(mergedMap.values());
 
         if (typeof window !== 'undefined') {
           localStorage.setItem('lms_all_submissions', JSON.stringify(finalMerged));
+          if (user) {
+            const mySubs = finalMerged.filter(
+              (s) =>
+                s.student_id === user.id ||
+                s.student?.id === user.id ||
+                (user.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase())
+            );
+            localStorage.setItem(`my_submissions_${user.id}`, JSON.stringify(mySubs));
+          }
         }
 
         if (!isTeacher && user) {
           setSubmissions(
-            finalMerged.filter((s) => s.student_id === user.id || s.student?.email === user.email)
+            finalMerged.filter(
+              (s) =>
+                s.student_id === user.id ||
+                s.student?.id === user.id ||
+                (user.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase())
+            )
           );
         } else {
           setSubmissions(finalMerged);
@@ -222,10 +245,10 @@ export default function GradebookPage() {
     saveSubmissions(updated);
 
     try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('submissions').delete().eq('id', subId);
-      }
+      await fetch(`/api/submissions?id=${subId}`, { method: 'DELETE' });
+      broadcastDataChange('SUBMISSIONS_UPDATED');
+      broadcastDataChange('EXAMS_UPDATED');
+      broadcastDataChange('ALL_UPDATED');
     } catch (err) {
       console.warn('Lỗi xóa bài nộp trên Supabase:', err);
     }
@@ -510,10 +533,10 @@ export default function GradebookPage() {
                 <tr key={s.id} className="hover:bg-slate-50/50 transition">
                   <td className="py-4 px-6">
                     <div className="font-semibold text-slate-900">
-                      {s.student?.full_name || user?.full_name || 'Học sinh'}
+                      {!isTeacher && user?.full_name ? user.full_name : (s.student?.full_name || 'Học sinh')}
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      {s.student?.email || user?.email}
+                      {!isTeacher && user?.email ? user.email : (s.student?.email || '')}
                     </div>
                   </td>
                   <td className="py-4 px-6 text-slate-700 font-medium">
@@ -550,14 +573,18 @@ export default function GradebookPage() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                      {isTeacher && s.status === 'grading' && (
+                      {isTeacher && (
                         <Link
                           href={`/gradebook/grade/${s.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-bold shadow-xs transition active:scale-95"
+                          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold shadow-xs transition active:scale-95 ${
+                            s.status === 'grading'
+                              ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
                           title="Chấm điểm câu hỏi tự luận của học sinh"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          <span>Chấm tự luận</span>
+                          <span>{s.status === 'grading' ? 'Chấm tự luận' : 'Xem / Chấm lại'}</span>
                         </Link>
                       )}
 

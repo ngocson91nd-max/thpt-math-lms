@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, use } from 'react';
+import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { MOCK_SUBMISSIONS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
@@ -24,28 +24,55 @@ export default function ExamResultPage({
 }) {
   const resolvedParams = use(params);
 
-  // Tìm submission trong mock store hoặc localStorage
-  let submission = MOCK_SUBMISSIONS.find((s) => s.id === resolvedParams.submissionId);
-  if (!submission && typeof window !== 'undefined') {
-    const saved = localStorage.getItem(`submission_${resolvedParams.submissionId}`);
-    if (saved) {
-      try {
-        submission = JSON.parse(saved);
-      } catch {}
+  // Khởi tạo submission từ cache nếu có
+  const [submission, setSubmission] = useState<any>(() => {
+    let sub = MOCK_SUBMISSIONS.find((s) => s.id === resolvedParams.submissionId);
+    if (!sub && typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`submission_${resolvedParams.submissionId}`);
+      if (saved) {
+        try {
+          sub = JSON.parse(saved);
+        } catch {}
+      }
     }
-  }
+    return sub || null;
+  });
 
-  let exam = submission?.exam || MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
-  if (!exam && typeof window !== 'undefined') {
-    const savedExams = localStorage.getItem('lms_exams');
-    if (savedExams) {
-      try {
-        const parsed = JSON.parse(savedExams);
-        const found = parsed.find((e: any) => e.id === resolvedParams.id);
-        if (found) exam = found;
-      } catch {}
+  const [exam, setExam] = useState<any>(() => {
+    let ex = submission?.exam || MOCK_EXAMS.find((e) => e.id === resolvedParams.id);
+    if (!ex && typeof window !== 'undefined') {
+      const savedExams = localStorage.getItem('lms_exams');
+      if (savedExams) {
+        try {
+          const parsed = JSON.parse(savedExams);
+          const found = parsed.find((e: any) => e.id === resolvedParams.id);
+          if (found) ex = found;
+        } catch {}
+      }
     }
-  }
+    return ex || null;
+  });
+
+  const [isLoading, setIsLoading] = useState(!submission);
+
+  useEffect(() => {
+    // Luôn đồng bộ dữ liệu mới nhất (điểm Thầy vừa chấm, nhận xét chi tiết) từ Cloud API
+    fetch(`/api/submissions?id=${resolvedParams.submissionId}&t=${Date.now()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.submission) {
+          setSubmission(d.submission);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`submission_${resolvedParams.submissionId}`, JSON.stringify(d.submission));
+          }
+          if (d.submission.exam) {
+            setExam(d.submission.exam);
+          }
+        }
+      })
+      .catch((e) => console.warn('Lỗi tải kết quả từ Cloud:', e))
+      .finally(() => setIsLoading(false));
+  }, [resolvedParams.submissionId]);
 
   const maxScore = submission?.max_score || (exam?.format === 'periodic_4_parts' ? 20.0 : 10.0);
   const score = submission?.score ?? 0;
@@ -60,6 +87,15 @@ export default function ExamResultPage({
       });
     }
   }, [isHighScorer]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center space-y-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
+        <p className="text-xs text-slate-500 font-medium">Đang đồng bộ kết quả bài thi mới nhất từ Thầy Sơn...</p>
+      </div>
+    );
+  }
 
   if (!submission || !exam) {
     return (
@@ -160,8 +196,8 @@ export default function ExamResultPage({
       <div className="space-y-6">
         <h2 className="text-xl font-bold text-slate-900">Chi Tiết Lời Giải Từng Câu Hỏi</h2>
 
-        {questions.map((q, idx) => {
-          const ans = submission?.answers?.find((a) => a.question_id === q.id);
+        {questions.map((q: any, idx: number) => {
+          const ans = submission?.answers?.find((a: any) => a.question_id === q.id);
           const isCorrect = ans?.is_correct;
           const isEssay = q.type === 'essay';
 
