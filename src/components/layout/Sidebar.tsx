@@ -191,7 +191,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
                   THPT
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 truncate">Luyện Thi Tốt Nghiệp 2025</p>
             </div>
           </Link>
 

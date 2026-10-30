@@ -219,7 +219,7 @@ export const StudentDashboard: React.FC = () => {
             </h1>
 
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-              Hãy kiên trì mỗi ngày để chinh phục điểm 9.0+ môn Toán THPT 2025. Dưới đây là bài tập cần hoàn thành và tiến độ học tập của em.
+              Hãy kiên trì mỗi ngày để chinh phục điểm 9.0+ môn Toán THPT. Dưới đây là bài tập cần hoàn thành và tiến độ học tập của em.
             </p>
           </div>
 
@@ -359,7 +359,7 @@ export const StudentDashboard: React.FC = () => {
                   {priorityTask.duration_minutes} phút
                 </span>
                 <span>•</span>
-                <span>{priorityTask.questions_count || priorityTask.questions?.length || 0} câu hỏi chuẩn 2025</span>
+                <span>{priorityTask.questions_count || priorityTask.questions?.length || 0} câu hỏi</span>
                 <span>•</span>
                 <span className="text-amber-800 font-semibold">Chưa làm bài</span>
               </p>

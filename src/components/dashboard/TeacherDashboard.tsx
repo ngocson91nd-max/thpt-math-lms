@@ -160,10 +160,10 @@ export const TeacherDashboard: React.FC = () => {
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-3.5 py-1 text-xs font-semibold text-blue-200 backdrop-blur-md">
               <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              Bàn làm việc Giảng viên • Năm học 2025 - 2026
+              Bàn làm việc Giảng viên
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
-              Kính chào Thầy {user?.full_name || 'Sơn'}! 👋
+              Kính chào {user?.full_name?.startsWith('Thầy') ? user.full_name : `Thầy ${user?.full_name || 'Sơn'}`}! 👋
             </h1>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
               Chúc Thầy một ngày giảng dạy hiệu quả. Dưới đây là tổng hợp lớp học, tiến độ làm bài và các công việc cần chú ý hôm nay.
@@ -446,7 +446,7 @@ export const TeacherDashboard: React.FC = () => {
                       </h3>
 
                       <p className="text-xs text-slate-500 mt-1 line-clamp-1">
-                        {c.description || `Năm học ${c.academic_year || '2025-2026'}`}
+                        {c.description || (c.grade ? `Lớp ${c.grade} • Toán THPT` : 'Toán THPT')}
                       </p>
                     </div>
 
