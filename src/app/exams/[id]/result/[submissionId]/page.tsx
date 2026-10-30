@@ -18,6 +18,9 @@ import {
   BookOpen,
   Pencil,
   ShieldCheck,
+  Lock,
+  Trophy,
+  Users,
 } from 'lucide-react';
 
 export default function ExamResultPage({
@@ -58,6 +61,7 @@ export default function ExamResultPage({
   });
 
   const [isLoading, setIsLoading] = useState(!submission);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
 
   useEffect(() => {
     // Luôn đồng bộ dữ liệu mới nhất (điểm Thầy vừa chấm, nhận xét chi tiết) từ Cloud API
@@ -97,19 +101,52 @@ export default function ExamResultPage({
       .finally(() => setIsLoading(false));
   }, [resolvedParams.submissionId]);
 
+  useEffect(() => {
+    const examTargetId = exam?.id || resolvedParams.id;
+    if (!examTargetId) return;
+
+    fetch(`/api/submissions?examId=${encodeURIComponent(examTargetId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.submissions)) {
+          const sorted = [...d.submissions]
+            .filter((s) => typeof s.score === 'number')
+            .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+            .slice(0, 10);
+          setLeaderboard(sorted);
+        }
+      })
+      .catch(() => {});
+  }, [exam?.id, resolvedParams.id]);
+
   const maxScore = submission?.max_score || (exam?.format === 'periodic_4_parts' ? 20.0 : 10.0);
   const score = submission?.score ?? 0;
   const isHighScorer = score >= (maxScore * 0.8);
 
+  const isClosed = Boolean(
+    exam?.is_locked ||
+      exam?.status === 'closed' ||
+      (exam?.end_time && new Date(exam.end_time).getTime() < Date.now())
+  );
+  const canViewScore = isTeacher || isAdmin || exam?.view_score_allowed !== false;
+  const canViewAnswers =
+    isTeacher ||
+    isAdmin ||
+    exam?.view_answer_policy === 'always' ||
+    !exam?.view_answer_policy ||
+    (exam?.view_answer_policy === 'after_closed' && isClosed);
+  const isNeverPolicy = exam?.view_answer_policy === 'never' && !isTeacher && !isAdmin;
+  const canViewLeaderboard = exam?.view_leaderboard_allowed !== false;
+
   useEffect(() => {
-    if (isHighScorer) {
+    if (isHighScorer && canViewScore) {
       confetti({
         particleCount: 120,
         spread: 70,
         origin: { y: 0.6 },
       });
     }
-  }, [isHighScorer]);
+  }, [isHighScorer, canViewScore]);
 
   if (isLoading) {
     return (
@@ -155,24 +192,38 @@ export default function ExamResultPage({
           </div>
 
           <div className="flex items-center gap-4 self-center md:self-auto">
-            <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 px-8 py-5 text-white shadow-lg shadow-blue-500/20">
-              <span className="text-xs uppercase font-semibold tracking-wider text-blue-100">
-                Điểm Đạt Được
-              </span>
-              <div className="text-4xl font-black mt-1">
-                {score.toFixed(2)}
-                <span className="text-lg font-normal text-blue-200">/{maxScore}</span>
+            {canViewScore ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 px-8 py-5 text-white shadow-lg shadow-blue-500/20">
+                <span className="text-xs uppercase font-semibold tracking-wider text-blue-100">
+                  Điểm Đạt Được
+                </span>
+                <div className="text-4xl font-black mt-1">
+                  {score.toFixed(2)}
+                  <span className="text-lg font-normal text-blue-200">/{maxScore}</span>
+                </div>
+                <span className="text-[11px] text-blue-200 mt-1 font-medium">
+                  {score >= 8.5
+                    ? '🌟 Xuất Sắc'
+                    : score >= 7.0
+                    ? '👍 Khá - Giỏi'
+                    : score >= 5.0
+                    ? '✅ Đạt Yêu Cầu'
+                    : '⚠️ Cần Cố Gắng'}
+                </span>
               </div>
-              <span className="text-[11px] text-blue-200 mt-1 font-medium">
-                {score >= 8.5
-                  ? '🌟 Xuất Sắc'
-                  : score >= 7.0
-                  ? '👍 Khá - Giỏi'
-                  : score >= 5.0
-                  ? '✅ Đạt Yêu Cầu'
-                  : '⚠️ Cần Cố Gắng'}
-              </span>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl bg-slate-800 px-6 py-5 text-white shadow-lg border border-slate-700 max-w-xs text-center">
+                <div className="h-9 w-9 rounded-xl bg-slate-700 flex items-center justify-center mb-2">
+                  <Lock className="h-5 w-5 text-amber-400" />
+                </div>
+                <span className="text-xs uppercase font-bold tracking-wider text-slate-300">
+                  Điểm Được Bảo Mật
+                </span>
+                <p className="text-[11px] text-slate-400 mt-1 leading-normal">
+                  Bài làm đã được ghi nhận. Thầy Sơn sẽ công bố điểm sau.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -215,6 +266,71 @@ export default function ExamResultPage({
         </div>
       </div>
 
+      {/* Bảng Vàng Xếp Hạng Điểm Thi (Leaderboard) */}
+      {canViewLeaderboard && leaderboard.length > 0 && (
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Bảng Vàng Xếp Hạng Điểm Thi</h3>
+                <p className="text-xs text-slate-500">Top thí sinh có điểm cao nhất bài thi này</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-xl">
+              {leaderboard.length} thí sinh
+            </span>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {leaderboard.map((subItem, rankIdx) => {
+              const isCurrentUser = subItem.student_id === submission.student_id;
+              return (
+                <div
+                  key={subItem.id}
+                  className={`flex items-center justify-between py-3 px-3 rounded-2xl transition ${
+                    isCurrentUser ? 'bg-blue-50/80 border border-blue-200 font-bold' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`w-7 text-center font-black text-sm ${
+                      rankIdx === 0 ? 'text-amber-500 text-base' :
+                      rankIdx === 1 ? 'text-slate-400 text-base' :
+                      rankIdx === 2 ? 'text-amber-700 text-base' :
+                      'text-slate-400'
+                    }`}>
+                      {rankIdx === 0 ? '🥇' : rankIdx === 1 ? '🥈' : rankIdx === 2 ? '🥉' : `#${rankIdx + 1}`}
+                    </span>
+                    <div>
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                        <span>{subItem.student?.full_name || 'Học sinh'}</span>
+                        {isCurrentUser && (
+                          <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.2 rounded font-bold">
+                            Bạn
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {subItem.submitted_at ? new Date(subItem.submitted_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-base font-black text-blue-700">
+                      {typeof subItem.score === 'number' ? subItem.score.toFixed(2) : '-'}
+                    </span>
+                    <span className="text-xs text-slate-400 ml-1">/ {subItem.max_score || maxScore}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Detailed Question Review */}
       <div className="space-y-6">
         <h2 className="text-xl font-bold text-slate-900">Chi Tiết Lời Giải Từng Câu Hỏi</h2>
@@ -241,6 +357,8 @@ export default function ExamResultPage({
                     className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold text-white ${
                       isEssay
                         ? 'bg-indigo-600'
+                        : !canViewAnswers
+                        ? 'bg-slate-600'
                         : isCorrect
                         ? 'bg-emerald-600'
                         : 'bg-rose-600'
@@ -254,20 +372,33 @@ export default function ExamResultPage({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-700">
-                    Điểm: {ans?.earned_points ?? 0} / {ans?.max_points ?? q.points}
-                  </span>
+                  {canViewScore ? (
+                    <span className="text-xs font-bold text-slate-700">
+                      Điểm: {ans?.earned_points ?? 0} / {ans?.max_points ?? q.points}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-500">
+                      {ans?.student_answer ? 'Đã làm' : 'Chưa làm'}
+                    </span>
+                  )}
+
                   {isEssay ? (
                     <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
                       Tự luận
                     </span>
-                  ) : isCorrect ? (
-                    <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Đúng
-                    </span>
+                  ) : canViewAnswers ? (
+                    isCorrect ? (
+                      <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Đúng
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                        <XCircle className="h-3.5 w-3.5" /> Sai
+                      </span>
+                    )
                   ) : (
-                    <span className="flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                      <XCircle className="h-3.5 w-3.5" /> Sai
+                    <span className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                      <Lock className="h-3.5 w-3.5 text-slate-500" /> Bảo mật
                     </span>
                   )}
                 </div>
@@ -303,15 +434,29 @@ export default function ExamResultPage({
                   <span className="font-semibold text-slate-500 uppercase tracking-wider block mb-1 text-xs">
                     Đáp án chính xác:
                   </span>
-                  <div className="font-semibold text-emerald-700 text-sm sm:text-base">
-                    {typeof q.correct_answer === 'object' ? (
-                      <pre className="text-xs font-mono bg-white p-2.5 rounded border border-slate-200 text-slate-800">
-                        {JSON.stringify(q.correct_answer, null, 2)}
-                      </pre>
-                    ) : (
-                      <MathRenderer content={String(q.correct_answer)} inline />
-                    )}
-                  </div>
+                  {canViewAnswers ? (
+                    <div className="font-semibold text-emerald-700 text-sm sm:text-base">
+                      {typeof q.correct_answer === 'object' ? (
+                        <pre className="text-xs font-mono bg-white p-2.5 rounded border border-slate-200 text-slate-800">
+                          {JSON.stringify(q.correct_answer, null, 2)}
+                        </pre>
+                      ) : (
+                        <MathRenderer content={String(q.correct_answer)} inline />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3 text-xs text-amber-900">
+                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                        <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                        <span>Đáp án chính xác được bảo mật</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-normal">
+                        {isNeverPolicy
+                          ? 'Quy chế đề thi không công khai đáp án.'
+                          : `Sẽ hiển thị tự động sau khi phòng thi kết thúc${exam.end_time ? ` (${new Date(exam.end_time).toLocaleString('vi-VN')})` : ''}.`}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -341,7 +486,7 @@ export default function ExamResultPage({
               )}
 
               {/* Detailed Explanation (KaTeX) */}
-              {q.explanation && (
+              {canViewAnswers && q.explanation && (
                 <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
                   <div className="text-xs font-bold uppercase tracking-wider text-blue-800 mb-2">
                     💡 Hướng Dẫn Giải Chi Tiết Chuẩn Sư Phạm:

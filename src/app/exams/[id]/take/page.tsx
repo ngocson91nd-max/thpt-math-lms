@@ -202,7 +202,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
           // Nếu trong cache đã có sẵn câu hỏi đầy đủ thì nạp tức thì 0ms
           if (found && Array.isArray(found.questions) && found.questions.length > 0) {
             setExam(found);
-            setTimeLeft(found.duration_minutes * 60);
+            setTimeLeft(found.no_time_limit ? 0 : found.duration_minutes * 60);
             checkAndLoadPdf(found);
             return;
           }
@@ -214,7 +214,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
     if (mockExam && Array.isArray(mockExam.questions) && mockExam.questions.length > 0) {
       setExam(mockExam);
-      setTimeLeft(mockExam.duration_minutes * 60);
+      setTimeLeft(mockExam.no_time_limit ? 0 : mockExam.duration_minutes * 60);
       checkAndLoadPdf(mockExam);
       return;
     }
@@ -255,7 +255,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         const d = await r.json();
         if (d.success && d.exam && Array.isArray(d.exam.questions) && d.exam.questions.length > 0) {
           setExam(d.exam);
-          setTimeLeft(d.exam.duration_minutes * 60);
+          setTimeLeft(d.exam.no_time_limit ? 0 : d.exam.duration_minutes * 60);
           checkAndLoadPdf(d.exam);
 
           // Cập nhật câu hỏi vào cache để lần sau nạp ngay 0ms
@@ -293,7 +293,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
           if (found && Array.isArray(found.questions) && found.questions.length > 0) {
             setExam(found);
-            setTimeLeft(found.duration_minutes * 60);
+            setTimeLeft(found.no_time_limit ? 0 : found.duration_minutes * 60);
             checkAndLoadPdf(found);
             if (typeof window !== 'undefined') {
               localStorage.setItem('lms_exams', JSON.stringify(d2.exams));
@@ -328,11 +328,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         if (data.tabSwitchCount) setTabSwitchCount(data.tabSwitchCount);
 
         // Tính toán lại thời gian còn lại chính xác dựa trên mốc bắt đầu thực
-        if (data.startedAt && exam?.duration_minutes) {
+        if (data.startedAt) {
           const elapsedSecs = Math.floor((Date.now() - data.startedAt) / 1000);
-          const totalSecs = exam.duration_minutes * 60;
-          const remaining = Math.max(0, totalSecs - elapsedSecs);
-          setTimeLeft(remaining);
+          if (exam?.no_time_limit) {
+            setTimeLeft(elapsedSecs);
+          } else if (exam?.duration_minutes) {
+            const totalSecs = exam.duration_minutes * 60;
+            const remaining = Math.max(0, totalSecs - elapsedSecs);
+            setTimeLeft(remaining);
+          }
         }
       } else {
         // Lưu mốc bắt đầu mới
@@ -466,7 +470,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     };
   }, []);
 
-  // B. Giám sát rời tab và thu bài tự động nếu vi phạm quá mức
+  // B. Giám sát rời tab và thu bài tự động nếu vi phạm quá mức theo cấu hình đề
   const recordViolation = (reason: string) => {
     const timeStr = new Date().toLocaleTimeString('vi-VN');
     const logItem = `${timeStr}: ${reason}`;
@@ -474,7 +478,10 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     setViolationLogs((prev) => [...prev, logItem]);
     setTabSwitchCount((prev) => {
       const next = prev + 1;
-      if (next >= MAX_ALLOWED_VIOLATIONS) {
+      const isLockAction = exam?.violation_action === 'lock_exam';
+      const allowedLimit = exam?.max_violations || 3;
+
+      if (isLockAction && next > allowedLimit) {
         // Tự động thu bài và khóa thi ngay lập tức
         setIsAutoSubmittingDueToViolation(true);
         setTimeout(() => {
@@ -544,7 +551,52 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, [timeLeft, isSubmitting, violationLogs]);
 
-  const questions: Question[] = exam?.questions || [];
+  // Nạp danh sách câu hỏi với cơ chế xáo trộn (shuffle) thông minh, bảo lưu thứ tự trong phiên qua sessionStorage
+  const questions: Question[] = React.useMemo(() => {
+    if (!exam?.questions || exam.questions.length === 0) return [];
+    let list = [...exam.questions];
+
+    const shuffleKey = `lms_shuffle_${exam.id}_${user?.id || 'guest'}`;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem(shuffleKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length === list.length) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
+
+    if (exam.shuffle_questions) {
+      // Xáo trộn thứ tự các câu hỏi trong từng phần, giữ nguyên cấu trúc phần 1, 2, 3, 4
+      const p1 = list.filter((q) => (q.part || 1) === 1).sort(() => Math.random() - 0.5);
+      const p2 = list.filter((q) => q.part === 2).sort(() => Math.random() - 0.5);
+      const p3 = list.filter((q) => q.part === 3).sort(() => Math.random() - 0.5);
+      const p4 = list.filter((q) => q.part === 4).sort(() => Math.random() - 0.5);
+      list = [...p1, ...p2, ...p3, ...p4];
+    }
+
+    if (exam.shuffle_options) {
+      list = list.map((q) => {
+        if ((q.type === 'single_choice' || q.type === 'multiple_choice') && Array.isArray(q.options) && q.options.length > 0) {
+          const shuffledOpts = [...q.options].sort(() => Math.random() - 0.5);
+          return { ...q, options: shuffledOpts };
+        }
+        return q;
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(shuffleKey, JSON.stringify(list));
+      } catch {}
+    }
+
+    return list;
+  }, [exam?.id, exam?.questions, exam?.shuffle_questions, exam?.shuffle_options, user?.id]);
+
   const part1Questions = questions.filter((q) => q.part === 1 || q.type === 'single_choice' || q.type === 'multiple_choice');
   const part2Questions = questions.filter((q) => q.part === 2 || q.type === 'true_false');
   const part3Questions = questions.filter((q) => q.part === 3 || q.type === 'short_answer');
@@ -556,8 +608,16 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     Boolean(loadedPdfUrl) ||
     (questions.length > 0 && questions.some((q) => q.content?.includes('file PDF')));
 
-  // 6. BỘ ĐẾM THỜI GIAN THẬT & TỰ ĐỘNG NỘP KHI HẾT GIỜ
+  // 6. BỘ ĐẾM THỜI GIAN THẬT (TỰ ĐỘNG CHUYỂN COUNT-UP NẾU KHÔNG GIỚI HẠN THỜI GIAN)
   useEffect(() => {
+    if (exam?.no_time_limit) {
+      // Chế độ không giới hạn thời gian: đếm xuôi (thời gian đã làm), KHÔNG tự động nộp
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => prev + 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+
     if (timeLeft <= 0) {
       handleFinalSubmit();
       return;
@@ -568,7 +628,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [timeLeft, exam?.no_time_limit]);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -741,14 +801,19 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     if (!exam || isSubmitting) return;
     setIsSubmitting(true);
 
-    const gradingResult = gradeExamSubmission(questions, answers);
     const maxScore = exam.format === 'periodic_4_parts' ? 20.0 : 10.0;
+    const gradingResult = gradeExamSubmission(questions, answers, maxScore, {
+      trueFalseScoring: exam.true_false_scoring || 'standard_thpt',
+      partPoints: exam.part_points,
+    });
     const newSubId =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : '99999999-9999-9999-9999-999999999999';
 
-    const startTimeIso = new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
+    const startTimeIso = exam.no_time_limit
+      ? new Date(Date.now() - timeLeft * 1000).toISOString()
+      : new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
     const submittedAtIso = new Date().toISOString();
     const studentId = user?.id || '33333333-3333-3333-3333-333333333333';
 
@@ -761,6 +826,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       max_points: r.maxPoints,
     }));
 
+    const allowedLimit = exam.max_violations || 3;
     const violationDetail = logs.length > 0 ? `\nNhật ký vi phạm:\n${logs.join('\n')}` : '';
 
     const newSubmission = {
@@ -776,7 +842,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       max_score: maxScore,
       status: gradingResult.hasPendingEssay ? ('grading' as const) : ('graded' as const),
       tab_switch_count: violationCount,
-      teacher_feedback: `[VI PHẠM QUY CHẾ THI] Bài thi bị thu tự động do rời màn hình quá ${MAX_ALLOWED_VIOLATIONS} lần.${violationDetail}`,
+      teacher_feedback: `[VI PHẠM QUY CHẾ THI] Bài thi bị thu tự động do rời màn hình quá ${allowedLimit} lần.${violationDetail}`,
       answers: submissionAnswers,
     };
 
@@ -810,20 +876,50 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
 
+  // Kiểm tra thời gian tối thiểu trước khi mở modal nộp bài
+  const handleOpenSubmitModal = () => {
+    if (user && isStudent && exam?.submission_restriction === 'min_time') {
+      const minMins = exam.submission_min_minutes || 0;
+      const elapsedSecs = exam.no_time_limit ? timeLeft : (exam.duration_minutes * 60 - timeLeft);
+      const elapsedMins = Math.floor(elapsedSecs / 60);
+      if (elapsedMins < minMins) {
+        alert(`⚠️ Quy định phòng thi: Chưa đến thời gian được nộp bài!\n\nĐề thi yêu cầu tối thiểu làm bài trong ${minMins} phút.\nThời gian em đã làm: ${elapsedMins} phút ${elapsedSecs % 60} giây.\nVui lòng kiểm tra lại bài và chờ đến khi đủ thời gian quy định.`);
+        return;
+      }
+    }
+    setShowSubmitModal(true);
+  };
+
   // Xử lý nộp bài chủ động
   const handleFinalSubmit = async () => {
     if (!exam) return;
+
+    if (user && isStudent && exam.submission_restriction === 'min_time') {
+      const minMins = exam.submission_min_minutes || 0;
+      const elapsedSecs = exam.no_time_limit ? timeLeft : (exam.duration_minutes * 60 - timeLeft);
+      const elapsedMins = Math.floor(elapsedSecs / 60);
+      if (elapsedMins < minMins) {
+        alert(`⚠️ Quy định phòng thi: Chưa đủ thời gian làm bài tối thiểu (${minMins} phút) để nộp bài!`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
-    const gradingResult = gradeExamSubmission(questions, answers);
     const maxScore = exam.format === 'periodic_4_parts' ? 20.0 : 10.0;
+    const gradingResult = gradeExamSubmission(questions, answers, maxScore, {
+      trueFalseScoring: exam.true_false_scoring || 'standard_thpt',
+      partPoints: exam.part_points,
+    });
 
     const newSubId =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : '99999999-9999-9999-9999-999999999999';
 
-    const startTimeIso = new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
+    const startTimeIso = exam.no_time_limit
+      ? new Date(Date.now() - timeLeft * 1000).toISOString()
+      : new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
     const submittedAtIso = new Date().toISOString();
     const studentId = user?.id || '33333333-3333-3333-3333-333333333333';
 
@@ -910,29 +1006,63 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
 
-  // 1. Kiểm tra phòng thi bị khóa đối với học sinh
-  if (user && isStudent && exam && (exam.is_locked || exam.status === 'closed')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
-          <div className="h-14 w-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-            <Lock className="h-7 w-7" />
-          </div>
-          <h2 className="text-lg font-extrabold text-slate-900">Phòng thi đang đóng</h2>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Đề thi <span className="font-bold text-slate-700">"{exam.title}"</span> hiện đang tạm khóa hoặc đã kết thúc thời gian làm bài. Thầy Sơn chưa mở phòng thi.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/exams"
-              className="inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
-            >
-              Quay lại danh sách đề thi
-            </Link>
+  // 1. Kiểm tra phòng thi chưa mở hoặc đã đóng đối với học sinh
+  if (user && isStudent && exam) {
+    const now = Date.now();
+    const startTimeMs = exam.start_time ? new Date(exam.start_time).getTime() : null;
+    const endTimeMs = exam.end_time ? new Date(exam.end_time).getTime() : null;
+
+    if (startTimeMs && now < startTimeMs) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
+            <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <Clock className="h-7 w-7" />
+            </div>
+            <h2 className="text-lg font-extrabold text-slate-900">Phòng thi chưa mở</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Đề thi <span className="font-bold text-slate-700">"{exam.title}"</span> có lịch mở phòng thi lúc:
+              <br />
+              <span className="font-bold text-amber-700 text-sm mt-1 inline-block">{new Date(exam.start_time!).toLocaleString('vi-VN')}</span>.
+              <br />
+              Em vui lòng quay lại khi đến giờ làm bài nhé!
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/exams"
+                className="inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
+              >
+                Quay lại danh sách đề thi
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    if (exam.is_locked || exam.status === 'closed' || (endTimeMs && now > endTimeMs)) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
+            <div className="h-14 w-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <Lock className="h-7 w-7" />
+            </div>
+            <h2 className="text-lg font-extrabold text-slate-900">Phòng thi đã đóng</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Đề thi <span className="font-bold text-slate-700">"{exam.title}"</span> hiện đang tạm khóa hoặc đã kết thúc thời gian mở thi{endTimeMs ? ` (đóng lúc ${new Date(exam.end_time!).toLocaleString('vi-VN')})` : ''}.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/exams"
+                className="inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-md shadow-blue-500/20"
+              >
+                Quay lại danh sách đề thi
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   // 2. Kiểm tra quyền vào lớp đối với đề thi giới hạn lớp
@@ -1015,7 +1145,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     );
   }
 
-  const isLowTime = timeLeft < 300; // Dưới 5 phút
+  const isLowTime = !exam?.no_time_limit && timeLeft < 300; // Dưới 5 phút (chỉ kích hoạt khi có giới hạn thời gian)
 
   // Thông tin từng Phần (Tự động nhận diện chuẩn Bộ GD&ĐT 2025 kể cả khi đề nhập thô)
   const getPartDetails = (q: Question, idx?: number) => {
@@ -1480,22 +1610,28 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
           </button>
 
-          {/* Đồng hồ đếm ngược */}
+          {/* Đồng hồ thời gian */}
           <div
             className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 font-mono font-bold text-xs sm:text-sm border transition ${
-              isLowTime
+              exam?.no_time_limit
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : isLowTime
                 ? 'border-rose-300 bg-rose-50 text-rose-600 animate-pulse'
                 : 'border-slate-200 bg-slate-50 text-slate-800'
             }`}
+            title={exam?.no_time_limit ? 'Thời gian làm bài (Không giới hạn)' : 'Thời gian còn lại'}
           >
-            <Clock className={`h-4 w-4 ${isLowTime ? 'text-rose-600' : 'text-blue-600'}`} />
+            <Clock className={`h-4 w-4 ${exam?.no_time_limit ? 'text-emerald-600' : isLowTime ? 'text-rose-600' : 'text-blue-600'}`} />
             <span>{formatTime(timeLeft)}</span>
+            {exam?.no_time_limit && (
+              <span className="text-[10px] font-sans font-medium text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded">Tự do</span>
+            )}
           </div>
 
           {/* Nút nộp bài */}
           <button
             type="button"
-            onClick={() => setShowSubmitModal(true)}
+            onClick={handleOpenSubmitModal}
             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition active:scale-95 cursor-pointer"
           >
             <Send className="h-4 w-4" />
@@ -1903,7 +2039,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowSubmitModal(true)}
+                    onClick={handleOpenSubmitModal}
                     className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer active:scale-95"
                   >
                     <Send className="h-4 w-4" />
@@ -2360,7 +2496,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 <span className="font-bold text-rose-500">{unansweredQuestions.length} câu</span>
               </div>
               <div className="flex justify-between">
-                <span>Thời gian còn lại:</span>
+                <span>{exam?.no_time_limit ? 'Thời gian đã làm:' : 'Thời gian còn lại:'}</span>
                 <span className="font-bold text-blue-600">{formatTime(timeLeft)}</span>
               </div>
               {tabSwitchCount > 0 && (

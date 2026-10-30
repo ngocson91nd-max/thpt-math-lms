@@ -261,12 +261,12 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     const isEndHigh = endY === highY;
 
     // Khoảng cách an toàn để mũi tên không đè lên chữ số
-    const arrowStartX = startX + 20;
-    const arrowEndX = endX - 20;
-    const arrowStartY = isStartHigh ? startY + 12 : startY - 12;
-    const arrowEndY = isEndHigh ? endY + 12 : endY - 12;
+    const arrowStartX = startX + 22;
+    const arrowEndX = endX - 22;
+    const arrowStartY = isStartHigh ? startY + 14 : startY - 14;
+    const arrowEndY = isEndHigh ? endY + 14 : endY - 14;
 
-    variationElements += `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="2.8" marker-end="url(#${markerId})" stroke-linecap="round" />`;
+    variationElements += `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" stroke="#2563eb" stroke-width="2.2" marker-end="url(#${markerId})" stroke-linecap="round" />`;
   }
 
   // Các điểm trên hàng x
@@ -276,5 +276,5 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     xPointsElements += `<text x="${xPos}" y="${row1Y + 31}" fill="#0f172a" font-size="17" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, serif">${cleanLatexSymbol(xVals[i])}</text>`;
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-4 bg-white rounded-2xl shadow-sm border border-slate-200 select-none" style="min-width: 480px; max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-3 bg-white rounded-2xl shadow-xs border border-slate-300 select-none" style="max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M 1 2 L 11 6 L 1 10 L 3.5 6 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
 }

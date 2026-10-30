@@ -122,6 +122,7 @@ function ExamEditorContent() {
   const [code, setCode] = useState(() => {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   });
+  const [category, setCategory] = useState<'exam' | 'practice'>('exam');
   const [noTimeLimit, setNoTimeLimit] = useState(false);
   const [accessType, setAccessType] = useState<'public' | 'restricted'>('restricted');
   const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
@@ -283,6 +284,8 @@ function ExamEditorContent() {
         if (found.assigned_classes) setAssignedClasses(found.assigned_classes);
         if (found.part_points) setPartPoints({ ...partPoints, ...found.part_points });
         if (found.access_type) setAccessType(found.access_type);
+        if (found.category) setCategory(found.category);
+        else if (found.no_time_limit) setCategory('practice');
         if (found.no_time_limit !== undefined) setNoTimeLimit(found.no_time_limit);
         if (found.true_false_scoring) setTrueFalseScoring(found.true_false_scoring);
         if (found.violation_action) setViolationAction(found.violation_action);
@@ -924,6 +927,7 @@ function ExamEditorContent() {
       code,
       title: title.trim(),
       description: description.trim(),
+      category,
       teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
       grade,
       duration_minutes: Number(duration),
@@ -960,11 +964,25 @@ function ExamEditorContent() {
         part4_count: part4Questions.length,
       },
       is_view_answer_allowed: true,
-      questions: questions.map((q, idx) => ({
-        ...q,
-        order_index: idx + 1,
-        custom_points: q.points,
-      })),
+      questions: questions.map((q, idx) => {
+        const part = q.part || 1;
+        let calculatedPt = q.points;
+        if (part === 1 && part1Questions.length > 0 && partPoints.part1 !== undefined) {
+          calculatedPt = Number((partPoints.part1 / part1Questions.length).toFixed(2));
+        } else if (part === 2 && part2Questions.length > 0 && partPoints.part2 !== undefined) {
+          calculatedPt = Number((partPoints.part2 / part2Questions.length).toFixed(2));
+        } else if (part === 3 && part3Questions.length > 0 && partPoints.part3 !== undefined) {
+          calculatedPt = Number((partPoints.part3 / part3Questions.length).toFixed(2));
+        } else if (part === 4 && part4Questions.length > 0 && partPoints.part4 !== undefined) {
+          calculatedPt = Number((partPoints.part4 / part4Questions.length).toFixed(2));
+        }
+        return {
+          ...q,
+          order_index: idx + 1,
+          points: calculatedPt,
+          custom_points: calculatedPt,
+        };
+      }),
       updated_at: new Date().toISOString(),
     };
 
@@ -1884,6 +1902,45 @@ function ExamEditorContent() {
             <p className="text-[11px] text-slate-500 leading-relaxed">
               {totalQuestions} câu trong bộ đang chỉnh. Đề kiểm tra thường, câu xếp theo loại (trắc nghiệm, Đúng/Sai, trả lời ngắn, tự luận), điểm cấu hình theo phần.
             </p>
+
+            {/* 0. Phân loại nội dung */}
+            <div className="space-y-1.5 pb-2 border-b border-slate-100">
+              <label className="block font-bold text-slate-700">Phân loại nội dung</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCategory('exam')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    category === 'exam'
+                      ? 'border-blue-600 bg-blue-50/70 text-blue-900 shadow-2xs font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-xs font-bold flex items-center gap-1">
+                    <span>🎯 Đề thi</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">Kiểm tra, tính giờ, xếp hạng</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory('practice');
+                    setNoTimeLimit(true);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                    category === 'practice'
+                      ? 'border-amber-500 bg-amber-50/70 text-amber-900 shadow-2xs font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block text-xs font-bold flex items-center gap-1">
+                    <span>⚡ Bài tập & Luyện</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">Tự luyện từng câu, AI đổi số</span>
+                </button>
+              </div>
+            </div>
 
             {/* 1. Tiêu đề đề thi */}
             <div>

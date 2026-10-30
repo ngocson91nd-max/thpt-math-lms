@@ -34,6 +34,7 @@ function unpackSubmission(sub: any) {
     const rawQuestions = Array.isArray(extra.questions) ? extra.questions : [];
     examObj = {
       ...examObj,
+      ...extra,
       description: cleanDesc,
       code: extra.code || examObj.code || (examObj.id ? examObj.id.substring(0, 6).toUpperCase() : 'EXAM01'),
       questions: rawQuestions,

@@ -211,7 +211,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       });
       observer.observe(target, { childList: true, subtree: true });
 
-      // F. TIMEOUT AN TOÀN (2 GIÂY): NẾU TIKZJAX HOẶC CDN CHẬM THÌ KHÔNG ĐỂ TREO SPINNER VÔ TẬN
+      // F. TIMEOUT AN TOÀN (20 GIÂY): Đủ thời gian cho CDN và WebAssembly biên dịch hình vẽ lớn
       setTimeout(() => {
         const hasRealSvg = target.querySelector('svg.tikz, svg.tikzjax, svg:not(.animate-spin)');
         if (!isRendered && !hasRealSvg) {
@@ -254,7 +254,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             });
           }
         }
-      }, 2000);
+      }, 20000);
     });
 
     // 3. Đảm bảo nạp script TikZJax và Font CSS từ CDN JsDelivr tốc độ cao với CDN Unpkg dự phòng

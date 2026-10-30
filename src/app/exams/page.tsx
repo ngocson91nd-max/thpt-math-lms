@@ -119,10 +119,37 @@ export default function ExamsPage() {
   });
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [categoryTab, setCategoryTab] = useState<'all' | 'exam' | 'practice'>('all');
   const [filterType, setFilterType] = useState<'all' | 'timed' | 'practice'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [copyToast, setCopyToast] = useState<string | null>(null);
+
+  // Nhận diện danh mục Đề thi vs Bài tập & Tự luyện
+  const getExamCategory = (e: Exam): 'exam' | 'practice' => {
+    if (e.category === 'practice' || e.category === 'exam') return e.category;
+    const title = (e.title || '').toLowerCase();
+    if (
+      title.includes('bài tập') ||
+      title.includes('luyện tập') ||
+      title.includes('tự luyện') ||
+      title.includes('về nhà') ||
+      title.includes('ôn tập')
+    ) {
+      return 'practice';
+    }
+    return 'exam';
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'exam' || tabParam === 'practice' || tabParam === 'all') {
+        setCategoryTab(tabParam);
+      }
+    }
+  }, []);
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -1074,6 +1101,11 @@ Khi đó chiều cao $h = 2\\text{ m}$.
       if (!isPermitted) return false;
     }
 
+    if (categoryTab !== 'all') {
+      const cat = getExamCategory(e);
+      if (cat !== categoryTab) return false;
+    }
+
     if (selectedGrade !== 'all' && e.grade !== selectedGrade) return false;
     if (selectedClass !== 'all') {
       const target = selectedClass.trim().toLowerCase();
@@ -1091,6 +1123,10 @@ Khi đó chiều cao $h = 2\\text{ m}$.
     }
     return true;
   });
+
+  const totalCount = exams.length;
+  const examCount = exams.filter((e) => getExamCategory(e) === 'exam').length;
+  const practiceCount = exams.filter((e) => getExamCategory(e) === 'practice').length;
 
   // Unique topics trong ngân hàng
   const allTopics = Array.from(new Set(questionsPool.map((q) => q.topic))).filter(Boolean);
@@ -1215,6 +1251,48 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             </>
           )}
         </div>
+      </div>
+
+      {/* 3 Tab phân loại chuyên biệt: Đề thi chính thức vs Bài tập & Tự luyện */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200 w-fit">
+        <button
+          type="button"
+          onClick={() => setCategoryTab('all')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+            categoryTab === 'all'
+              ? 'bg-white text-blue-600 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <ClipboardList className="h-4 w-4" />
+          <span>Tất cả ({totalCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCategoryTab('exam')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+            categoryTab === 'exam'
+              ? 'bg-white text-indigo-600 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Award className="h-4 w-4 text-amber-500" />
+          <span>🎯 Đề thi chính thức ({examCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCategoryTab('practice')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+            categoryTab === 'practice'
+              ? 'bg-white text-emerald-600 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+          <span>⚡ Bài tập & Tự luyện ({practiceCount})</span>
+        </button>
       </div>
 
       {/* Thanh tìm kiếm & lọc nhanh */}
@@ -1479,6 +1557,25 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                       {/* Status Badges */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-2.5 mb-2">
                         <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
+                            getExamCategory(exam) === 'practice'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}
+                        >
+                          {getExamCategory(exam) === 'practice' ? (
+                            <>
+                              <Zap className="h-3 w-3 text-amber-600 fill-amber-500" />
+                              <span>Bài tập & Tự luyện</span>
+                            </>
+                          ) : (
+                            <>
+                              <Award className="h-3 w-3 text-indigo-600" />
+                              <span>Đề thi chính thức</span>
+                            </>
+                          )}
+                        </span>
+                        <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                             isLocked
                               ? 'bg-rose-50 text-rose-700 border border-rose-200'
@@ -1701,6 +1798,26 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                               <span>⚡ Luyện tập lại đề này (Có lời giải ngay)</span>
                             </Link>
                           </div>
+                        ) : getExamCategory(exam) === 'practice' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Link
+                              href={`/exams/${exam.id}/practice`}
+                              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold transition shadow-md shadow-amber-500/20 active:scale-[0.99]"
+                              title="Tự luyện từng câu, có lời giải chi tiết KaTeX ngay và AI đổi số"
+                            >
+                              <Zap className="h-4 w-4 fill-white" />
+                              <span>⚡ Làm tự luyện</span>
+                            </Link>
+
+                            <Link
+                              href={`/exams/${exam.id}/take`}
+                              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition border border-slate-200"
+                              title="Làm cả đề hoàn chỉnh như bài kiểm tra"
+                            >
+                              <Play className="h-3.5 w-3.5 text-slate-600" />
+                              <span>Làm cả đề</span>
+                            </Link>
+                          </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <Link
@@ -1718,7 +1835,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                               title="Tự luyện không áp lực thời gian, kiểm tra từng câu và có AI đổi số"
                             >
                               <Zap className="h-3.5 w-3.5 text-amber-600 fill-amber-500" />
-                              <span>⚡ Tự luyện</span>
+                              <span>⚡ Ôn luyện</span>
                             </Link>
                           </div>
                         )}

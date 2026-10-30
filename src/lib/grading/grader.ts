@@ -71,7 +71,8 @@ function areNumericValuesEqual(val1: string, val2: string): boolean {
 export function gradeSingleQuestion(
   question: Question,
   studentAnswer: any,
-  customMaxPoints?: number
+  customMaxPoints?: number,
+  trueFalseScoring?: 'standard_thpt' | 'equal'
 ): GradeQuestionResult {
   const maxPoints = customMaxPoints !== undefined ? customMaxPoints : (question.points || 1.0);
 
@@ -179,10 +180,19 @@ export function gradeSingleQuestion(
     }
 
     let ratio = 0;
-    if (correctCount === 1) ratio = 0.1;
-    else if (correctCount === 2) ratio = 0.25;
-    else if (correctCount === 3) ratio = 0.5;
-    else if (correctCount === 4) ratio = 1.0;
+    if (trueFalseScoring === 'equal') {
+      // Chia đều: mỗi ý 0.25 (25%) tổng điểm câu
+      if (correctCount === 1) ratio = 0.25;
+      else if (correctCount === 2) ratio = 0.5;
+      else if (correctCount === 3) ratio = 0.75;
+      else if (correctCount === 4) ratio = 1.0;
+    } else {
+      // Chuẩn Bộ GD&ĐT 2025: 1 ý 10%, 2 ý 25%, 3 ý 50%, 4 ý 100%
+      if (correctCount === 1) ratio = 0.1;
+      else if (correctCount === 2) ratio = 0.25;
+      else if (correctCount === 3) ratio = 0.5;
+      else if (correctCount === 4) ratio = 1.0;
+    }
 
     const earnedPoints = Number((ratio * maxPoints).toFixed(2));
     const isCorrect = correctCount === 4;
@@ -236,20 +246,54 @@ export function gradeSingleQuestion(
 export function gradeExamSubmission(
   questions: (Question & { custom_points?: number })[],
   studentAnswersMap: Record<string, any>,
-  targetMaxScore: number = 10
+  targetMaxScoreOrOptions:
+    | number
+    | {
+        trueFalseScoring?: 'standard_thpt' | 'equal';
+        partPoints?: { part1?: number; part2?: number; part3?: number; part4?: number };
+      } = 10,
+  maybeOptions?: {
+    trueFalseScoring?: 'standard_thpt' | 'equal';
+    partPoints?: { part1?: number; part2?: number; part3?: number; part4?: number };
+  }
 ): GradeExamResult {
+  const targetMaxScore = typeof targetMaxScoreOrOptions === 'number' ? targetMaxScoreOrOptions : 10;
+  const options =
+    typeof targetMaxScoreOrOptions === 'object' && targetMaxScoreOrOptions !== null
+      ? targetMaxScoreOrOptions
+      : maybeOptions;
+
   let rawEarnedPoints = 0;
   let rawMaxPoints = 0;
   let hasPendingEssay = false;
+
+  // Tính trước số câu của từng phần nếu có partPoints cấu hình
+  const partCounts: Record<number, number> = {};
+  if (options?.partPoints) {
+    questions.forEach((q) => {
+      const p = q.part || 1;
+      partCounts[p] = (partCounts[p] || 0) + 1;
+    });
+  }
 
   const results: GradeQuestionResult[] = [];
 
   for (const q of questions) {
     const sAns = studentAnswersMap[q.id];
-    const maxP = q.custom_points !== undefined ? q.custom_points : (q.points || 1.0);
+    let maxP = q.custom_points !== undefined ? q.custom_points : (q.points || 1.0);
+
+    if (q.custom_points === undefined && options?.partPoints) {
+      const p = q.part || 1;
+      const totalPartPts = options.partPoints[`part${p}` as keyof typeof options.partPoints];
+      const count = partCounts[p] || 0;
+      if (totalPartPts !== undefined && count > 0) {
+        maxP = Number((totalPartPts / count).toFixed(2));
+      }
+    }
+
     rawMaxPoints += maxP;
 
-    const r = gradeSingleQuestion(q, sAns, maxP);
+    const r = gradeSingleQuestion(q, sAns, maxP, options?.trueFalseScoring);
     results.push(r);
 
     if (q.type === 'essay') {

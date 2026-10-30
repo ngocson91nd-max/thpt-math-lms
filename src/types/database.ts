@@ -165,6 +165,7 @@ export interface Exam {
   };
   is_view_answer_allowed: boolean;
   code?: string;
+  category?: 'exam' | 'practice';
   assigned_classes?: string[];
   access_type?: 'public' | 'restricted';
   no_time_limit?: boolean;

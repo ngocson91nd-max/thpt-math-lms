@@ -81,13 +81,19 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
     return { ...coords[s] };
   }
 
-  // Cú pháp nội suy hoặc vector calc e.g. "$(B)+(D)-(A)$" hoặc "$(A)!0.5!(B)$"
+  // Cú pháp nội suy hoặc vector calc e.g. "$(B)+(D)-(A)$" hoặc "$(A)!0.5!(B)$" hoặc "$(S)!2/3!(H)$"
   if (s.startsWith('$') && s.endsWith('$')) {
     s = s.slice(1, -1).trim();
-    const interpMatch = s.match(/^\(([^)]+)\)\s*!\s*([0-9.]+)\s*!\s*\(([^)]+)\)$/);
+    const interpMatch = s.match(/^\(([^)]+)\)\s*!\s*([0-9./]+)\s*!\s*\(([^)]+)\)$/);
     if (interpMatch) {
       const p1 = coords[interpMatch[1]] || { x: 0, y: 0 };
-      const ratio = parseFloat(interpMatch[2]);
+      let ratio = 0.5;
+      if (interpMatch[2].includes('/')) {
+        const [n, d] = interpMatch[2].split('/').map(Number);
+        ratio = d ? n / d : 0.5;
+      } else {
+        ratio = parseFloat(interpMatch[2]) || 0.5;
+      }
       const p2 = coords[interpMatch[3]] || { x: 0, y: 0 };
       return {
         x: p1.x + ratio * (p2.x - p1.x),
@@ -101,9 +107,15 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
       for (const part of parts) {
         const sign = part.trim().startsWith('-') ? -1 : 1;
         const name = part.replace(/[+-]/g, '').trim().slice(1, -1);
-        const pt = coords[name] || { x: 0, y: 0 };
-        x += sign * pt.x;
-        y += sign * pt.y;
+        if (name.includes(',')) {
+          const off = parsePoint(name, coords, defs);
+          x += sign * off.x;
+          y += sign * off.y;
+        } else {
+          const pt = coords[name] || { x: 0, y: 0 };
+          x += sign * pt.x;
+          y += sign * pt.y;
+        }
       }
       return { x, y };
     }
@@ -283,6 +295,57 @@ function expandMacros(tikz: string): string {
 }
 
 /**
+ * Tự động mở rộng các vòng lặp \\foreach để hỗ trợ hình học THPT (đỉnh S.ABCD, lăng trụ, v.v.)
+ */
+function expandForeachLoops(tikz: string): string {
+  let res = tikz;
+
+  // 1. Dạng cặp biến: \\foreach \\p/\\pos in {S/above, A/above left, ...} \\fill (\\p) circle (1.2pt) node[\\pos] {$\\p$};
+  const foreachPairRegex = /\\foreach\s*\\([a-zA-Z]+)\s*\/\s*\\([a-zA-Z]+)\s*in\s*\{([^}]+)\}\s*(?:\{([\s\S]*?)\}|([^\n;]*;))/g;
+  res = res.replace(foreachPairRegex, (_m, var1, var2, listStr, blockBody, lineBody) => {
+    let rawBody = (blockBody || lineBody || '').trim();
+    // Chuẩn hóa cú pháp \\fill (\\p) circle (...) node[...] {...}
+    rawBody = rawBody.replace(/\\fill\s*\(([^)]+)\)\s*circle\s*\(([^)]+)\)\s*node\s*\[([^\]]*)\]\s*\{([^}]*)\}/g, 
+      '\\fill ($1) circle ($2); \\node[$3] at ($1) {$4}');
+
+    const items = listStr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    let expanded = '';
+    for (const item of items) {
+      if (!item.includes('/')) continue;
+      const [val1, val2] = item.split('/').map((s: string) => s.trim());
+      let b = rawBody;
+      b = b.replace(new RegExp(`\\\\${var1}\\b`, 'g'), val1);
+      b = b.replace(new RegExp(`\\\\${var2}\\b`, 'g'), val2);
+      b = b.replace(new RegExp(`\\(\\s*\\\\?${var1}\\s*\\)`, 'g'), `(${val1})`);
+      b = b.replace(new RegExp(`\\{\\s*\\$?\\\\?${var1}\\$?\\s*\\}`, 'g'), `{$${val1}$}`);
+      b = b.replace(new RegExp(`\\[\\s*\\\\?${var2}\\s*\\]`, 'g'), `[${val2}]`);
+      expanded += b + '\n';
+    }
+    return expanded;
+  });
+
+  // 2. Dạng đơn: \\foreach \\p in {A, B, C} \\fill (\\p) circle (1.2pt);
+  const foreachSingleRegex = /\\foreach\s*\\([a-zA-Z]+)\s*in\s*\{([^}]+)\}\s*(?:\{([\s\S]*?)\}|([^\n;]*;))/g;
+  res = res.replace(foreachSingleRegex, (_m, var1, listStr, blockBody, lineBody) => {
+    const rawBody = (blockBody || lineBody || '').trim();
+    if (rawBody.includes('--')) return _m; // Nhường cho bộ vạch chia trục
+    const items = listStr.split(',').map((s: string) => s.trim()).filter(Boolean);
+    let expanded = '';
+    for (const item of items) {
+      let b = rawBody;
+      const val = item.trim();
+      b = b.replace(new RegExp(`\\\\${var1}\\b`, 'g'), val);
+      b = b.replace(new RegExp(`\\(\\s*\\\\?${var1}\\s*\\)`, 'g'), `(${val})`);
+      b = b.replace(new RegExp(`\\{\\s*\\$?\\\\?${var1}\\$?\\s*\\}`, 'g'), `{$${val}$}`);
+      expanded += b + '\n';
+    }
+    return expanded;
+  });
+
+  return res;
+}
+
+/**
  * Phân tích và tạo SVG hoàn chỉnh từ mã TikZ (cho đồ thị hàm số và hình phẳng 2D Oxy)
  */
 export function renderTikzToSvg(rawTikz: string): string | null {
@@ -290,61 +353,18 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0a. Mở rộng tự động các macro \newcommand nếu có
+  // 0a. Mở rộng tự động vòng lặp \\foreach & các macro \\newcommand nếu có
+  rawTikz = expandForeachLoops(rawTikz);
   rawTikz = expandMacros(rawTikz);
 
   // 0b. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
   rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
 
-  // 0c. KIỂM TRA NGHIÊM NGẶT HÌNH HỌC KHÔNG GIAN 3D:
-  // Nếu là hình 3D (lập phương, chóp, nón, trụ, lăng trụ, cáp treo, đèn chùm, đỉnh có dấu phẩy A' B' C' D', đỉnh S chóp...)
-  // TUYỆT ĐỐI TỪ CHỐI (trả về null) để nhường quyền biên dịch cho TikzJax (WebAssembly TeX Engine) hoặc ảnh chụp!
-  const hasPlot = rawTikz.includes('plot');
+  // 0c. Chỉ từ chối các mã nguồn dùng tọa độ 3 chiều thật (chưa chiếu phẳng) e.g. (1, 2, 3) hoặc lệnh \\shade
+  const hasTrue3DCoords = /\([0-9.-]+\s*,\s*[0-9.-]+\s*,\s*[0-9.-]+\)/.test(rawTikz);
+  const hasShade = /\\shade\b/.test(rawTikz);
 
-  const has3DKeywords =
-    /\\(?:draw|node|coordinate)[^;]*(?:[A-D]'\b|\b[SABCD]'\b)/.test(rawTikz) || // Đỉnh A', B', C', D'
-    /\b(?:cube|cone|cylinder|sphere|prism|pyramid|3d|plane|view|polyhedron|solid|hop|khoi|lap_phuong|khoi_hop|cáp\s*treo|đèn\s*chùm)\b/i.test(rawTikz) ||
-    /(\([A-Z]'\))/i.test(rawTikz) || // Tọa độ (A'), (B')
-    /\([0-9.-]+,[0-9.-]+,[0-9.-]+\)/.test(rawTikz) || // Tọa độ 3D (x, y, z)
-    /\bz\s*=\s*/.test(rawTikz) || // Trục z không gian
-    /\b[xyz]\s*=\s*\{/.test(rawTikz); // Hệ trục affine 3D
-
-  const hasMacroOrLoop3D =
-    /#\d/.test(rawTikz) ||
-    /\\begin\{scope\}\[[^\]]*shift/i.test(rawTikz);
-
-  const hasComplexLoopOrShapes =
-    /\\foreach\s*\\(?:p|pos|i|pt|name|u|v|k)\b/i.test(rawTikz) ||
-    /\\foreach[^{]*\/[^{]*in/i.test(rawTikz) ||
-    /node[^}]*\\(?:p|pos)\b/i.test(rawTikz) ||
-    /\\shade\b/.test(rawTikz);
-
-  // Nhận diện khối đa diện / hình học không gian 3D phức tạp khi KHÔNG CÓ plot đồ thị:
-  // - Chứa từ 4 chu trình 'cycle' trở lên
-  // - Chứa tọa độ tương đối ++( lặp lại
-  // - Chứa tô màu mặt khối che khuất fill=... từ 4 lần trở lên
-  const cycleCount = (rawTikz.match(/cycle/g) || []).length;
-  const hasPolyhedronGeometry =
-    !hasPlot &&
-    (cycleCount >= 4 ||
-      (rawTikz.match(/\+\+\s*\(/g) || []).length >= 2 ||
-      (rawTikz.match(/fill\s*=/g) || []).length >= 4);
-
-  // Nhận diện hình đa diện nét đứt (hình lập phương, chóp có >= 3 nét đứt)
-  const dashedMatches = rawTikz.match(/dashed/g) || [];
-  const isPolyhedronWithoutPlot = !hasPlot && dashedMatches.length >= 3;
-
-  // Nhận diện hình chóp S.ABCD (đỉnh S kết hợp A, B, C, D)
-  const isPyramidShape = !hasPlot && /\(S\)/.test(rawTikz) && (/\(A\)/.test(rawTikz) || /\(B\)/.test(rawTikz));
-
-  if (
-    has3DKeywords ||
-    hasMacroOrLoop3D ||
-    hasComplexLoopOrShapes ||
-    hasPolyhedronGeometry ||
-    isPolyhedronWithoutPlot ||
-    isPyramidShape
-  ) {
+  if (hasTrue3DCoords || hasShade) {
     return null;
   }
 
@@ -699,20 +719,22 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   // Thiết lập kích thước SVG thoáng rộng, to rõ và sắc nét
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const marginX = Math.max(0.4, spanX * 0.14);
-  const marginY = Math.max(0.4, spanY * 0.14);
+  const marginX = Math.max(0.3, spanX * 0.12);
+  const marginY = Math.max(0.3, spanY * 0.12);
   const boundMinX = minX - marginX;
   const boundMaxX = maxX + marginX;
   const boundMinY = minY - marginY;
   const boundMaxY = maxY + marginY;
 
-  // Nâng kích thước SVG từ 300px lên 380px để hình vẽ to rõ, không bị bé
-  const width = Math.max(340, Math.round(380 * globalScale));
-  const height = Math.min(380, Math.max(240, Math.round(width * (spanY / spanX))));
-  const pad = 26;
+  const pad = 28;
+  const targetW = Math.max(340, Math.round(380 * globalScale));
+  // Tỉ lệ scale đẳng cự (isometric) cho cả X và Y để đảm bảo góc vuông, đường tròn và hình học không gian không bị biến dạng
+  const scale = Math.min((targetW - 2 * pad) / (boundMaxX - boundMinX), 70);
+  const width = Math.max(340, Math.round((boundMaxX - boundMinX) * scale + 2 * pad));
+  const height = Math.max(220, Math.round((boundMaxY - boundMinY) * scale + 2 * pad));
 
-  const toSvgX = (x: number) => pad + ((x - boundMinX) / (boundMaxX - boundMinX)) * (width - 2 * pad);
-  const toSvgY = (y: number) => height - (pad + ((y - boundMinY) / (boundMaxY - boundMinY)) * (height - 2 * pad));
+  const toSvgX = (x: number) => pad + (x - boundMinX) * scale;
+  const toSvgY = (y: number) => height - (pad + (y - boundMinY) * scale);
 
   const svgElements: string[] = [];
 
