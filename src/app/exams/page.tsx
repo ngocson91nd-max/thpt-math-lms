@@ -50,6 +50,7 @@ import {
   ExternalLink,
   GraduationCap,
   Users,
+  Zap,
 } from 'lucide-react';
 
 export default function ExamsPage() {
@@ -1661,6 +1662,16 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                             <span>Nhân bản</span>
                           </button>
                         </div>
+
+                        {/* Nút Luyện tập thử cho Giáo viên */}
+                        <Link
+                          href={`/exams/${exam.id}/practice`}
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl text-xs font-bold bg-amber-50/70 border border-amber-300 text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+                          title="Thử nghiệm chế độ tự luyện từng câu với AI đổi số"
+                        >
+                          <Zap className="h-3.5 w-3.5 text-amber-600 fill-amber-500" />
+                          <span>⚡ Thử Chế Độ Tự Luyện (AI Đổi Số)</span>
+                        </Link>
                       </div>
                     ) : (
                       <div className="pt-3 border-t border-slate-100">
@@ -1670,23 +1681,46 @@ Khi đó chiều cao $h = 2\\text{ m}$.
                             <span>Phòng thi đang đóng</span>
                           </div>
                         ) : studentSub ? (
-                          <Link
-                            href={`/exams/${exam.id}/result/${studentSub.id}`}
-                            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition shadow-2xs"
-                          >
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            <span>
-                              Đã nộp ({studentSub.score !== undefined ? `${studentSub.score.toFixed(2)}đ` : 'Xem bài làm'})
-                            </span>
-                          </Link>
+                          <div className="space-y-2">
+                            <Link
+                              href={`/exams/${exam.id}/result/${studentSub.id}`}
+                              className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition shadow-2xs"
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              <span>
+                                Đã nộp ({studentSub.score !== undefined ? `${studentSub.score.toFixed(2)}đ` : 'Xem bài làm'})
+                              </span>
+                            </Link>
+
+                            <Link
+                              href={`/exams/${exam.id}/practice`}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold transition shadow-2xs"
+                              title="Tự luyện tập lại từng câu, có đáp án và AI đổi số liệu"
+                            >
+                              <Zap className="h-3.5 w-3.5 text-amber-600 fill-amber-500" />
+                              <span>⚡ Luyện tập lại đề này (Có lời giải ngay)</span>
+                            </Link>
+                          </div>
                         ) : (
-                          <Link
-                            href={`/exams/${exam.id}/take`}
-                            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-500/20 active:scale-[0.99]"
-                          >
-                            <Play className="h-4 w-4 fill-white" />
-                            <span>Vào làm bài ngay</span>
-                          </Link>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Link
+                              href={`/exams/${exam.id}/take`}
+                              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-500/20 active:scale-[0.99]"
+                              title="Vào phòng thi chính thức (tính giờ, có giám sát)"
+                            >
+                              <Play className="h-4 w-4 fill-white" />
+                              <span>Thi chính thức</span>
+                            </Link>
+
+                            <Link
+                              href={`/exams/${exam.id}/practice`}
+                              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold transition shadow-2xs"
+                              title="Tự luyện không áp lực thời gian, kiểm tra từng câu và có AI đổi số"
+                            >
+                              <Zap className="h-3.5 w-3.5 text-amber-600 fill-amber-500" />
+                              <span>⚡ Tự luyện</span>
+                            </Link>
+                          </div>
                         )}
                       </div>
                     )}

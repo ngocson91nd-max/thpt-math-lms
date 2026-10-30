@@ -54,9 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
     setMobileOpen(false);
   }, [pathname]);
 
-  // Nếu đang ở màn hình làm bài thi (/take), ẩn sidebar để học sinh tập trung 100% vào bài làm
-  const isTakeExamPage = pathname.includes('/take');
-  if (isTakeExamPage) {
+  // Nếu đang ở màn hình làm bài thi (/take) hoặc luyện tập tương tác (/practice), ẩn sidebar để học sinh tập trung 100%
+  const isImmersiveExamPage = pathname.includes('/take') || pathname.includes('/practice');
+  if (isImmersiveExamPage) {
     return null;
   }
 
