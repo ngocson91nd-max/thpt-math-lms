@@ -57,7 +57,19 @@ function hashTikz(str: string): string {
     hash = (hash << 5) - hash + str.charCodeAt(i);
     hash |= 0;
   }
-  return 'tikz_v4_' + Math.abs(hash).toString(36);
+  return Math.abs(hash).toString(36);
+}
+
+// Xóa sạch toàn bộ cache TikZ cũ khỏi LocalStorage để đảm bảo hiển thị hình vẽ mới sửa chuẩn xác
+if (typeof window !== 'undefined') {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v8_')) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch {}
 }
 
 export const MathRenderer: React.FC<MathRendererProps> = ({
@@ -118,7 +130,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v5_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v8_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {

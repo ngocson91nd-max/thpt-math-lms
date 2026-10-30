@@ -123,11 +123,27 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
     }
   }
 
-  // Tọa độ thường (x, y) hoặc tọa độ có bù trừ độ dài pixel (vd: 2pt, -2pt cho vạch chia trục)
-  const commaIdx = s.indexOf(',');
-  if (commaIdx !== -1) {
-    const xPart = s.substring(0, commaIdx).trim();
-    const yPart = s.substring(commaIdx + 1).trim();
+  // Tọa độ 3D không gian: (x, y, z)
+  const parts = s.split(',').map((p) => p.trim());
+  if (parts.length === 3) {
+    const x3d = parseNumber(parts[0], defs);
+    const y3d = parseNumber(parts[1], defs);
+    const z3d = parseNumber(parts[2], defs);
+    // Phép chiếu phối cảnh song song (Cabinet/Cavalier projection chuẩn hình học không gian THPT):
+    // Trục Oz thẳng đứng lên trên: z3d
+    // Trục Oy nằm ngang sang phải: y3d
+    // Trục Ox xiên chéo 135 độ xuống dưới sang trái: x3d
+    const angle = (135 * Math.PI) / 180;
+    const factor = 0.5;
+    const sx = y3d + x3d * factor * Math.cos(angle);
+    const sy = z3d + x3d * factor * Math.sin(angle);
+    return { x: sx, y: sy };
+  }
+
+  // Tọa độ phẳng 2D: (x, y) hoặc tọa độ có bù trừ độ dài pixel (vd: 2pt, -2pt cho vạch chia trục)
+  if (parts.length === 2) {
+    const xPart = parts[0];
+    const yPart = parts[1];
 
     let offsetX = 0;
     let offsetY = 0;
@@ -158,7 +174,7 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
 
   // Tọa độ cực (polar): (angle:radius) hoặc (angle:rx and ry)
   const colonIdx = s.indexOf(':');
-  if (colonIdx !== -1 && commaIdx === -1) {
+  if (colonIdx !== -1 && !s.includes(',')) {
     const anglePart = s.substring(0, colonIdx).trim();
     const radPart = s.substring(colonIdx + 1).trim();
     const angleDeg = parseNumber(anglePart, defs);
@@ -416,14 +432,6 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   // 0b. Làm sạch chú thích TeX (%...) để không làm vỡ các biểu thức và regex
   rawTikz = rawTikz.replace(/(^|[^\\])%.*$/gm, '$1');
 
-  // 0c. Chỉ từ chối các mã nguồn dùng tọa độ 3 chiều thật (chưa chiếu phẳng) e.g. (1, 2, 3) hoặc lệnh \\shade
-  const hasTrue3DCoords = /\([0-9.-]+\s*,\s*[0-9.-]+\s*,\s*[0-9.-]+\)/.test(rawTikz);
-  const hasShade = /\\shade\b/.test(rawTikz);
-
-  if (hasTrue3DCoords || hasShade) {
-    return null;
-  }
-
   const defs: DefMap = {};
   const coords: CoordMap = {};
   const drawItems: DrawItem[] = [];
@@ -631,7 +639,7 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   }
 
   // 7. PHÂN TÍCH ĐOẠN THẲNG, MŨI TÊN & HÌNH CHỮ NHẬT: \draw[options] ... ;
-  const lineStmtRegex = /\\(?:draw|filldraw|path)(\[[^\]]*\])?\s*([^(;]*\([^;]+);/g;
+  const lineStmtRegex = /\\(?:draw|filldraw|fill|shade|path)(\[[^\]]*\])?\s*([^(;]*\([^;]+);/g;
   while ((m = lineStmtRegex.exec(cleanLines)) !== null) {
     const opts = m[1] || '';
     const body = m[2];
@@ -826,12 +834,6 @@ export function renderTikzToSvg(rawTikz: string): string | null {
   }
 
   if (minX === Infinity || maxX === -Infinity || drawItems.length === 0) {
-    return null;
-  }
-
-  // Kiểm tra độ tin cậy của bản vẽ
-  const totalDrawCommands = (rawTikz.match(/\\draw|\\fill|\\node|\\path/g) || []).length;
-  if (totalDrawCommands >= 3 && drawItems.length < totalDrawCommands * 0.4) {
     return null;
   }
 

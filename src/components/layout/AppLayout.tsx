@@ -57,6 +57,14 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         setIsSidebarCollapsed(true);
       }
 
+      // Dọn sạch toàn bộ cache TikZ cũ để nạp đồ thị mới sửa
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('tikz_') && !key.startsWith('tikz_v8_')) {
+          localStorage.removeItem(key);
+        }
+      }
+
       // Xóa sạch toàn bộ dữ liệu bài thi/đề thi cũ theo yêu cầu của Thầy Sơn (reset sạch sẽ)
       const DATA_CLEAN_VERSION = 'lms_v3_clean_all_exams_data';
       if (localStorage.getItem(DATA_CLEAN_VERSION) !== 'true') {
