@@ -124,9 +124,14 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const [isFormulaSheetOpen, setIsFormulaSheetOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Giám sát thi & chống gian lận
+  // Giám sát thi & chống gian lận chuẩn Azota
+  const MAX_ALLOWED_VIOLATIONS = 3;
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [violationLogs, setViolationLogs] = useState<string[]>([]);
   const [showTabWarning, setShowTabWarning] = useState(false);
+  const [isAutoSubmittingDueToViolation, setIsAutoSubmittingDueToViolation] = useState(false);
+  const [proctoringToast, setProctoringToast] = useState<string | null>(null);
+  const [showFullscreenOverlay, setShowFullscreenOverlay] = useState(false);
 
   // Trạng thái tự động lưu (Auto-save)
   const [lastSavedTime, setLastSavedTime] = useState<string>('');
@@ -371,38 +376,117 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     }
   }, [answers, flagged, essayImages, viewMode, fontSize, tabSwitchCount, exam, storageKey]);
 
-  // 4. GIÁM SÁT THI & CHỐNG GIAN LẬN: PHÁT HIỆN RỜI TAB / MỞ GOOGLE / CHATGPT
+  // Trigger thông báo răn đe chống gian lận (Anti-cheat Toast)
+  const triggerProctorToast = (msg: string) => {
+    setProctoringToast(msg);
+    setTimeout(() => setProctoringToast(null), 3000);
+  };
+
+  // 4. GIÁM SÁT THI & CHỐNG GIAN LẬN TOÀN DIỆN CHUẨN AZOTA
+  useEffect(() => {
+    // A. Chặn phím tắt gian lận: F12, Ctrl+Shift+I, Ctrl+C, Ctrl+V, Ctrl+U, Ctrl+S
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Chặn phím tắt mở Developer Tools (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C)
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && ['I', 'J', 'C', 'i', 'j', 'c'].includes(e.key)) ||
+        (e.metaKey && e.altKey && ['I', 'J', 'C', 'i', 'j', 'c'].includes(e.key))
+      ) {
+        e.preventDefault();
+        triggerProctorToast('⚠️ Thao tác bị khóa! Nghiêm cấm mở công cụ nhà phát triển trong lúc thi.');
+        return false;
+      }
+
+      // 2. Chặn Ctrl + U (Xem mã nguồn HTML)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+        e.preventDefault();
+        triggerProctorToast('⚠️ Thao tác bị khóa! Không thể xem mã nguồn.');
+        return false;
+      }
+
+      // 3. Chặn Ctrl + S (Lưu trang)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        return false;
+      }
+
+      // 4. Chặn Sao chép (Ctrl + C / Cmd + C) trừ khi đang gõ trong input/textarea của tự luận
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const targetTag = (e.target as HTMLElement)?.tagName?.toUpperCase();
+        if (targetTag !== 'INPUT' && targetTag !== 'TEXTAREA') {
+          e.preventDefault();
+          triggerProctorToast('🔒 Nghiêm cấm sao chép câu hỏi đề thi ra bên ngoài!');
+          return false;
+        }
+      }
+    };
+
+    // B. Chặn chuột phải (Context Menu)
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      triggerProctorToast('🔒 Chuột phải đã bị vô hiệu hóa để bảo mật đề thi.');
+      return false;
+    };
+
+    // C. Chặn bôi đen đề thi để chống copy
+    const handleSelectStart = (e: Event) => {
+      const targetTag = (e.target as HTMLElement)?.tagName?.toUpperCase();
+      if (targetTag !== 'INPUT' && targetTag !== 'TEXTAREA') {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    // Gắn các trình nghe chống gian lận
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('contextmenu', handleContextMenu, true);
+    document.addEventListener('selectstart', handleSelectStart);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('selectstart', handleSelectStart);
+    };
+  }, []);
+
+  // B. Giám sát rời tab và thu bài tự động nếu vi phạm quá mức
+  const recordViolation = (reason: string) => {
+    const timeStr = new Date().toLocaleTimeString('vi-VN');
+    const logItem = `${timeStr}: ${reason}`;
+
+    setViolationLogs((prev) => [...prev, logItem]);
+    setTabSwitchCount((prev) => {
+      const next = prev + 1;
+      if (next >= MAX_ALLOWED_VIOLATIONS) {
+        // Tự động thu bài và khóa thi ngay lập tức
+        setIsAutoSubmittingDueToViolation(true);
+        setTimeout(() => {
+          handleFinalSubmitWithViolation(next, [...violationLogs, logItem]);
+        }, 1500);
+      } else {
+        setShowTabWarning(true);
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     const handleVisibilityChange = () => {
-      // Chỉ cảnh báo khi học sinh thực sự chuyển sang tab khác hoặc thu nhỏ trình duyệt
       if (document.hidden) {
-        setTabSwitchCount((prev) => {
-          const next = prev + 1;
-          setShowTabWarning(true);
-          return next;
-        });
+        recordViolation('Rời khỏi tab đề thi (chuyển sang ứng dụng hoặc tab khác)');
       }
     };
 
     const handleWindowBlur = () => {
-      // Trì hoãn 200ms để trình duyệt cập nhật focus target
       setTimeout(() => {
-        // NẾU HỌC SINH NHẤP CHUỘT VÀO KHUNG PDF (IFRAME/EMBED/OBJECT) -> TUYỆT ĐỐI KHÔNG BÁO CÁO
         const activeTag = document.activeElement?.tagName?.toUpperCase();
         if (activeTag === 'IFRAME' || activeTag === 'EMBED' || activeTag === 'OBJECT') {
           return;
         }
-
-        // Nếu trang vẫn đang hiển thị (document.hidden === false) -> KHÔNG cảnh báo
         if (!document.hidden) {
           return;
         }
-
-        setTabSwitchCount((prev) => {
-          const next = prev + 1;
-          setShowTabWarning(true);
-          return next;
-        });
+        recordViolation('Chuyển cửa sổ làm việc (mất tiêu điểm trình duyệt)');
       }, 200);
     };
 
@@ -413,12 +497,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, []);
+  }, [violationLogs]);
 
-  // 5. TOÀN MÀN HÌNH (FULLSCREEN MODE)
+  // C. Giám sát chế độ toàn màn hình (Fullscreen)
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+        setShowFullscreenOverlay(false);
+      }).catch(() => {});
     } else {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
@@ -426,11 +513,19 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      // Nếu đề thi đang diễn ra mà thoát fullscreen -> Cảnh báo
+      if (!isFs && timeLeft > 0 && !isSubmitting) {
+        setShowFullscreenOverlay(true);
+        recordViolation('Thoát khỏi chế độ toàn màn hình');
+      } else {
+        setShowFullscreenOverlay(false);
+      }
     };
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
+  }, [timeLeft, isSubmitting, violationLogs]);
 
   const questions: Question[] = exam?.questions || [];
   const part1Questions = questions.filter((q) => q.part === 1 || q.type === 'single_choice' || q.type === 'multiple_choice');
@@ -624,7 +719,81 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     }
   };
 
-  // Xử lý nộp bài
+  // Xử lý nộp bài cưỡng chế khi vi phạm quá số lần cho phép
+  const handleFinalSubmitWithViolation = async (violationCount: number, logs: string[]) => {
+    if (!exam || isSubmitting) return;
+    setIsSubmitting(true);
+
+    const gradingResult = gradeExamSubmission(questions, answers);
+    const maxScore = exam.format === 'periodic_4_parts' ? 20.0 : 10.0;
+    const newSubId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : '99999999-9999-9999-9999-999999999999';
+
+    const startTimeIso = new Date(Date.now() - (exam.duration_minutes * 60 - timeLeft) * 1000).toISOString();
+    const submittedAtIso = new Date().toISOString();
+    const studentId = user?.id || '33333333-3333-3333-3333-333333333333';
+
+    const submissionAnswers = gradingResult.answers.map((r) => ({
+      question_id: r.questionId,
+      student_answer: answers[r.questionId],
+      essay_images: essayImages[r.questionId] || [],
+      is_correct: r.isCorrect ?? undefined,
+      earned_points: r.earnedPoints,
+      max_points: r.maxPoints,
+    }));
+
+    const violationDetail = logs.length > 0 ? `\nNhật ký vi phạm:\n${logs.join('\n')}` : '';
+
+    const newSubmission = {
+      id: newSubId,
+      exam_id: exam.id,
+      exam,
+      student_id: studentId,
+      student: user || undefined,
+      attempt_number: 1,
+      start_time: startTimeIso,
+      submitted_at: submittedAtIso,
+      score: gradingResult.score,
+      max_score: maxScore,
+      status: gradingResult.hasPendingEssay ? ('grading' as const) : ('graded' as const),
+      tab_switch_count: violationCount,
+      teacher_feedback: `[VI PHẠM QUY CHẾ THI] Bài thi bị thu tự động do rời màn hình quá ${MAX_ALLOWED_VIOLATIONS} lần.${violationDetail}`,
+      answers: submissionAnswers,
+    };
+
+    try {
+      await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSubmission),
+      });
+    } catch {}
+
+    MOCK_SUBMISSIONS.unshift(newSubmission as any);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
+      const mySubmissionsKey = `my_submissions_${studentId}`;
+      const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
+      existingMySubs.unshift(newSubmission);
+      localStorage.setItem(mySubmissionsKey, JSON.stringify(existingMySubs));
+
+      const allSubsKey = 'lms_all_submissions';
+      const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
+      const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
+      filteredAll.unshift(newSubmission);
+      localStorage.setItem(allSubsKey, JSON.stringify(filteredAll));
+
+      broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
+      broadcastDataChange('EXAMS_UPDATED');
+      localStorage.removeItem(storageKey);
+    }
+
+    router.push(`/exams/${exam.id}/result/${newSubId}`);
+  };
+
+  // Xử lý nộp bài chủ động
   const handleFinalSubmit = async () => {
     if (!exam) return;
     setIsSubmitting(true);
@@ -2238,40 +2407,121 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
         </div>
       )}
 
-      {/* 4. MODAL CẢNH BÁO RỜI MÀN HÌNH THI (GIÁM SÁT GIAN LẬN AZOTA) */}
-      {showTabWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4 border-2 border-rose-400">
+      {/* 4. TOAST THÔNG BÁO CHỐNG GIAN LẬN THỜI GIAN THỰC (AZOTA SHIELD) */}
+      {proctoringToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-2xl bg-slate-900/95 text-white px-5 py-3 text-xs sm:text-sm font-bold shadow-2xl backdrop-blur-md border border-rose-500/60 animate-in fade-in slide-in-from-top-4">
+          <ShieldAlert className="h-5 w-5 text-rose-400 shrink-0 animate-bounce" />
+          <span>{proctoringToast}</span>
+        </div>
+      )}
+
+      {/* 5. OVERLAY BẮT BUỘC TOÀN MÀN HÌNH (ENFORCED FULLSCREEN GUARD) */}
+      {showFullscreenOverlay && !isAutoSubmittingDueToViolation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl text-center space-y-4 border-2 border-amber-400">
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-100 text-amber-600 mx-auto">
+              <Maximize className="h-9 w-9 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">YÊU CẦU TOÀN MÀN HÌNH</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Quy chế thi trực tuyến yêu cầu bạn phải giữ toàn màn hình cho tới khi hoàn thành nộp bài.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-xs text-amber-900 font-semibold text-left">
+              ⚠️ Hành vi thu nhỏ cửa sổ hoặc chuyển màn hình đã được ghi nhận vào nhật ký giám sát gửi về máy Thầy Sơn.
+            </div>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold py-3 text-sm shadow-lg shadow-orange-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Maximize className="h-4 w-4" />
+              <span>Quay Lại Toàn Màn Hình Để Tiếp Tục</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODAL ĐÌNH CHỈ THI & TỰ ĐỘNG THU BÀI (AUTO-SUBMIT ON 3 VIOLATIONS) */}
+      {isAutoSubmittingDueToViolation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-rose-950/90 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl text-center space-y-4 border-4 border-rose-600 animate-in zoom-in-95">
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-rose-100 text-rose-600 mx-auto">
+              <AlertTriangle className="h-9 w-9 animate-bounce" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-rose-600">BÀI THI BỊ THU CƯỠNG CHẾ</h3>
+              <p className="text-xs text-slate-600 mt-1 font-medium">
+                Bạn đã rời màn hình làm bài quá <strong>{MAX_ALLOWED_VIOLATIONS} lần</strong> quy định!
+              </p>
+            </div>
+            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs text-rose-900 text-left space-y-2">
+              <div className="font-bold">Biên bản vi phạm đã được lập:</div>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-rose-800">
+                {violationLogs.map((log, idx) => (
+                  <li key={idx}>{log}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-rose-600 border-t-transparent" />
+              <span>Đang tự động nộp bài và khóa quyền truy cập...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. MODAL CẢNH BÁO RỜI MÀN HÌNH THI PHÂN CẤP (AZOTA SHIELD) */}
+      {showTabWarning && !isAutoSubmittingDueToViolation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-4">
+          <div className={`w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4 border-2 ${
+            tabSwitchCount === 1 ? 'border-amber-400' : 'border-rose-500 animate-pulse'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 shrink-0">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl shrink-0 ${
+                tabSwitchCount === 1 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'
+              }`}>
                 <ShieldAlert className="h-7 w-7" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">CẢNH BÁO GIÁM SÁT THI</h3>
-                <p className="text-xs text-slate-500">Hệ thống phát hiện học sinh vừa rời tab thi</p>
+                <h3 className="text-base font-bold text-slate-900">
+                  {tabSwitchCount === 1 ? 'CẢNH BÁO VI PHẠM (Lần 1/3)' : '🚨 CẢNH BÁO NGUY CẤP (Lần 2/3)'}
+                </h3>
+                <p className="text-xs text-slate-500">Hệ thống giám sát phát hiện bạn vừa rời khỏi đề thi</p>
               </div>
             </div>
 
-            <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 space-y-1.5 text-xs text-rose-900">
+            <div className={`rounded-2xl border p-4 space-y-1.5 text-xs ${
+              tabSwitchCount === 1
+                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900 font-semibold'
+            }`}>
               <div className="font-bold text-sm">
-                Bạn đã rời khỏi màn hình làm bài {tabSwitchCount} lần!
+                Bạn đã rời khỏi màn hình làm bài {tabSwitchCount}/{MAX_ALLOWED_VIOLATIONS} lần!
               </div>
               <p>
-                Hành động chuyển sang tab khác (tìm kiếm Google, ChatGPT, Photomath, v.v.) được ghi nhận chi tiết vào biên bản thi gửi trực tiếp cho Thầy Sơn.
+                {tabSwitchCount === 1
+                  ? 'Hành vi chuyển tab (tìm kiếm Google, mở ChatGPT, chuyển app) được ghi nhận chi tiết vào biên bản thi gửi về cho Thầy Sơn.'
+                  : '⚠️ CẢNH BÁO CUỐI CÙNG: Nếu rời màn hình thêm 1 lần nữa, bài thi sẽ BỊ THU CƯỠNG CHẾ VÀ ĐÌNH CHỈ THI NGAY LẬP TỨC!'}
               </p>
             </div>
 
             <p className="text-xs text-slate-600 font-medium">
-              Vui lòng tập trung làm bài và giữ nguyên màn hình thi cho tới khi hoàn tất nộp bài!
+              Vui lòng tập trung 100% làm bài và giữ nguyên màn hình thi cho tới khi hoàn tất nộp bài!
             </p>
 
             <div className="flex justify-end pt-1">
               <button
                 type="button"
                 onClick={() => setShowTabWarning(false)}
-                className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition cursor-pointer"
+                className={`rounded-xl px-5 py-2.5 text-xs font-bold text-white transition cursor-pointer ${
+                  tabSwitchCount === 1
+                    ? 'bg-blue-600 hover:bg-blue-500'
+                    : 'bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-600/30'
+                }`}
               >
-                Tôi đã hiểu & Tiếp tục làm bài
+                Tôi Cam Kết Trung Thực & Tiếp Tục Làm Bài
               </button>
             </div>
           </div>
