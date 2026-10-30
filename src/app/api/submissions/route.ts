@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/adminClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Giải mã answers và tab_switch_count từ cột teacher_feedback
+// Giải mã answers và tab_switch_count từ cột teacher_feedback và bung toàn bộ thông tin đề thi
 function unpackSubmission(sub: any) {
   if (!sub) return sub;
   let answers = Array.isArray(sub.answers) ? sub.answers : [];
@@ -20,22 +20,54 @@ function unpackSubmission(sub: any) {
     } catch {}
   }
 
-  // Đảm bảo exam object có title
+  // Đảm bảo exam object có title, code, và danh sách câu hỏi
   let examObj = sub.exam;
-  if (examObj && typeof examObj.description === 'string' && examObj.description.startsWith('{"__lms_meta__":true')) {
-    try {
-      const meta = JSON.parse(examObj.description);
-      examObj = {
-        ...examObj,
-        code: meta.code || examObj.code,
-        assigned_classes: meta.assigned_classes || [],
-      };
-    } catch {}
+  if (examObj) {
+    let cleanDesc = examObj.description || '';
+    let extra: any = {};
+    if (typeof cleanDesc === 'string' && cleanDesc.startsWith('{"__lms_meta__":true')) {
+      try {
+        extra = JSON.parse(cleanDesc);
+        cleanDesc = extra.text || '';
+      } catch {}
+    }
+    const rawQuestions = Array.isArray(extra.questions) ? extra.questions : [];
+    examObj = {
+      ...examObj,
+      description: cleanDesc,
+      code: extra.code || examObj.code || (examObj.id ? examObj.id.substring(0, 6).toUpperCase() : 'EXAM01'),
+      questions: rawQuestions,
+      questions_count: rawQuestions.length,
+      format: extra.format || 'standard_3_parts',
+      part_structure: extra.part_structure || null,
+      part_points: extra.part_points || null,
+      assigned_classes: Array.isArray(extra.assigned_classes) ? extra.assigned_classes : [],
+      access_type: extra.access_type || 'restricted',
+      is_locked: extra.is_locked ?? (examObj.status === 'closed'),
+      exam_mode: extra.exam_mode || 'standard',
+      pdf_url: extra.pdf_url || null,
+      solution_pdf_url: extra.solution_pdf_url || null,
+    };
+  } else {
+    examObj = {
+      id: sub.exam_id,
+      title: sub.exam_title || 'Đề kiểm tra',
+      code: sub.exam_code || '',
+      questions: [],
+      assigned_classes: [],
+    };
   }
+
+  const studentObj = sub.student || {
+    id: sub.student_id,
+    full_name: 'Học sinh',
+    role: 'student',
+  };
 
   return {
     ...sub,
     exam: examObj,
+    student: studentObj,
     answers,
     tab_switch_count: tabSwitch,
     teacher_feedback: feedback,
@@ -71,14 +103,43 @@ export async function GET(req: NextRequest) {
     // 2. Lấy danh sách bài nộp có lọc
     let query = supabase
       .from('submissions')
-      .select('*, exam:exams(id, title, code, grade, duration_minutes, description), student:profiles(id, full_name, email, role, candidate_number, school_name)')
+      .select('*, exam:exams(*), student:profiles(*)')
       .order('submitted_at', { ascending: false });
 
     if (examId) {
-      query = query.eq('exam_id', examId);
+      let resolvedExamId = examId.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedExamId);
+      if (!isUuid) {
+        // Tìm exam UUID theo code hoặc title trong description/title
+        const { data: matchedExams } = await supabase
+          .from('exams')
+          .select('id, title, description')
+          .or(`description.ilike.%${resolvedExamId}%,title.ilike.%${resolvedExamId}%`)
+          .limit(1);
+        if (matchedExams && matchedExams.length > 0) {
+          resolvedExamId = matchedExams[0].id;
+        }
+      }
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedExamId)) {
+        query = query.eq('exam_id', resolvedExamId);
+      }
     }
     if (studentId) {
-      query = query.eq('student_id', studentId);
+      let resolvedStudentId = studentId.trim();
+      const isStudentUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedStudentId);
+      if (!isStudentUuid) {
+        const { data: matchedProfiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`email.ilike.%${resolvedStudentId}%,full_name.ilike.%${resolvedStudentId}%`)
+          .limit(1);
+        if (matchedProfiles && matchedProfiles.length > 0) {
+          resolvedStudentId = matchedProfiles[0].id;
+        }
+      }
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedStudentId)) {
+        query = query.eq('student_id', resolvedStudentId);
+      }
     }
 
     const { data, error } = await query;
@@ -137,24 +198,55 @@ export async function POST(req: NextRequest) {
         ? crypto.randomUUID()
         : '00000000-0000-0000-0000-' + Date.now().toString().padStart(12, '0');
 
-    // 1. Đảm bảo profile học sinh tồn tại
-    if (student && student.id) {
+    // 1. Phân giải exam_id và student_id sang UUID chuẩn Postgres
+    let finalExamId = exam_id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalExamId)) {
+      const { data: matchedExams } = await supabase
+        .from('exams')
+        .select('id')
+        .or(`description.ilike.%${finalExamId}%,title.ilike.%${finalExamId}%`)
+        .limit(1);
+      if (matchedExams && matchedExams.length > 0) {
+        finalExamId = matchedExams[0].id;
+      }
+    }
+
+    let finalStudentId = student_id;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalStudentId)) {
+      if (student?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(student.id)) {
+        finalStudentId = student.id;
+      } else {
+        const { data: matchedProfiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`email.ilike.%${finalStudentId}%,full_name.ilike.%${finalStudentId}%`)
+          .limit(1);
+        if (matchedProfiles && matchedProfiles.length > 0) {
+          finalStudentId = matchedProfiles[0].id;
+        } else {
+          finalStudentId = '48dc643d-1b47-4c4e-a473-ca2f622b761c';
+        }
+      }
+    }
+
+    // 2. Đảm bảo profile học sinh tồn tại (nếu ID là UUID hợp lệ)
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalStudentId)) {
       try {
         await supabase.from('profiles').upsert([
           {
-            id: student.id,
-            email: student.email || `${student.id}@thpt-math-lms.vn`,
-            full_name: student.full_name || 'Học sinh',
+            id: finalStudentId,
+            email: student?.email || `${finalStudentId}@thpt-math-lms.vn`,
+            full_name: student?.full_name || 'Học sinh',
             role: 'student',
-            grade: student.grade || 12,
-            school_name: student.school_name || 'THPT Chuyên',
+            grade: student?.grade || 12,
+            school_name: student?.school_name || 'THPT Chuyên',
             updated_at: new Date().toISOString(),
           },
         ]);
       } catch {}
     }
 
-    // 2. Đóng gói answers và tab_switch_count vào teacher_feedback an toàn
+    // 3. Đóng gói answers và tab_switch_count vào teacher_feedback an toàn
     const feedbackMeta = {
       __meta__: true,
       feedback: typeof teacher_feedback === 'string' ? teacher_feedback : '',
@@ -162,11 +254,11 @@ export async function POST(req: NextRequest) {
       answers: Array.isArray(answers) ? answers : [],
     };
 
-    // 3. Chỉ gửi các cột chuẩn tồn tại trong bảng submissions của Supabase
+    // 4. Chỉ gửi các cột chuẩn tồn tại trong bảng submissions của Supabase
     const submissionPayload = {
       id: subUuid,
-      exam_id,
-      student_id,
+      exam_id: finalExamId,
+      student_id: finalStudentId,
       start_time: start_time || new Date().toISOString(),
       submitted_at: submitted_at || new Date().toISOString(),
       score: Number(score) || 0,

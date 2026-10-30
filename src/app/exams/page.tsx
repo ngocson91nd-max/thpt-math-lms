@@ -1025,6 +1025,18 @@ Khi đó chiều cao $h = 2\\text{ m}$.
 
   // Lấy bài nộp của học sinh đối với đề thi cụ thể
   const getStudentSubmission = (examId: string, studentId?: string) => {
+    // 1. Kiểm tra trong allSubmissions (đồng bộ từ Cloud Supabase theo thời gian thực)
+    const cloudSub = allSubmissions.find((s: any) => {
+      if (!s) return false;
+      const matchExam = s.exam_id === examId || s.exam?.id === examId;
+      const matchStudent =
+        (studentId && (s.student_id === studentId || s.student?.id === studentId)) ||
+        (user?.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase());
+      return matchExam && matchStudent;
+    });
+    if (cloudSub) return cloudSub;
+
+    // 2. Fallback sang bộ nhớ cục bộ cá nhân của học sinh
     if (!studentId || typeof window === 'undefined') return null;
     try {
       const raw = localStorage.getItem(`my_submissions_${studentId}`);

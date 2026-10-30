@@ -102,7 +102,18 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
       }
 
+      let subCount = 0;
+      try {
+        const { count } = await supabase
+          .from('submissions')
+          .select('id', { count: 'exact', head: true })
+          .eq('exam_id', data.id);
+        subCount = count || 0;
+      } catch {}
+
       const formattedExam = unpackExam(data, true);
+      formattedExam.submissions_count = subCount;
+
       return NextResponse.json(
         { success: true, exam: formattedExam },
         {
@@ -124,7 +135,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    const formattedExams = (data || []).map((exam) => unpackExam(exam, true));
+    // Đếm số lượng bài nộp cho từng đề thi từ Supabase Cloud
+    const countMap: Record<string, number> = {};
+    try {
+      const { data: subsData } = await supabase.from('submissions').select('exam_id');
+      if (subsData && Array.isArray(subsData)) {
+        subsData.forEach((s: any) => {
+          if (s.exam_id) countMap[s.exam_id] = (countMap[s.exam_id] || 0) + 1;
+        });
+      }
+    } catch {}
+
+    const formattedExams = (data || []).map((exam) => {
+      const unpacked = unpackExam(exam, true);
+      unpacked.submissions_count = countMap[unpacked.id] || 0;
+      return unpacked;
+    });
 
     return NextResponse.json(
       { success: true, exams: formattedExams },
