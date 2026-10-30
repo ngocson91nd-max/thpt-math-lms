@@ -239,23 +239,21 @@ export default function ExamsPage() {
       fetchExams();
 
       // 4. Tải danh sách bài nộp để đếm số HS đã thi và hiển thị bài chờ chấm
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('lms_deleted_submission_ids');
+      }
       fetchSubmissions();
     }
   }, []);
 
   const fetchSubmissions = async () => {
     try {
-      const deletedSubIds =
-        typeof window !== 'undefined'
-          ? new Set(JSON.parse(localStorage.getItem('lms_deleted_submission_ids') || '[]'))
-          : new Set();
       const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
       const d = await res.json();
       if (d.success && Array.isArray(d.submissions)) {
-        const cleanSubs = d.submissions.filter((s: any) => !deletedSubIds.has(s.id));
-        setAllSubmissions(cleanSubs);
+        setAllSubmissions(d.submissions);
         if (typeof window !== 'undefined') {
-          localStorage.setItem('lms_all_submissions', JSON.stringify(cleanSubs));
+          localStorage.setItem('lms_all_submissions', JSON.stringify(d.submissions));
         }
       }
     } catch (e) {

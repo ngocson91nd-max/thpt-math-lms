@@ -69,11 +69,6 @@ export default function GradebookPage() {
     let combined: Submission[] = [];
 
     // A. Nạp từ cache nội bộ (đã loại bỏ sạch sẽ các bản ghi giả định / mock cũ)
-    const deletedSubIds =
-      typeof window !== 'undefined'
-        ? new Set(JSON.parse(localStorage.getItem('lms_deleted_submission_ids') || '[]'))
-        : new Set();
-
     if (typeof window !== 'undefined') {
       const globalSaved = localStorage.getItem('lms_all_submissions');
       if (globalSaved) {
@@ -84,7 +79,6 @@ export default function GradebookPage() {
               (s) =>
                 s &&
                 s.id &&
-                !deletedSubIds.has(s.id) &&
                 !s.id.startsWith('sub-') &&
                 !s.id.startsWith('mock-') &&
                 s.exam_id !== 'exam-1' &&
@@ -98,10 +92,9 @@ export default function GradebookPage() {
     if (!isTeacher && user) {
       const studentOnly = combined.filter(
         (s) =>
-          !deletedSubIds.has(s.id) &&
-          (s.student_id === user.id ||
-            s.student?.id === user.id ||
-            (user.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase()))
+          s.student_id === user.id ||
+          s.student?.id === user.id ||
+          (user.email && s.student?.email && s.student.email.toLowerCase() === user.email.toLowerCase())
       );
       setSubmissions(studentOnly);
     } else {
@@ -113,7 +106,7 @@ export default function GradebookPage() {
       const res = await fetch(`/api/submissions?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success && Array.isArray(data.submissions)) {
-        const cloudList: Submission[] = data.submissions.filter((s: any) => !deletedSubIds.has(s.id));
+        const cloudList: Submission[] = data.submissions;
 
         // Chỉ kết hợp thêm các bài vừa nộp cục bộ trong 60 giây (nếu có bài thi mới chưa kịp đồng bộ)
         const now = Date.now();
@@ -249,11 +242,6 @@ export default function GradebookPage() {
     if (!isConfirmed) return;
 
     if (typeof window !== 'undefined') {
-      const deletedSubIds = new Set(
-        JSON.parse(localStorage.getItem('lms_deleted_submission_ids') || '[]')
-      );
-      deletedSubIds.add(subId);
-      localStorage.setItem('lms_deleted_submission_ids', JSON.stringify(Array.from(deletedSubIds)));
       localStorage.removeItem(`submission_${subId}`);
     }
 
@@ -262,7 +250,7 @@ export default function GradebookPage() {
 
     try {
       await fetch(`/api/submissions?id=${subId}`, { method: 'DELETE' });
-      broadcastDataChange('SUBMISSIONS_UPDATED', { deletedId: subId });
+      broadcastDataChange('SUBMISSIONS_UPDATED');
       broadcastDataChange('EXAMS_UPDATED');
       broadcastDataChange('ALL_UPDATED');
     } catch (err) {
