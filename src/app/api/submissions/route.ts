@@ -192,12 +192,13 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const subUuid =
-      id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      id && uuidRegex.test(id)
         ? id
         : typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : '00000000-0000-0000-0000-' + Date.now().toString().padStart(12, '0');
+        : '20000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
 
     // 1. Phân giải exam_id và student_id sang UUID chuẩn Postgres
     let finalExamId = exam_id;

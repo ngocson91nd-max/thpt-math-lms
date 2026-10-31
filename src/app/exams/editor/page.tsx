@@ -99,7 +99,15 @@ function ExamEditorContent() {
   }
 
   // 1. THÔNG TIN ĐỀ THI
-  const [examId, setExamId] = useState<string>(() => examIdParam || `exam-${Date.now()}`);
+  const [examId, setExamId] = useState<string>(() => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (examIdParam && uuidRegex.test(examIdParam)) {
+      return examIdParam;
+    }
+    return typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : '10000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+  });
   const [title, setTitle] = useState('Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (Chuẩn Bộ GD&ĐT)');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [grade, setGrade] = useState<10 | 11 | 12>(12);
@@ -136,6 +144,7 @@ function ExamEditorContent() {
   const [showSingleInputModal, setShowSingleInputModal] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [examAssets, setExamAssets] = useState<ExamAsset[]>([]);
 
   // Nạp lại Exam Asset Registry từ localStorage / sessionStorage (giữ ảnh đồ thị, hình vẽ, SVG MathType không bị vỡ)
@@ -369,77 +378,120 @@ function ExamEditorContent() {
   };
 
   // Lưu đề thi vào localStorage và đồng bộ Supabase Cloud
-  const handleSaveExam = () => {
+  const handleSaveExam = async () => {
     if (!title.trim()) {
       alert('Vui lòng nhập tiêu đề cho đề thi!');
       return;
     }
 
-    const updatedExam: Exam = {
-      id: examId,
-      code,
-      title: title.trim(),
-      description: description.trim(),
-      category,
-      teacher_id: user?.id || '22222222-2222-2222-2222-222222222222',
-      grade,
-      duration_minutes: Number(duration),
-      passing_score: 5.0,
-      shuffle_questions: shuffleQuestions,
-      shuffle_options: shuffleOptions,
-      shuffle_true_false: shuffleTrueFalse,
-      max_attempts: maxAttempts,
-      status: 'published',
-      format,
-      exam_mode: 'interactive',
-      assigned_classes: assignedClasses,
-      access_type: accessType,
-      no_time_limit: noTimeLimit,
-      part_points: partPoints,
-      true_false_scoring: trueFalseScoring,
-      submission_min_minutes: submissionMinMinutes,
-      max_violations: maxViolations,
-      view_answer_policy: viewAnswerPolicy,
-      view_score_allowed: true,
-      view_leaderboard_allowed: true,
-      is_view_answer_allowed: true,
-      questions: questions.map((q, idx) => ({
-        ...q,
-        order_index: idx + 1,
-      })),
-      assets: examAssets.length > 0 ? examAssets : getAllExamAssets(),
-      updated_at: new Date().toISOString(),
-    };
+    setIsSaving(true);
+    try {
+      const allAssets = examAssets.length > 0 ? examAssets : getAllExamAssets();
+      const updatedExam: Exam = {
+        id: examId,
+        code,
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        teacher_id: user?.id || '11111111-1111-1111-1111-111111111111',
+        grade,
+        duration_minutes: Number(duration),
+        passing_score: 5.0,
+        shuffle_questions: shuffleQuestions,
+        shuffle_options: shuffleOptions,
+        shuffle_true_false: shuffleTrueFalse,
+        max_attempts: maxAttempts,
+        status: 'published',
+        format,
+        exam_mode: 'interactive',
+        assigned_classes: assignedClasses,
+        access_type: accessType,
+        no_time_limit: noTimeLimit,
+        part_points: partPoints,
+        true_false_scoring: trueFalseScoring,
+        submission_min_minutes: submissionMinMinutes,
+        max_violations: maxViolations,
+        view_answer_policy: viewAnswerPolicy,
+        view_score_allowed: true,
+        view_leaderboard_allowed: true,
+        is_view_answer_allowed: true,
+        questions: questions.map((q, idx) => ({
+          ...q,
+          order_index: idx + 1,
+        })),
+        assets: allAssets,
+        updated_at: new Date().toISOString(),
+      };
 
-    if (typeof window !== 'undefined') {
+      // 1. Đồng bộ lên Supabase Cloud API trước tiên để đảm bảo dữ liệu đề thi được lưu chắc chắn
+      let savedCloudExam: Exam | null = null;
       try {
-        // Lưu trữ các assets riêng theo key của đề thi để các màn hình thi nạp nhanh
-        if (updatedExam.assets && updatedExam.assets.length > 0) {
-          localStorage.setItem(`exam_assets_${examId}`, JSON.stringify(updatedExam.assets));
-        }
-
-        const savedExams = localStorage.getItem('lms_exams');
-        let examsList: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
-        const existIdx = examsList.findIndex((e) => e.id === examId);
-        if (existIdx >= 0) {
-          examsList[existIdx] = updatedExam;
-        } else {
-          examsList = [updatedExam, ...examsList];
-        }
-        localStorage.setItem('lms_exams', JSON.stringify(examsList));
-        window.dispatchEvent(new Event('lms_exams_updated'));
-
-        fetch('/api/exams', {
+        const res = await fetch('/api/exams', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedExam),
-        }).catch((err) => console.warn('Lỗi đồng bộ Cloud:', err));
-
-        setSaveToast('Đã lưu đề thi thành công vào hệ thống!');
-        setTimeout(() => setSaveToast(null), 3000);
-      } catch (err) {
-        console.warn(err);
+        });
+        const resData = await res.json();
+        if (resData.success && resData.exam) {
+          savedCloudExam = resData.exam;
+          if (savedCloudExam?.id && savedCloudExam.id !== examId) {
+            setExamId(savedCloudExam.id);
+            if (typeof window !== 'undefined') {
+              window.history.replaceState(null, '', `/exams/editor?id=${savedCloudExam.id}`);
+            }
+          }
+        } else if (resData.error) {
+          console.warn('Lỗi lưu Supabase Cloud:', resData.error);
+        }
+      } catch (cloudErr) {
+        console.warn('Không thể kết nối Cloud:', cloudErr);
       }
+
+      const finalExam = savedCloudExam || updatedExam;
+      const targetId = finalExam.id;
+
+      // 2. Lưu trữ an toàn vào LocalStorage (chống tràn quota 5MB)
+      if (typeof window !== 'undefined') {
+        try {
+          if (finalExam.assets && finalExam.assets.length > 0) {
+            try {
+              localStorage.setItem(`exam_assets_${targetId}`, JSON.stringify(finalExam.assets));
+            } catch {
+              try {
+                Object.keys(localStorage).forEach((k) => {
+                  if (k.startsWith('asset_') && !k.includes(targetId)) localStorage.removeItem(k);
+                });
+                localStorage.setItem(`exam_assets_${targetId}`, JSON.stringify(finalExam.assets));
+              } catch {}
+            }
+          }
+
+          // Trong lms_exams, không lưu kèm toàn bộ chuỗi assets nặng để tránh quá tải quota 5MB
+          const lightweightExam = { ...finalExam, assets: [] };
+          const savedExams = localStorage.getItem('lms_exams');
+          let examsList: Exam[] = savedExams ? JSON.parse(savedExams) : [];
+          const existIdx = examsList.findIndex((e) => e.id === targetId || (examId && e.id === examId));
+          if (existIdx >= 0) {
+            examsList[existIdx] = lightweightExam;
+          } else {
+            examsList = [lightweightExam, ...examsList];
+          }
+          localStorage.setItem('lms_exams', JSON.stringify(examsList));
+          window.dispatchEvent(new Event('lms_exams_updated'));
+          if ('BroadcastChannel' in window) {
+            new BroadcastChannel('lms_realtime_sync').postMessage({ type: 'EXAMS_UPDATED' });
+          }
+        } catch (storageErr) {
+          console.warn('Lỗi lưu trữ cục bộ:', storageErr);
+        }
+      }
+
+      setSaveToast('Đã lưu và cập nhật đề thi thành công vào hệ thống!');
+      setTimeout(() => setSaveToast(null), 4000);
+    } catch (err: any) {
+      alert(`Lỗi lưu đề thi: ${err?.message || 'Vui lòng kiểm tra lại'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -551,10 +603,20 @@ function ExamEditorContent() {
           <button
             type="button"
             onClick={handleSaveExam}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition cursor-pointer"
+            disabled={isSaving}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition cursor-pointer disabled:opacity-60"
           >
-            <Save className="h-3.5 w-3.5" />
-            <span>Cập nhật</span>
+            {isSaving ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-3.5 w-3.5" />
+                <span>Cập nhật</span>
+              </>
+            )}
           </button>
         </div>
       </header>
@@ -1331,9 +1393,16 @@ function ExamEditorContent() {
 
       {/* Toast thông báo nổi */}
       {saveToast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded-2xl bg-slate-900/95 text-white px-4 py-2.5 text-xs font-extrabold shadow-2xl flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-3">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <div className="fixed bottom-5 right-5 z-50 rounded-2xl bg-slate-900/95 text-white px-4 py-2.5 text-xs font-extrabold shadow-2xl flex items-center gap-3 border border-slate-700 animate-in fade-in slide-in-from-bottom-3">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
           <span>{saveToast}</span>
+          <Link
+            href="/exams"
+            className="ml-2 px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] transition cursor-pointer shadow-xs inline-flex items-center gap-1 shrink-0"
+          >
+            <span>Về danh sách đề</span>
+            <span>&rarr;</span>
+          </Link>
         </div>
       )}
     </div>

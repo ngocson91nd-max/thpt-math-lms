@@ -294,12 +294,16 @@ export default function ExamsPage() {
       const res = await fetch('/api/exams');
       const data = await res.json();
       if (data.success && Array.isArray(data.exams)) {
-        setExams(data.exams);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('lms_exams', JSON.stringify(data.exams));
-          localStorage.removeItem('lms_deleted_exam_ids');
+        if (data.exams.length > 0) {
+          setExams(data.exams);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('lms_exams', JSON.stringify(data.exams));
+              localStorage.removeItem('lms_deleted_exam_ids');
+            } catch {}
+          }
+          return;
         }
-        return;
       }
     } catch (e) {
       console.error('Fetch exams error:', e);
@@ -307,18 +311,20 @@ export default function ExamsPage() {
       setIsLoading(false);
     }
 
-    // Fallback nếu mất kết nối mạng
+    // Fallback nếu mất kết nối mạng hoặc Cloud chưa có đề
     if (typeof window !== 'undefined') {
       try {
         const savedExams = localStorage.getItem('lms_exams');
         if (savedExams) {
           const parsed = JSON.parse(savedExams);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             setExams(parsed);
+            return;
           }
         }
       } catch {}
     }
+    setExams(MOCK_EXAMS);
   };
 
   useEffect(() => {

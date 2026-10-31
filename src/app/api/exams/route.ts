@@ -245,14 +245,41 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    // Chuẩn hóa UUID đề thi
-    const examUuid =
-      id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-        ? id
-        : typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : '00000000-0000-0000-0000-' + Date.now().toString().padStart(12, '0');
+    // Chuẩn hóa UUID đề thi chuẩn RFC 4122 v4
+    let examUuid = id && uuidRegex.test(id) ? id : null;
+    if (!examUuid) {
+      examUuid =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : '10000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+    }
+
+    // Đảm bảo teacher_id luôn là UUID hợp lệ và tồn tại trong bảng profiles (tránh lỗi khóa ngoại foreign key)
+    let validTeacherId = teacher_id;
+    if (!validTeacherId || !uuidRegex.test(validTeacherId)) {
+      validTeacherId = '11111111-1111-1111-1111-111111111111';
+    } else {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', validTeacherId)
+          .maybeSingle();
+        if (!prof) {
+          validTeacherId = '11111111-1111-1111-1111-111111111111';
+        }
+      } catch {
+        validTeacherId = '11111111-1111-1111-1111-111111111111';
+      }
+    }
+
+    // Đảm bảo class_id nếu có phải là UUID hợp lệ, ngược lại null
+    let validClassId = class_id;
+    if (!validClassId || !uuidRegex.test(validClassId)) {
+      validClassId = null;
+    }
 
     // Đóng gói metadata để lưu vào description
     const metadata = {
@@ -291,8 +318,8 @@ export async function POST(req: NextRequest) {
       description: JSON.stringify(metadata),
       grade: Number(grade) || 12,
       duration_minutes: Number(duration_minutes) || 45,
-      teacher_id: teacher_id || '11111111-1111-1111-1111-111111111111',
-      class_id: class_id || null,
+      teacher_id: validTeacherId,
+      class_id: validClassId,
       status: status || (is_locked ? 'closed' : 'published'),
       passing_score: passing_score || 5.0,
       shuffle_questions: shuffle_questions ?? true,
