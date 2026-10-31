@@ -65,7 +65,7 @@ if (typeof window !== 'undefined') {
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v25_')) {
+      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v30_')) {
         localStorage.removeItem(k);
       }
     }
@@ -123,14 +123,14 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
 
     // 2. Chèn script tag TikZ hoặc nạp ngay từ Cache 0ms
     tikzTargets.forEach((target) => {
-      // Nếu target đã có SVG đồ thị hợp lệ (từ pureSvg hoặc Tikzjax), không can thiệp đè lại
-      const existingSvg = target.querySelector('svg.tikz-svg-pure, svg.tikz, svg.tikzjax');
-      if (existingSvg) return;
+      // Nếu target đã có ảnh TeX Server chuẩn xác, không can thiệp đè lại
+      const existingImg = target.querySelector('img.tikz-rendered-img, img[alt="Hình vẽ TikZ"]');
+      if (existingImg) return;
 
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v25_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v30_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {
@@ -160,19 +160,8 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         }
       } catch {}
 
-      // C. THỬ RENDER BẰNG PURE TS TIKZ-TO-SVG ENGINE TRỰC TIẾP (0.1ms, KHÔNG CẦN CHỜ MẠNG)
-      const pureSvg = renderTikzToSvg(rawTikz);
-      if (pureSvg) {
-        target.innerHTML = pureSvg;
-        inMemoryTikzCache.set(cacheKey, pureSvg);
-        try {
-          localStorage.setItem(cacheKey, pureSvg);
-        } catch {}
-        return;
-      }
-
-      // D. NẾU ENGINE THUẦN KHÔNG XỬ LÝ ĐƯỢC (3D tdplot, tkz-euclide, hình phức tạp):
-      // GỌI SERVER TE-X API /api/render-tikz (CÓ ĐỦ TIKZ-3DPLOT, TKZ-EUCLIDE, PGFPLOTS)
+      // C. GỌI TRỰC TIẾP SERVER TE-X API (/api/render-tikz)
+      // Biên dịch qua TeX Live Mode 1 (Standalone) đầy đủ gói tikz, pgfplots, tikz-3dplot, tkz-euclide
       target.innerHTML = '';
       const loaderDiv = document.createElement('div');
       loaderDiv.className = 'tikz-loading flex items-center justify-center gap-2 py-3 px-5 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-blue-700 text-xs font-semibold my-2';

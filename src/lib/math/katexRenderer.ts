@@ -284,19 +284,17 @@ export function renderMathToHtml(content: string): string {
       }
     }
 
-    // 8b. Thử dựng SVG trực tiếp qua Pure TS/JS TikZ Engine (<0.5ms, đồ thị hàm số & hình học THPT)
+    // 8b. Thử dựng SVG trực tiếp qua Pure TS/JS TikZ Engine (chỉ dành cho đồ thị hàm số 2D)
     const pureSvg = renderTikzToSvg(cleanTikz);
+    const encodedTikz = encodeURIComponent(cleanTikz);
 
-    const optimizedTikz = cleanTikz.replace(/samples\s*=\s*(?:1[0-9]{2}|[2-9][0-9]{2})/g, 'samples=60');
-    const encodedTikz = encodeURIComponent(optimizedTikz);
-
-    // 8c. Nếu đã có pureSvg: nhúng TRỰC TIẾP DUY NHẤT SVG (0ms, tuyệt đối không chèn script để tránh TikzJax vẽ thêm hình thứ 2 ở góc)
+    // 8c. Nếu có pureSvg (đồ thị hàm số 2D chuẩn): nhúng SVG trực tiếp 0ms
     if (pureSvg) {
       const pureWrapper = `<div class="tikz-wrapper my-2 w-full flex flex-col items-center justify-center max-w-full overflow-hidden select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}">${pureSvg}</div></div>`;
       return savePlaceholder(pureWrapper);
     }
 
-    // 8d. Fallback cho Server TeX Engine & TikzJax đối với các hình vẽ đặc thù ngoài phạm vi parser thuần
+    // 8d. Còn lại (hình học 3D, đèn chùm, trang sách, đa giác): chuyển giao cho TeX Server /api/render-tikz
     const tikzWrapper = `<div class="tikz-wrapper my-2 flex flex-col items-center justify-center max-w-full overflow-hidden select-none"><div class="tikz-target flex justify-center py-1 w-full" data-tikz="${encodedTikz}"></div></div>`;
 
     return savePlaceholder(tikzWrapper);

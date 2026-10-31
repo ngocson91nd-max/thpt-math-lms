@@ -455,7 +455,7 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0. Nếu là hình học không gian 3D, hình học phẳng đa giác, vector hoặc chứa gói chuyên sâu:
+  // 0. Nếu là hình học không gian 3D, hoặc các hình học phức tạp (đèn chùm, trang sách ABCD-MNPQ, chóp S.ABCD):
   // Nhường 100% cho Server TeX Engine để đạt độ chuẩn xác tuyệt đối từng milimet
   const is3DOrComplex =
     /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|Oxyz|\[[^\]]*\b3d\b/i.test(
@@ -464,9 +464,10 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     /\((?:-?[0-9.]+\s*,\s*){2}-?[0-9.]+\)/.test(rawTikz) || // Tọa độ 3D (x,y,z)
     /\bz\s*=\s*\{/.test(rawTikz) || // Trục z={(...)}
     /\b[A-Z]['′](?![a-zA-Z0-9(])/.test(rawTikz) || // Đỉnh lăng trụ / hình hộp A', B', C', D'
-    (/\bellipse\b/i.test(rawTikz) && /\b(?:S|top|dinh)\b/.test(rawTikz)) || // Đèn chùm đĩa elip và đỉnh treo S
-    (/\b(?:S|top|dinh)\b/.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz) && /--/.test(rawTikz)) || // Hình chóp S.ABCD
-    (/\((?:M|N|P|Q)\)/.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz)); // Hình lồng nhau MNPQ trong ABCD (trang sách SGK)
+    (/\bellipse\b/i.test(rawTikz) && /\b(?:S|top|dinh|day|treo)\b/i.test(rawTikz)) || // Đèn chùm đĩa elip và đỉnh treo S
+    (/\b(?:S|treo)\b/i.test(rawTikz) && /\b(?:A|B|C|D)\b/.test(rawTikz) && !rawTikz.includes('plot')) || // Đèn chùm dây treo S đến ABCD
+    (/\b(?:S|top|dinh)\b/i.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz) && /--/.test(rawTikz)) || // Hình chóp S.ABCD
+    (/\b(?:M|N|P|Q)\b/.test(rawTikz) && /\b(?:A|B|C|D)\b/.test(rawTikz) && !rawTikz.includes('plot')); // Hình lồng nhau MNPQ trong ABCD (trang sách SGK)
 
   if (is3DOrComplex) {
     return null;
