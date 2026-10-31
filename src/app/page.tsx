@@ -49,7 +49,7 @@ export default function HomePage() {
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl leading-tight">
-            Toán Thầy Sơn - Lớp Học Trực Tuyến <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-teal-200 to-indigo-200">Toán THPT</span>
+            VNS Math - Nền Tảng Học Tập & Kiểm Tra <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-teal-200 to-indigo-200">Toán THPT</span>
           </h1>
 
           <p className="mt-5 text-base sm:text-lg text-slate-300 leading-relaxed">

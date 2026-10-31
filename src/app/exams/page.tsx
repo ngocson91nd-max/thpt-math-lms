@@ -1189,7 +1189,7 @@ Khi đó chiều cao $h = 2\\text{ m}$.
             </span>
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Quản lý ngân hàng đề thi, tạo đề từ file PDF, Word hoặc bộ soạn thảo trực tuyến Toán Thầy Sơn.
+            Quản lý ngân hàng đề thi, tạo đề từ file PDF, Word hoặc bộ soạn thảo trực tuyến VNS Math.
           </p>
         </div>
 

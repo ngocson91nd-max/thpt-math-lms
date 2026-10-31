@@ -5,9 +5,21 @@ import { AuthProvider } from '@/context/AuthContext';
 import AppLayout from '@/components/layout/AppLayout';
 
 export const metadata: Metadata = {
-  title: 'Toán Thầy Sơn - Nền Tảng Dạy & Học Toán THPT Trực Tuyến',
+  title: {
+    default: 'VNS- Học tập và kiểm tra Toán',
+    template: '%s | VNS- Học tập và kiểm tra Toán',
+  },
   description:
-    'Lớp học Toán trực tuyến Thầy Sơn (Lớp 10, 11, 12). Hỗ trợ KaTeX, 5 dạng câu hỏi chuẩn Bộ GD&ĐT 2025, thi tính giờ và chấm tự động.',
+    'VNS Math - Hệ thống học tập, luyện thi trắc nghiệm và tự luận Toán THPT chuẩn cấu trúc Bộ GD&ĐT 2025.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '32x32' },
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

@@ -341,7 +341,7 @@ export default function ClassesPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
             <GraduationCap className="h-8 w-8 text-blue-600 shrink-0" />
-            Quản Lý Lớp Học - Toán Thầy Sơn
+            Quản Lý Lớp Học - VNS Math
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Danh sách các lớp học trực tuyến, mã tham gia lớp và quản lý học sinh theo từng khối lớp 10, 11, 12.

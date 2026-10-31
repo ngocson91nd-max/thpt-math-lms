@@ -132,7 +132,7 @@ export const ExamFormulaSheetModal: React.FC<ExamFormulaSheetModalProps> = ({ is
 
         {/* Footer */}
         <div className="border-t border-slate-100 bg-slate-50 px-6 py-3 flex items-center justify-between text-xs text-slate-500">
-          <span>Hệ thống học tập THPT Toán Thầy Sơn</span>
+          <span>Hệ thống học tập VNS Math</span>
           <button
             type="button"
             onClick={onClose}

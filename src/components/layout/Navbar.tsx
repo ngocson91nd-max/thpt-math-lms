@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import VnsLogo from '@/components/brand/VnsLogo';
 import {
   BookOpen,
   FileQuestion,
@@ -54,19 +55,8 @@ export const Navbar: React.FC = () => {
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition">
-            <Sigma className="h-6 w-6 stroke-[2.5]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 font-bold text-lg text-slate-900 tracking-tight">
-              TOÁN THẦY SƠN
-              <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                THPT
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-500 -mt-0.5">Lớp Học Toán Trực Tuyến</div>
-          </div>
+        <Link href="/" className="flex items-center group">
+          <VnsLogo size="md" showText={true} />
         </Link>
 
         {/* Desktop Navigation Links */}

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import VnsLogo from '@/components/brand/VnsLogo';
 import {
   Sigma,
   Mail,
@@ -151,15 +152,15 @@ export default function RegisterPage() {
     <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-10 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-lg space-y-7">
         {/* Header */}
-        <div className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25">
-            <Sigma className="h-8 w-8 stroke-[2.5]" />
-          </div>
-          <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-            Đăng Ký Học Sinh - Toán Thầy Sơn
+        <div className="text-center flex flex-col items-center">
+          <Link href="/" className="inline-block hover:opacity-95 transition">
+            <VnsLogo size="lg" showText={true} />
+          </Link>
+          <h2 className="mt-4 text-xl font-bold tracking-tight text-slate-800">
+            Đăng Ký Tài Khoản Học Sinh
           </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Tạo tài khoản để tham gia các lớp học trực tuyến và làm bài thi tính giờ của Thầy Sơn
+          <p className="mt-1 text-xs text-slate-500">
+            Tham gia lớp học trực tuyến và làm bài kiểm tra Toán
           </p>
         </div>
 

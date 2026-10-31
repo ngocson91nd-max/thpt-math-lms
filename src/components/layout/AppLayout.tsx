@@ -276,7 +276,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
     }
 
     // 3. Khách chưa đăng nhập:
-    // Nếu ở Trang chủ (/): Cho phép xem Landing Page giới thiệu Toán Thầy Sơn
+    // Nếu ở Trang chủ (/): Cho phép xem Landing Page giới thiệu VNS Math
     // Nếu ở các trang nội bộ khác: Hiển thị tường bảo vệ GuestAuthWall yêu cầu đăng nhập
     if (!user) {
       if (pathname === '/') {

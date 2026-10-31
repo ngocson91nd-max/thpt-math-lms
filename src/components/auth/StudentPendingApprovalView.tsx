@@ -190,7 +190,7 @@ export const StudentPendingApprovalView: React.FC = () => {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-bold text-blue-700">
             <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-            <span>Toán Thầy Sơn THPT</span>
+            <span>VNS Math</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">

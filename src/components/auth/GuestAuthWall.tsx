@@ -16,7 +16,7 @@ export const GuestAuthWall: React.FC = () => {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
             <ShieldCheck className="h-4 w-4" />
-            <span>Khu Vực Học Tập Nội Bộ • Toán Thầy Sơn THPT</span>
+            <span>Khu Vực Học Tập Nội Bộ • VNS Math</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Nội Dung Yêu Cầu Đăng Nhập
@@ -52,7 +52,7 @@ export const GuestAuthWall: React.FC = () => {
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-blue-600 transition"
           >
             <Sigma className="h-3.5 w-3.5" />
-            <span>Quay lại Trang chủ giới thiệu Toán Thầy Sơn</span>
+            <span>Quay lại Trang chủ giới thiệu VNS Math</span>
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>

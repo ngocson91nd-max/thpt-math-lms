@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import VnsLogo from '@/components/brand/VnsLogo';
 import {
   Home,
   BookOpen,
@@ -180,18 +181,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
       {/* 1. Header / Logo */}
       <div>
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-5">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition">
-              <Sigma className="h-6 w-6 stroke-[2.5]" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 font-bold text-base text-slate-900 tracking-tight">
-                <span>TOÁN THẦY SƠN</span>
-                <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
-                  THPT
-                </span>
-              </div>
-            </div>
+          <Link href="/" className="flex items-center group">
+            <VnsLogo size="md" showText={true} />
           </Link>
 
           {/* Nút thu gọn thanh bên trên Desktop */}
@@ -360,11 +351,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
     <>
       {/* Thanh Bar trên cùng cho điện thoại / Tablet (< lg) */}
       <div className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur-md lg:hidden">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
-            <Sigma className="h-5 w-5 stroke-[2.5]" />
-          </div>
-          <span className="font-bold text-slate-900 text-sm">TOÁN THẦY SƠN</span>
+        <Link href="/" className="flex items-center">
+          <VnsLogo size="sm" showText={true} />
         </Link>
         <button
           type="button"
