@@ -66,7 +66,9 @@ body {
 .tikz-target svg,
 .tikzjax-wrapper svg,
 svg.tikz,
-svg.tikzjax {
+svg.tikzjax,
+svg.tikz-svg-pure,
+.tikz-rendered-img {
   max-width: 100% !important;
   height: auto !important;
   display: block;

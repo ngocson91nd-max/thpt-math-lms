@@ -455,7 +455,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0. Nếu là hình học không gian 3D hoặc chứa gói chuyên sâu, nhường 100% cho Server TeX Engine để tuyệt đối không có nét thừa
+  // 0. Nếu là hình học không gian 3D, hình học phẳng đa giác, vector hoặc chứa gói chuyên sâu:
+  // Nhường 100% cho Server TeX Engine để đạt độ chuẩn xác tuyệt đối từng milimet
   const is3DOrComplex =
     /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|Oxyz|\[[^\]]*\b3d\b/i.test(
       rawTikz
@@ -463,7 +464,9 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     /\((?:-?[0-9.]+\s*,\s*){2}-?[0-9.]+\)/.test(rawTikz) || // Tọa độ 3D (x,y,z)
     /\bz\s*=\s*\{/.test(rawTikz) || // Trục z={(...)}
     /\b[A-Z]['′](?![a-zA-Z0-9(])/.test(rawTikz) || // Đỉnh lăng trụ / hình hộp A', B', C', D'
-    (/\bellipse\b/.test(rawTikz) && /\b(?:--|\bto\b)[^;]*\((?:[S]|top|dinh)\)/i.test(rawTikz)); // Đèn chùm, hình nón, trụ nối đỉnh S
+    (/\bellipse\b/i.test(rawTikz) && /\b(?:S|top|dinh)\b/.test(rawTikz)) || // Đèn chùm đĩa elip và đỉnh treo S
+    (/\b(?:S|top|dinh)\b/.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz) && /--/.test(rawTikz)) || // Hình chóp S.ABCD
+    (/\((?:M|N|P|Q)\)/.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz)); // Hình lồng nhau MNPQ trong ABCD (trang sách SGK)
 
   if (is3DOrComplex) {
     return null;
@@ -615,6 +618,15 @@ export function renderTikzToSvg(rawTikz: string): string | null {
           drawItems.push({ type: 'plot', expr, startX, endX, isDashed, color });
           updateBounds(startX, 0);
           updateBounds(endX, 0);
+
+          // Lấy mẫu các điểm của đồ thị để cập nhật chính xác biên độ trục Y, không bao giờ bị cắt cụt cực trị
+          for (let s = 0; s <= 20; s++) {
+            const sx = startX + (s * (endX - startX)) / 20;
+            const sy = evalPlotExpr(expr, sx, defs);
+            if (sy !== null && isFinite(sy) && Math.abs(sy) < 50) {
+              updateBounds(sx, sy);
+            }
+          }
 
           plotPositions.push({ start: drawIdx !== -1 ? drawIdx : plotIdx, end: stmtEnd });
         }
@@ -1077,5 +1089,5 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
   }
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="tikz-svg-pure mx-auto block select-none my-2" style="max-width: 100%; height: auto; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" class="tikz-svg-pure mx-auto block select-none my-2 max-w-full h-auto" style="max-width: 100%; height: auto; display: block;" xmlns="http://www.w3.org/2000/svg">${svgElements.join('\n')}</svg>`;
 }

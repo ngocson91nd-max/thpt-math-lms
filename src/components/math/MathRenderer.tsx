@@ -65,7 +65,7 @@ if (typeof window !== 'undefined') {
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v9_')) {
+      if (k && k.startsWith('tikz_') && !k.startsWith('tikz_v25_')) {
         localStorage.removeItem(k);
       }
     }
@@ -130,7 +130,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v20_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v25_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {
@@ -256,7 +256,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         .then((data) => {
           if (data.success && data.url) {
             isFinished = true;
-            const imgHtml = `<img src="${data.url}" alt="Hình vẽ TikZ" class="max-w-full h-auto mx-auto block my-2 select-none pointer-events-none rounded-lg" style="max-height: 360px;" />`;
+            const imgHtml = `<img src="${data.url}" alt="Hình vẽ TikZ" class="max-w-full h-auto mx-auto block my-2 select-none pointer-events-none rounded-xl shadow-xs" style="max-height: 420px; object-fit: contain;" />`;
             target.innerHTML = imgHtml;
             inMemoryTikzCache.set(cacheKey, imgHtml);
             try {

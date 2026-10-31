@@ -48,14 +48,17 @@ export async function POST(req: NextRequest) {
 
     const preamble = customPreamble ? `${defaultPreamble}\n${customPreamble}` : defaultPreamble;
 
+    // Chuẩn hóa thành tài liệu standalone hoàn chỉnh để QuickLaTeX biên dịch ở Mode 1 (100% không lỗi SVG)
+    const fullDoc = cleanTikz.includes('\\documentclass')
+      ? cleanTikz
+      : `\\documentclass[border=3pt]{standalone}\n${preamble}\n\\begin{document}\n${cleanTikz}\n\\end{document}`;
+
     const postData = new URLSearchParams({
-      formula: cleanTikz,
+      formula: fullDoc,
       fsize: '18px',
       fcolor: '000000',
-      mode: '0',
-      out: '1',
+      mode: '1',
       remhost: 'quicklatex.com',
-      preamble,
     }).toString();
 
     const response = await fetch('https://quicklatex.com/latex3.f', {

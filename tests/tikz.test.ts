@@ -130,4 +130,37 @@ describe('TikZ 3D & Advanced Tests', () => {
     const svg = renderTikzToSvg(code);
     expect(svg).toBeNull();
   });
+
+  it('detects chandelier with suspension apex S and ellipse base and delegates to Server TeX', () => {
+    const code = `\\begin{tikzpicture}
+      \\coordinate (O) at (0,0);
+      \\coordinate (S) at (0,3.5);
+      \\coordinate (A) at (-2.5,0);
+      \\coordinate (B) at (-0.8,-0.3);
+      \\coordinate (C) at (2.5,0);
+      \\coordinate (D) at (0.8,0.3);
+      \\draw (O) ellipse (2.5 and 0.4);
+      \\draw (S) -- (A) (S) -- (B) (S) -- (C);
+      \\draw[dashed] (S) -- (D);
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).toBeNull();
+  });
+
+  it('detects book page geometric layout with coordinates and cycle and delegates to Server TeX', () => {
+    const code = `\\begin{tikzpicture}[scale=0.8]
+      \\coordinate (A) at (0,6);
+      \\coordinate (B) at (4.5,6);
+      \\coordinate (C) at (4.5,0);
+      \\coordinate (D) at (0,0);
+      \\coordinate (M) at (1.2, 4.5);
+      \\coordinate (N) at (3.5, 4.5);
+      \\coordinate (P) at (3.5, 1.5);
+      \\coordinate (Q) at (1.2, 1.5);
+      \\draw[thick] (A) -- (B) -- (C) -- (D) -- cycle;
+      \\draw[thick] (M) -- (N) -- (P) -- (Q) -- cycle;
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).toBeNull();
+  });
 });
