@@ -959,8 +959,33 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
 
   // BÓC TÁCH ĐÁP ÁN VÀ LỜI GIẢI TỪ RAW XML TRƯỚC KHI BỎ CÁC THẺ BẢNG VÀ ĐOẠN VĂN!
   // Chỉ khớp tiêu đề bắt đầu thẻ <w:t>, tránh nhầm lẫn với cụm từ "điền đáp án", "chọn đáp án"
-  const tailRegex = /<w:t[^>]*>\s*(?:BẢNG\s+ĐÁP\s+ÁN|HƯỚNG\s+DẪN\s+CHẤM|HƯỚNG\s+DẪN\s+GIẢI|ĐÁP\s+ÁN\s+VÀ\s+LỜI\s+GIẢI|ĐÁP\s+ÁN\s+CÁC\s+CÂU|ĐÁP\s+ÁN\s+KIỂM\s+TRA|ĐÁP\s+ÁN\s+ĐỀ\s+KIỂM\s+TRA|LỜI\s+GIẢI\s+CHI\s+TIẾT|LỜI\s+GIẢI|ĐÁP\s+ÁN)\b/i;
-  const tailMatch = xml.match(tailRegex);
+  // QUAN TRỌNG: Chỉ coi là Tail Section (Đuôi đề) nếu SAU ĐÓ KHÔNG CÒN các câu hỏi tiếp theo (Câu 2, 3...)
+  // để tránh cắt nhầm khi gặp chữ "Lời giải" inline dưới từng câu hỏi!
+  // Phân biệt chính xác giữa Mục Lời giải/Đáp án cuối đề (Tail Section) và Lời giải inline dưới từng câu:
+  // - Nếu là Bảng đáp án / Hướng dẫn chấm -> luôn là Tail Section.
+  // - Nếu là Lời giải / Đáp án / Hướng dẫn giải -> chỉ là Tail Section nếu phần còn lại khởi động lại từ đầu (chứa 'PHẦN I' hoặc 'Câu 1')
+  //   và không được lập tức tiếp nối sang Câu 2.
+  const candidateTailRegex = /<w:t[^>]*>\s*(?:BẢNG\s+ĐÁP\s+ÁN|BẢNG\s+ĐÁP\s+SỐ|HƯỚNG\s+DẪN\s+CHẤM|HƯỚNG\s+DẪN\s+GIẢI\s+CHI\s+TIẾT|LỜI\s+GIẢI\s+CHI\s+TIẾT|ĐÁP\s+ÁN\s+VÀ\s+LỜI\s+GIẢI|LỜI\s+GIẢI|ĐÁP\s+ÁN|HƯỚNG\s+DẪN\s+GIẢI)\b/gi;
+  let cm;
+  let tailMatch: any = null;
+  while ((cm = candidateTailRegex.exec(xml)) !== null) {
+    const matchedText = cm[0];
+    const remaining = xml.substring(cm.index + cm[0].length);
+
+    if (/BẢNG\s+ĐÁP\s+ÁN|BẢNG\s+ĐÁP\s+SỐ|HƯỚNG\s+DẪN\s+CHẤM/i.test(matchedText)) {
+      tailMatch = cm;
+      break;
+    }
+
+    const hasRestart = /(?:PHẦN\s*(?:I\b|1\b)|(?:Câu|Bài)\s*1\b)/i.test(remaining);
+    const hasNextOnly = /^\s*[\s\S]{1,500}?(?:Câu|Bài)\s*[2-9]\b/i.test(remaining);
+
+    if (hasRestart && !hasNextOnly) {
+      tailMatch = cm;
+      break;
+    }
+  }
+
   let tailAnswers: ParsedTailAnswers = {
     part1: new Map(),
     part2: new Map(),
@@ -1381,6 +1406,9 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       .replace(/<br\s*\/?>/gi, '\n');
   }
 
+  // Ghép các chữ số của số câu bị Word chẻ tách giữa các thẻ (ví dụ "Câu 2</b><b>0." -> "Câu 20.")
+  examContent = examContent.replace(/((?:Câu|Bài|CÂU|BÀI)\s*\d+)(?:<\/[^>]+>|\s)*(?:<[^>]+>|\s)*(\d+)/gi, '$1$2');
+
   // Tách câu hỏi theo biểu thức đa dạng, hỗ trợ mọi thẻ lồng giữa "Câu" và số
   const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
 
@@ -1420,6 +1448,24 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
 
       let type: QuestionType = 'single_choice';
       let part: 1 | 2 | 3 | 4 = section.part;
+
+      // Tự động phân loại Phần thông minh nếu file thiếu tiêu đề PHẦN III giữa Câu 16 và Câu 17
+      // Theo cấu trúc chuẩn đề thi THPT 2025: Câu 1-12 là Phần I, Câu 13-16 là Phần II, Câu 17-22 là Phần III
+      if (section.part === 2 && questionNumber >= 17) {
+        part = 3;
+      } else if (section.part === 1 && questionNumber >= 13 && questionNumber <= 16 && tfMatches.length >= 3) {
+        part = 2;
+      } else if (section.part === 1 && questionNumber >= 17) {
+        part = 3;
+      } else if (section.part === 2 && tfMatches.length < 3 && choicesMatches.length === 0) {
+        if (
+          questionNumber >= 17 ||
+          /(?:Đáp án|Đáp số|Kết quả)(?:<[^>]+>|\s|\$|:)*([+-]?[\d\,\.\-\/]+)/i.test(body + '\n' + explanation)
+        ) {
+          part = 3;
+        }
+      }
+
       let points = 0.25;
       let options: any[] = [];
       let correctAnswer: any = null;
@@ -1515,8 +1561,24 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
             stmtText = stmtText.replace(/(?:^|\n)\s*(?:PHẦN|PHAN|Phần|Phan|phan)\s*(?:[I|V|X]+|[1-4])\b[\s\S]*$/i, '').trim();
 
             if (!tailTf) {
-              const isTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
-              if (isTrue) correctMap[label] = true;
+              const isUnderline = cur[0].includes('<u>') || stmtText.includes('<u>');
+              const isRed =
+                cur[0].includes('color:red') ||
+                cur[0].includes('color: red') ||
+                cur[0].includes('FF0000') ||
+                stmtText.includes('color:red') ||
+                stmtText.includes('color: red') ||
+                stmtText.includes('FF0000');
+              const isExplicitTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
+              const isExplicitFalse = /[\(\[]?\s*Sai\s*[\)\]]?/i.test(stmtText);
+
+              if (isExplicitTrue) {
+                correctMap[label] = true;
+              } else if (isExplicitFalse) {
+                correctMap[label] = false;
+              } else if (isUnderline || isRed) {
+                correctMap[label] = true;
+              }
             }
 
             stmtText = stmtText.replace(/[\(\[]?\s*(?:Đúng|Sai)\s*[\)\]]?/gi, '').trim();
@@ -1526,7 +1588,34 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
               text: stmtText,
             });
           }
-          correctAnswer = correctMap;
+
+          // Bổ sung: Nếu câu đúng/sai chưa có đáp án, tự động bóc tách từ lời giải chi tiết
+          if (!tailTf && Object.values(correctMap).every((v) => !v) && explanation) {
+            for (const key of ['a', 'b', 'c', 'd']) {
+              const expMatch = explanation.match(new RegExp(`(?:^|[\\n\\s\\;\\,\\.]|<[^>]+>)${key}[\\)\\.\\:\\-\\s]*(?:<[^>]+>|\\s)*(Đúng|Sai|True|False)`, 'i'));
+              if (expMatch) {
+                correctMap[key] = /Đúng|True/i.test(expMatch[1]);
+              }
+            }
+          }
+
+          if (options.length >= 3) {
+            correctAnswer = correctMap;
+          } else {
+            // Không phải câu Đúng/Sai thực sự (do các ký hiệu toán a, b, c vô tình khớp regex), chuyển sang Trả lời ngắn
+            type = 'short_answer';
+            part = 3;
+            points = 0.5;
+            options = [];
+            questionContent = contentAndChoices.trim();
+            const numMatch = (explanation + '\n' + contentAndChoices).match(/(?:Đáp án|Đáp số|Kết quả)(?:<[^>]+>|\s|\$|:)*([+-]?[\d\,\.\-\/]+)/i);
+            if (numMatch) {
+              const rawAns = numMatch[1].trim();
+              correctAnswer = [rawAns, rawAns.replace(',', '.')];
+            } else {
+              correctAnswer = ['0'];
+            }
+          }
         }
       } else if (part === 3) {
         // PHẦN III: Trả lời ngắn / Điền số
@@ -1537,7 +1626,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
         if (tailAnswers.part3.has(questionNumber)) {
           correctAnswer = tailAnswers.part3.get(questionNumber);
         } else {
-          const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
+          const numMatch = (explanation + '\n' + contentAndChoices).match(/(?:Đáp án|Đáp số|Kết quả)(?:<[^>]+>|\s|\$|:)*([+-]?[\d\,\.\-\/]+)/i);
           if (numMatch) {
             const rawAns = numMatch[1].trim();
             correctAnswer = [rawAns, rawAns.replace(',', '.')];

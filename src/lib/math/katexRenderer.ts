@@ -267,13 +267,27 @@ export function renderMathToHtml(content: string): string {
   text = text.replace(/\\includegraphics(?:\[(.*?)\])?\{([^}]+)\}/g, (_m, optionsStr, src) => {
     const cleanSrc = src.trim();
     const finalUrl = resolveAssetUrl(cleanSrc);
-    const isInline = cleanSrc.startsWith('mathtype_') || (optionsStr && optionsStr.includes('height'));
+    // Xác định xem ảnh là công thức toán inline hay là hình minh họa / bảng biến thiên:
+    // - Chỉ là inline khi có thuộc tính [height=...] rõ ràng VÀ chiều cao nhỏ (<= 3.5em hoặc <= 65px)
+    // - Nếu không có [height=...], hoặc height lớn (bảng biến thiên / bảng xét dấu / hình vẽ WMF lớn)
+    //   -> Hiển thị dạng hình minh họa (exam-illustration-img) to rõ nét, cân đối chuẩn mực
     const heightMatch = optionsStr?.match(/height=([\d\.]+(?:em|pt|px)?)/i);
-    const customHeight = heightMatch ? heightMatch[1] : '1.35em';
+    let isInline = false;
+    let customHeight = '1.35em';
+
+    if (heightMatch) {
+      const rawVal = parseFloat(heightMatch[1]);
+      const unit = heightMatch[1].replace(/[\d\.]/g, '').toLowerCase() || 'px';
+      const isSmallHeight = (unit === 'em' && rawVal <= 3.5) || ((unit === 'pt' || unit === 'px') && rawVal <= 65);
+      if (isSmallHeight) {
+        isInline = true;
+        customHeight = heightMatch[1];
+      }
+    }
 
     const imgHtml = isInline
       ? `<img src="${finalUrl}" alt="Công thức MathType" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:${customHeight};width:auto;vertical-align:-0.3em;" />`
-      : `<img src="${finalUrl}" alt="Hình minh họa" class="exam-illustration-img max-w-[420px] max-h-[280px] w-auto h-auto mx-auto my-3 rounded-xl border border-slate-200/90 shadow-2xs block object-contain select-none cursor-zoom-in transition-transform hover:scale-[1.01]" />`;
+      : `<img src="${finalUrl}" alt="Hình minh họa" class="exam-illustration-img max-w-[550px] max-h-[380px] w-auto h-auto mx-auto my-3 rounded-xl border border-slate-200/90 shadow-2xs block object-contain select-none cursor-zoom-in transition-transform hover:scale-[1.01]" />`;
     return savePlaceholder(imgHtml);
   });
 

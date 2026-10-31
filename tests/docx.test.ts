@@ -240,4 +240,42 @@ describe('Word Exam Parser', () => {
     // Kiểm tra không chứa base64
     expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
+
+  it('bóc tách chuẩn xác 22 câu đề thi ĐỢT 1-TỔ 25 có lời giải inline và gạch chân ý đúng', async () => {
+    const filePath = 'ĐỢT 1-TỔ 25-SÁNG TÁC ĐỀ GHKI-K12-ĐỀ 1.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    expect(res.questions.length).toBe(22);
+    const p1 = res.questions.filter((q) => q.part === 1);
+    const p2 = res.questions.filter((q) => q.part === 2);
+    const p3 = res.questions.filter((q) => q.part === 3);
+
+    expect(p1.length).toBe(12);
+    expect(p2.length).toBe(4);
+    expect(p3.length).toBe(6);
+
+    // Phần 1: Đáp án A-D
+    expect(p1[0].correct_answer).toBe('C');
+    expect(p1[0].content).toContain('có bảng xét dấu của đạo hàm như sau:');
+    expect(p1[0].content).toContain('\\includegraphics{mathtype_7dc72a116375a.svg}');
+
+    // Phần 2: Đúng / Sai nhận diện qua gạch chân (u) ý đúng hoặc lời giải inline
+    expect(p2[0].correct_answer).toEqual({ a: false, b: false, c: true, d: true });
+    expect(p2[1].correct_answer).toEqual({ a: true, b: true, c: false, d: true });
+    expect(p2[2].correct_answer).toEqual({ a: true, b: true, c: false, d: false });
+    expect(p2[3].correct_answer).toEqual({ a: true, b: false, c: true, d: true });
+
+    // Phần 3: Trả lời ngắn bóc tách đáp số từ lời giải inline
+    expect(p3[0].correct_answer).toEqual(['269', '269']);
+    expect(p3[1].correct_answer).toEqual(['27,5', '27.5']);
+    expect(p3[2].correct_answer).toEqual(['1,48', '1.48']);
+    expect(p3[3].correct_answer).toEqual(['16', '16']);
+    expect(p3[4].correct_answer).toEqual(['33,6', '33.6']);
+    expect(p3[5].correct_answer).toEqual(['1', '1']);
+
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
+  });
 });
