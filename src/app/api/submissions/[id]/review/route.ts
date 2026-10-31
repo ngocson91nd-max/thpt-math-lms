@@ -130,7 +130,7 @@ export async function GET(
         solutions[qId] = {
           type: 'short_answer',
           correct_value: qKey.value,
-          display_answer: qKey.display_answer || qKey.value,
+          display_answer: qKey.value,
           explanation: qKey.explanation,
         };
       } else if (qKey.type === 'essay') {
