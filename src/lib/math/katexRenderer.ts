@@ -273,7 +273,7 @@ export function renderMathToHtml(content: string): string {
 
     const imgHtml = isInline
       ? `<img src="${finalUrl}" alt="Công thức MathType" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:${customHeight};width:auto;vertical-align:-0.3em;" />`
-      : `<img src="${finalUrl}" alt="Hình minh họa" class="max-w-full h-auto mx-auto my-2 rounded-xl border border-slate-200 shadow-2xs block" />`;
+      : `<img src="${finalUrl}" alt="Hình minh họa" class="exam-illustration-img max-w-[420px] max-h-[280px] w-auto h-auto mx-auto my-3 rounded-xl border border-slate-200/90 shadow-2xs block object-contain select-none cursor-zoom-in transition-transform hover:scale-[1.01]" />`;
     return savePlaceholder(imgHtml);
   });
 

@@ -1238,21 +1238,74 @@ export function splitDocumentIntoSections(text: string): ExamSectionBlock[] {
 }
 
 /**
+ * Chuẩn hóa các đơn vị đo lường trong Toán THPT:
+ * Đưa đơn vị ra ngoài cặp $...$ thành văn bản thường (text), giữ con số trong $...$
+ * Ví dụ: $50cm$ -> $50$ cm, $6m/s$ -> $6$ m/s, $10m/s^{2}$ -> $10$ m/s$^2$, đơn vị là $N$ -> đơn vị là N
+ */
+export function normalizeMathUnits(text: string): string {
+  if (!text) return text;
+
+  // 1. Đơn vị đứng độc lập sau các từ chỉ đơn vị: "đơn vị là $N$", "đơn vị là $kg$", "đơn vị: $mm$", "bao nhiêu $cm$?"
+  text = text.replace(/(đơn\s*vị(?:\s*là|\s*:|\s*tính\s*là)?\s*)\$([a-zA-Z\/\^\d]+)\$/gi, (match, prefix, unit) => {
+    if (/^(?:mm|cm|dm|m|km|g|kg|tạ|tấn|lít|lit|ml|s|giây|phút|giờ|h|m\/s|km\/h|m\/s\^2|N|J|W|Pa|đồng|triệu|nghìn)$/i.test(unit)) {
+      return `${prefix}${unit}`;
+    }
+    return match;
+  });
+
+  text = text.replace(/(bao\s*nhiêu\s*)\$([a-zA-Z\/\^\d]+)\$/gi, (match, prefix, unit) => {
+    if (/^(?:mm|cm|dm|m|km|g|kg|lít|giây|phút|giờ|m\/s|km\/h|N|J|W|Pa|đồng)$/i.test(unit)) {
+      return `${prefix}${unit}`;
+    }
+    return match;
+  });
+
+  // 2. Gia tốc m/s^2 hoặc m/s^{2}: ở cuối công thức hoặc đứng một mình với số
+  text = text.replace(/([0-9]+(?:[\,\.][0-9]+)?)\s*(?:\\text\{|\\mathrm\{)?m\/s\^\{?2\}?\}?\$([^\^]|$)/gi, (_m, num, tail) => {
+    return `${num}$ m/s$^2$${tail}`;
+  });
+
+  // 3. Đơn vị diện tích / thể tích: cm^2, cm^3, mm^2, mm^3, m^2, m^3, dm^2, dm^3, km^2 ở cuối công thức
+  text = text.replace(/([0-9]+(?:[\,\.][0-9]+)?)\s*(?:\\text\{|\\mathrm\{)?(cm|mm|dm|m|km)\^\{?([23])\}?\}?\$([^\^]|$)/gi, (_m, num, unit, exp, tail) => {
+    return `${num}$ ${unit}$^${exp}$${tail}`;
+  });
+
+  // 4. Các đơn vị ghép và đơn vị đa ký tự ở cuối công thức hoặc đứng một mình với số
+  // cm, mm, dm, km, kg, mg, ml, km/h, m/s, cm/s, lít, lit, giây, phút, giờ, đồng, nghìn, triệu, tỷ, N, J, W, Pa
+  text = text.replace(/([0-9]+(?:[\,\.][0-9]+)?)\s*(?:\\text\{|\\mathrm\{)?(km\/h|m\/s|cm\/s|mm|cm|dm|km|kg|mg|ml|ha|tạ|tấn|lít|lit|giây|phút|giờ|đồng|VND|VNĐ|USD|N|J|W|Pa)\}?\$([^\^]|$)/gi, (_m, num, unit, tail) => {
+    return `${num}$ ${unit}${tail}`;
+  });
+
+  // 5. Đơn vị mét "m" (khi đứng sau số nguyên có từ 2 chữ số trở lên hoặc từ độ dài)
+  text = text.replace(/([0-9]{2,}(?:[\,\.][0-9]+)?)\s*m\$/gi, (_m, num) => {
+    return `${num}$ m`;
+  });
+  text = text.replace(/(bằng|dài|rộng|cao|sâu|cách|quãng\s*đường|độ\s*dài)\s*\$([0-9]+(?:[\,\.][0-9]+)?)\s*m\$/gi, (_m, prefix, num) => {
+    return `${prefix} $${num}$ m`;
+  });
+
+  // Dọn dẹp khoảng trắng thừa trước dấu chấm câu
+  text = text.replace(/\s+([\.\,\;\:\?\!])/g, '$1');
+
+  return text;
+}
+
+/**
  * Loại bỏ triệt để và di trú toàn bộ chuỗi base64 hoặc thẻ <img src="data:..."> khỏi Question
  */
 export function cleanLegacyBase64FromQuestions(questions: Question[]): Question[] {
   return questions.map((q) => {
-    const cleanContent = sanitizeNoBase64OrRawHtml(q.content);
+    const cleanContent = normalizeMathUnits(sanitizeNoBase64OrRawHtml(q.content));
     const cleanOptions = (q.options || []).map((opt: any) => {
       if (typeof opt === 'string') {
-        return sanitizeNoBase64OrRawHtml(opt);
+        return normalizeMathUnits(sanitizeNoBase64OrRawHtml(opt));
       }
       return {
         ...opt,
-        text: sanitizeNoBase64OrRawHtml(opt.text || ''),
+        text: normalizeMathUnits(sanitizeNoBase64OrRawHtml(opt.text || '')),
       };
     });
-    const cleanExplanation = q.explanation ? sanitizeNoBase64OrRawHtml(q.explanation) : q.explanation;
+    const cleanExplanation = q.explanation ? normalizeMathUnits(sanitizeNoBase64OrRawHtml(q.explanation)) : q.explanation;
     return {
       ...q,
       content: cleanContent,

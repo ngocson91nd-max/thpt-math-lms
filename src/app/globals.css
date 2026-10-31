@@ -72,11 +72,33 @@ svg.tikz,
 svg.tikzjax,
 svg.tikz-svg-pure,
 .tikz-rendered-img {
-  max-width: 100% !important;
+  max-width: 440px !important;
+  max-height: 280px !important;
+  width: auto !important;
   height: auto !important;
   display: block;
-  margin: 0 auto;
+  margin: 0.5rem auto;
   object-fit: contain !important;
+}
+
+/* Hình minh họa đề thi (Hình học không gian, đồ thị hàm số, bảng xét dấu) cân đối tỉ lệ */
+.exam-illustration-img {
+  max-width: 420px !important;
+  max-height: 280px !important;
+  width: auto !important;
+  height: auto !important;
+  display: block !important;
+  margin: 0.75rem auto !important;
+  object-fit: contain !important;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 640px) {
+  .exam-illustration-img {
+    max-width: 90% !important;
+    max-height: 220px !important;
+  }
 }
 
 /* Cấu trúc \immini (2 cột Đề + Hình) */

@@ -2174,7 +2174,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                       </div>
 
                       {/* Nội dung câu hỏi KaTeX */}
-                      <div className={`${fontSizeClass} text-slate-900 leading-relaxed font-medium`}>
+                      <div
+                        className={`${fontSizeClass} text-slate-900 leading-relaxed font-medium`}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.tagName === 'IMG' && (target.classList.contains('exam-illustration-img') || target.getAttribute('alt') === 'Hình minh họa')) {
+                            setPreviewImage((target as HTMLImageElement).src);
+                          }
+                        }}
+                      >
                         <MathRenderer content={q.content} />
                       </div>
 
@@ -2260,7 +2268,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 </div>
 
                 {/* Nội dung câu hỏi KaTeX */}
-                <div className={`${fontSizeClass} text-slate-900 leading-relaxed font-medium`}>
+                <div
+                  className={`${fontSizeClass} text-slate-900 leading-relaxed font-medium`}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.tagName === 'IMG' && (target.classList.contains('exam-illustration-img') || target.getAttribute('alt') === 'Hình minh họa')) {
+                      setPreviewImage((target as HTMLImageElement).src);
+                    }
+                  }}
+                >
                   <MathRenderer content={currentQ.content} />
                 </div>
 
