@@ -304,78 +304,114 @@ export function convertMathTypeSvgToLatex(svg: string): string | null {
     });
   }
 
-  // 4. Sắp xếp các text elements theo tọa độ x từ trái qua phải
-  elements.sort((a, b) => a.x - b.x);
-
-  // Cao độ y trung bình của các phần tử cỡ lớn (dòng cơ sở)
-  const baseElements = elements.filter((e) => e.fontSize >= maxFontSize * 0.85);
-  const avgBaseY = baseElements.length > 0
-    ? baseElements.reduce((acc, e) => acc + e.y, 0) / baseElements.length
+  // 4. Phân loại các phần tử: Dòng cơ sở (Base line), Chỉ số dưới (Subscript/Underscript), Chỉ số trên (Superscript)
+  const baseLineCandidates = elements.filter((e) => e.fontSize >= maxFontSize * 0.82);
+  const avgBaseY = baseLineCandidates.length > 0
+    ? baseLineCandidates.reduce((acc, e) => acc + e.y, 0) / baseLineCandidates.length
     : elements[0].y;
 
-  // Gom các element thành chuỗi LaTeX
-  let latex = '';
-  let inSup = false;
-  let inSub = false;
+  const baseItems: MathTextElement[] = [];
+  const subItems: MathTextElement[] = [];
+  const supItems: MathTextElement[] = [];
 
-  for (let i = 0; i < elements.length; i++) {
-    const el = elements[i];
-
-    // Kiểm tra xem ký tự này có nằm dưới vector arrow không
-    const hasVector = vectorPaths.some(
-      (vp) => el.x >= vp.startX - el.fontSize * 0.3 && el.x <= vp.endX + el.fontSize * 0.3
-    );
-
-    // Kiểm tra superscript / subscript dựa trên font-size và độ lệch y so với avgBaseY
+  for (const el of elements) {
     const isSmaller = el.fontSize <= maxFontSize * 0.82;
-    const dy = el.y - avgBaseY; // dy âm -> nằm phía trên (superscript), dy dương -> nằm phía dưới (subscript)
-    const isSup = isSmaller && dy < -el.fontSize * 0.25;
-    const isSub = isSmaller && dy > el.fontSize * 0.15;
+    const dy = el.y - avgBaseY;
+    if (isSmaller && dy > el.fontSize * 0.15) {
+      subItems.push(el);
+    } else if (isSmaller && dy < -el.fontSize * 0.25) {
+      supItems.push(el);
+    } else {
+      baseItems.push(el);
+    }
+  }
 
-    if (isSup && !inSup) {
-      latex += '^{';
-      inSup = true;
-    } else if (!isSup && inSup) {
-      latex += '}';
-      inSup = false;
+  // Sắp xếp các nhóm theo x từ trái qua phải
+  baseItems.sort((a, b) => a.x - b.x);
+  subItems.sort((a, b) => a.x - b.x);
+  supItems.sort((a, b) => a.x - b.x);
+
+  // Nhận diện toán tử có underscript: max, min, lim, sup, inf
+  const consumedSubIdxs = new Set<number>();
+  let latex = '';
+
+  for (let i = 0; i < baseItems.length; i++) {
+    const b = baseItems[i];
+    const b2 = baseItems[i + 1];
+    const b3 = baseItems[i + 2];
+
+    // Kiểm tra "max", "min", "lim", "sup", "inf"
+    const threeWord = (b.char + (b2?.char || '') + (b3?.char || '')).toLowerCase();
+    const isOp3 = (threeWord === 'max' || threeWord === 'min' || threeWord === 'lim' || threeWord === 'sup' || threeWord === 'inf') &&
+      b2 && b3 && Math.abs(b2.x - b.x) < maxFontSize * 1.5 && Math.abs(b3.x - b2.x) < maxFontSize * 1.5;
+
+    if (isOp3) {
+      const opName = threeWord;
+      const opXStart = b.x;
+      const opXEnd = b3.x + b3.fontSize * 0.8;
+
+      // Tìm tất cả các phần tử sub nằm dưới hoặc kề sát toán tử
+      const attachedSubs: MathTextElement[] = [];
+      subItems.forEach((sub, sIdx) => {
+        if (!consumedSubIdxs.has(sIdx) && sub.x >= opXStart - b.fontSize * 0.4 && sub.x <= opXEnd + maxFontSize * 1.8) {
+          attachedSubs.push(sub);
+          consumedSubIdxs.add(sIdx);
+        }
+      });
+
+      let opLatex = `\\${opName}`;
+      if (attachedSubs.length > 0) {
+        let subStr = '';
+        for (const s of attachedSubs) {
+          if (s.char === ';') subStr += '; ';
+          else if (s.char === ',') subStr += ', ';
+          else subStr += s.char;
+        }
+        opLatex += `_{${subStr.trim()}}`;
+      }
+      latex += ` ${opLatex} `;
+      i += 2; // Bỏ qua 2 ký tự sau
+      continue;
     }
 
-    if (isSub && !inSub) {
-      latex += '_{';
-      inSub = true;
-    } else if (!isSub && inSub) {
-      latex += '}';
-      inSub = false;
-    }
-
-    let charText = el.char;
+    // Xử lý ký tự cơ sở thông thường
+    let charText = b.char;
+    const hasVector = vectorPaths.some(
+      (vp) => b.x >= vp.startX - b.fontSize * 0.3 && b.x <= vp.endX + b.fontSize * 0.3
+    );
     if (hasVector && /^[a-zA-Z]$/.test(charText)) {
       charText = `\\vec{${charText}}`;
     }
 
-    // Định dạng khoảng cách toán học
-    if (charText === '=') {
-      latex += ' = ';
-    } else if (charText === '+') {
-      latex += ' + ';
-    } else if (charText === '-') {
-      const prev = elements[i - 1]?.char;
-      if (prev && /[0-9a-zA-Z\)\}]/.test(prev)) {
-        latex += ' - ';
-      } else {
-        latex += '-';
+    if (charText === '=') latex += ' = ';
+    else if (charText === '+') latex += ' + ';
+    else if (charText === '-') {
+      const prev = baseItems[i - 1]?.char;
+      if (prev && /[0-9a-zA-Z\)\}]/.test(prev)) latex += ' - ';
+      else latex += '-';
+    } else if (charText === ';') latex += '; ';
+    else if (charText === ',') latex += ', ';
+    else latex += charText;
+
+    // Gắn chỉ số dưới (subscript) thông thường của ký tự này nếu có
+    const nextBaseX = baseItems[i + 1]?.x ?? Infinity;
+    const attachedNormalSubs: MathTextElement[] = [];
+    subItems.forEach((sub, sIdx) => {
+      if (!consumedSubIdxs.has(sIdx) && sub.x >= b.x - 5 && sub.x < nextBaseX) {
+        attachedNormalSubs.push(sub);
+        consumedSubIdxs.add(sIdx);
       }
-    } else if (charText === ';') {
-      latex += '; ';
-    } else if (charText === ',') {
-      latex += ', ';
-    } else {
-      latex += charText;
+    });
+    if (attachedNormalSubs.length > 0) {
+      latex += `_{${attachedNormalSubs.map(s => s.char).join('')}}`;
+    }
+
+    // Gắn chỉ số trên (superscript) của ký tự này nếu có
+    const attachedSups = supItems.filter((sup) => sup.x >= b.x - 5 && sup.x < nextBaseX);
+    if (attachedSups.length > 0) {
+      latex += `^{${attachedSups.map(s => s.char).join('')}}`;
     }
   }
-
-  if (inSup) latex += '}';
-  if (inSub) latex += '}';
 
   latex = latex.trim();
   latex = latex.replace(/\s+/g, ' ');

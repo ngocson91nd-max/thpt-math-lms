@@ -145,4 +145,19 @@ describe('Word Exam Parser', () => {
     expect(q5.content).toContain('cho hai điểm');
     expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
+
+  it('nhận diện chính xác ký hiệu giá trị lớn nhất max/min có underscript trong file Nho Quan C', async () => {
+    const filePath = 'E:/Nam2627/GK1-12/GK1-12-Nho Quan C.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    const q10 = res.questions.find((q) => q.content.includes('[-1; 3]') && q.content.includes('như hình vẽ bên'));
+    expect(q10).toBeDefined();
+    if (q10) {
+      expect(q10.options[0].text).toContain('\\max_{[-1; 3]}');
+      expect(q10.options[0].text).not.toContain('m_{[-1}');
+    }
+  });
 });
