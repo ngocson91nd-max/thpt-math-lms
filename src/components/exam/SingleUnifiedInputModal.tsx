@@ -20,7 +20,7 @@ import {
 export interface SingleUnifiedInputModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onApplyQuestions: (questions: Question[], detectedTitle?: string) => void;
+  onApplyQuestions: (questions: Question[], detectedTitle?: string, assets?: any[]) => void;
 }
 
 async function safeParseJsonResponse(res: Response): Promise<any> {
@@ -178,7 +178,7 @@ export default function SingleUnifiedInputModal({
         }
 
         const examTitle = selectedFile.name.replace(/\.docx$/i, '').trim();
-        onApplyQuestions(data.questions, examTitle);
+        onApplyQuestions(data.questions, examTitle, data.assets || []);
         onClose();
         return;
       }

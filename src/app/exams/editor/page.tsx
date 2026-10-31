@@ -5,13 +5,13 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { Exam, Question, QuestionType, QuestionDifficulty, ClassItem } from '@/types/database';
+import { Exam, Question, QuestionType, QuestionDifficulty, ClassItem, ExamAsset } from '@/types/database';
 import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import SingleUnifiedInputModal from '@/components/exam/SingleUnifiedInputModal';
 import ExamSettingsDrawer from '@/components/exam/ExamSettingsDrawer';
-import { loadExamAssets } from '@/lib/exam/assetRegistry';
+import { loadExamAssets, getAllExamAssets } from '@/lib/exam/assetRegistry';
 import {
   Upload,
   Save,
@@ -136,15 +136,19 @@ function ExamEditorContent() {
   const [showSingleInputModal, setShowSingleInputModal] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [examAssets, setExamAssets] = useState<ExamAsset[]>([]);
 
-  // Nạp lại Exam Asset Registry từ sessionStorage (giữ ảnh SVG MathType không bị vỡ)
+  // Nạp lại Exam Asset Registry từ localStorage / sessionStorage (giữ ảnh đồ thị, hình vẽ, SVG MathType không bị vỡ)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const cached = sessionStorage.getItem('exam_assets');
+      const cached = localStorage.getItem('exam_assets') || sessionStorage.getItem('exam_assets');
       if (cached) {
         const parsedAssets = JSON.parse(cached);
-        loadExamAssets(parsedAssets);
+        if (Array.isArray(parsedAssets)) {
+          loadExamAssets(parsedAssets);
+          setExamAssets(parsedAssets);
+        }
       }
     } catch {}
   }, []);
@@ -173,6 +177,10 @@ function ExamEditorContent() {
         setDuration(found.duration_minutes);
         setDescription(found.description || '');
         setFormat(found.format || 'standard_3_parts');
+        if (found.assets && Array.isArray(found.assets) && found.assets.length > 0) {
+          setExamAssets(found.assets);
+          loadExamAssets(found.assets);
+        }
         if (found.part_points) {
           setPartPoints({
             part1: found.part_points.part1 ?? 3,
@@ -399,11 +407,17 @@ function ExamEditorContent() {
         ...q,
         order_index: idx + 1,
       })),
+      assets: examAssets.length > 0 ? examAssets : getAllExamAssets(),
       updated_at: new Date().toISOString(),
     };
 
     if (typeof window !== 'undefined') {
       try {
+        // Lưu trữ các assets riêng theo key của đề thi để các màn hình thi nạp nhanh
+        if (updatedExam.assets && updatedExam.assets.length > 0) {
+          localStorage.setItem(`exam_assets_${examId}`, JSON.stringify(updatedExam.assets));
+        }
+
         const savedExams = localStorage.getItem('lms_exams');
         let examsList: Exam[] = savedExams ? JSON.parse(savedExams) : MOCK_EXAMS;
         const existIdx = examsList.findIndex((e) => e.id === examId);
@@ -1263,9 +1277,13 @@ function ExamEditorContent() {
       <SingleUnifiedInputModal
         isOpen={showSingleInputModal}
         onClose={() => setShowSingleInputModal(false)}
-        onApplyQuestions={(newQuestions, detectedTitle) => {
+        onApplyQuestions={(newQuestions, detectedTitle, newAssets) => {
           if (detectedTitle) setTitle(detectedTitle);
           setQuestionsWithHistory(newQuestions);
+          if (newAssets && Array.isArray(newAssets) && newAssets.length > 0) {
+            setExamAssets(newAssets);
+            loadExamAssets(newAssets);
+          }
           if (newQuestions.length > 0) setActiveQuestionId(newQuestions[0].id);
           setSaveToast(`Đã nạp thành công ${newQuestions.length} câu hỏi vào đề thi!`);
           setTimeout(() => setSaveToast(null), 3000);

@@ -8,6 +8,7 @@ import {
   registerExamAsset,
   sanitizeNoBase64OrRawHtml,
   containsBase64OrImgTag,
+  getAllExamAssets,
 } from '../exam/assetRegistry';
 
 let WMF: any = null;
@@ -1282,6 +1283,7 @@ export function validateNoBase64InQuestions(questions: Question[]): boolean {
 export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Array | Buffer): Promise<{
   questions: Question[];
   rawText: string;
+  assets?: any[];
 }> {
   let arrayBuffer: ArrayBuffer;
   if (typeof File !== 'undefined' && fileOrBuffer instanceof File) {
@@ -1533,7 +1535,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
   // Khử sạch 100% mọi chuỗi base64 hoặc thẻ <img trước khi trả về
   const cleanQuestions = cleanLegacyBase64FromQuestions(questions);
 
-  return { questions: cleanQuestions, rawText: examContent };
+  return { questions: cleanQuestions, rawText: examContent, assets: getAllExamAssets() };
 }
 
 /**

@@ -8,6 +8,7 @@ import { MOCK_EXAMS, MOCK_SUBMISSIONS, MOCK_CLASSES } from '@/lib/supabase/mockS
 import { Exam, Question, ClassItem } from '@/types/database';
 import dynamic from 'next/dynamic';
 import MathRenderer from '@/components/math/MathRenderer';
+import { loadExamAssets } from '@/lib/exam/assetRegistry';
 import { gradeExamSubmission } from '@/lib/grading/grader';
 import { createClient } from '@/lib/supabase/client';
 import { ExamCalculator } from '@/components/exam/ExamCalculator';
@@ -141,6 +142,21 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const storageKey = `exam_take_v2_${resolvedParams.id}_${user?.id || 'guest'}`;
+
+  // Tự động nạp toàn bộ tài nguyên đồ họa (đồ thị, hình vẽ, SVG MathType) của đề thi vào Registry
+  useEffect(() => {
+    if (exam?.assets && Array.isArray(exam.assets) && exam.assets.length > 0) {
+      loadExamAssets(exam.assets);
+    } else if (exam?.id && typeof window !== 'undefined') {
+      try {
+        const cachedExamAssets = localStorage.getItem(`exam_assets_${exam.id}`);
+        if (cachedExamAssets) {
+          const list = JSON.parse(cachedExamAssets);
+          if (Array.isArray(list)) loadExamAssets(list);
+        }
+      } catch {}
+    }
+  }, [exam]);
 
   // 1. Tải đề thi từ Supabase hoặc localStorage
   useEffect(() => {

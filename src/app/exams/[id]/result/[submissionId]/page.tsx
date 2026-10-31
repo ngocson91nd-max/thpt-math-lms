@@ -6,6 +6,7 @@ import confetti from 'canvas-confetti';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_SUBMISSIONS, MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import MathRenderer from '@/components/math/MathRenderer';
+import { loadExamAssets } from '@/lib/exam/assetRegistry';
 import {
   Award,
   CheckCircle2,
@@ -62,6 +63,21 @@ export default function ExamResultPage({
 
   const [isLoading, setIsLoading] = useState(!submission);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+
+  // Nạp toàn bộ tài nguyên đồ họa (đồ thị, hình vẽ, SVG MathType) của đề thi vào Registry
+  useEffect(() => {
+    if (exam?.assets && Array.isArray(exam.assets) && exam.assets.length > 0) {
+      loadExamAssets(exam.assets);
+    } else if (exam?.id && typeof window !== 'undefined') {
+      try {
+        const cachedExamAssets = localStorage.getItem(`exam_assets_${exam.id}`);
+        if (cachedExamAssets) {
+          const list = JSON.parse(cachedExamAssets);
+          if (Array.isArray(list)) loadExamAssets(list);
+        }
+      } catch {}
+    }
+  }, [exam]);
 
   useEffect(() => {
     // Luôn đồng bộ dữ liệu mới nhất (điểm Thầy vừa chấm, nhận xét chi tiết) từ Cloud API

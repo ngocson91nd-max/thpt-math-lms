@@ -1,4 +1,6 @@
 export type UserRole = 'admin' | 'teacher' | 'student';
+import type { ExamAsset } from '@/lib/exam/assetRegistry';
+export type { ExamAsset };
 
 export interface Profile {
   id: string;
@@ -189,6 +191,7 @@ export interface Exam {
   submissions_count?: number;
   questions_count?: number;
   questions?: (Question & { custom_points?: number; order_index?: number })[];
+  assets?: ExamAsset[];
   created_at?: string;
   updated_at?: string;
 }

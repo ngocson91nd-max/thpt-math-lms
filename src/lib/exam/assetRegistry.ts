@@ -14,7 +14,7 @@ export interface ExamAsset {
   filename: string;
   mimeType: string;
   dataUrl: string;
-  base64: string;
+  base64?: string;
 }
 
 // Bảng lưu trữ Asset trong bộ nhớ toàn cục (hoạt động đồng nhất trên cả client và server)
@@ -41,6 +41,83 @@ export function computeStringHash(str: string): string {
 }
 
 /**
+ * Tự động đồng bộ các asset từ localStorage/sessionStorage vào globalRegistry
+ */
+export function hydrateAssetsFromBrowserStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // 1. Quét sessionStorage (chứa các asset vừa được nạp từ modal tải đề ở tab hiện tại)
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith('asset_')) {
+        const id = key.substring(6);
+        const dataUrl = sessionStorage.getItem(key);
+        if (dataUrl) {
+          globalRegistry.set(id, { id, filename: id, mimeType: '', dataUrl, base64: '' });
+          // Đồng bộ sang localStorage để các tab làm bài thi của học sinh cũng nhận được tức thì
+          try {
+            localStorage.setItem(key, dataUrl);
+          } catch {}
+        }
+      }
+    }
+
+    // 2. Quét localStorage (toàn cục cho mọi tab trên cùng domain)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('asset_')) {
+        const id = key.substring(6);
+        const dataUrl = localStorage.getItem(key);
+        if (dataUrl && !globalRegistry.has(id)) {
+          globalRegistry.set(id, { id, filename: id, mimeType: '', dataUrl, base64: '' });
+        }
+      }
+    }
+
+    // 3. Quét exam_assets
+    const cached = localStorage.getItem('exam_assets') || sessionStorage.getItem('exam_assets');
+    if (cached) {
+      const list = JSON.parse(cached);
+      if (Array.isArray(list)) {
+        for (const a of list) {
+          if (a && a.id && a.dataUrl && !globalRegistry.has(a.id)) {
+            globalRegistry.set(a.id, a);
+            try {
+              localStorage.setItem(`asset_${a.id}`, a.dataUrl);
+            } catch {}
+          }
+        }
+      }
+    }
+
+    // 4. Quét danh sách đề thi lms_exams (nếu đề thi có kèm assets)
+    const savedExamsRaw = localStorage.getItem('lms_exams');
+    if (savedExamsRaw) {
+      const exams = JSON.parse(savedExamsRaw);
+      if (Array.isArray(exams)) {
+        for (const ex of exams) {
+          if (Array.isArray(ex.assets)) {
+            for (const a of ex.assets) {
+              if (a && a.id && a.dataUrl && !globalRegistry.has(a.id)) {
+                globalRegistry.set(a.id, a);
+                try {
+                  localStorage.setItem(`asset_${a.id}`, a.dataUrl);
+                } catch {}
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
+// Chạy tự động khi module được nạp trên browser
+if (typeof window !== 'undefined') {
+  hydrateAssetsFromBrowserStorage();
+}
+
+/**
  * Đăng ký một tài nguyên ảnh / SVG vào Registry và trả về mã định danh chuẩn LaTeX
  */
 export function registerExamAsset(
@@ -54,13 +131,22 @@ export function registerExamAsset(
   const assetId = `${prefix}_${hash}.${cleanExt}`;
   const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  globalRegistry.set(assetId, {
+  const asset: ExamAsset = {
     id: assetId,
     filename: assetId,
     mimeType,
     dataUrl,
     base64,
-  });
+  };
+
+  globalRegistry.set(assetId, asset);
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(`asset_${assetId}`, dataUrl);
+      sessionStorage.setItem(`asset_${assetId}`, dataUrl);
+    } catch {}
+  }
 
   return assetId;
 }
@@ -69,7 +155,14 @@ export function registerExamAsset(
  * Tra cứu asset theo ID để lấy URL hiển thị
  */
 export function getExamAsset(assetId: string): ExamAsset | undefined {
-  return globalRegistry.get(assetId.trim());
+  const clean = assetId.trim();
+  const found = globalRegistry.get(clean);
+  if (found) return found;
+  if (typeof window !== 'undefined') {
+    hydrateAssetsFromBrowserStorage();
+    return globalRegistry.get(clean);
+  }
+  return undefined;
 }
 
 /**
@@ -80,12 +173,22 @@ export function resolveAssetUrl(src: string): string {
   const asset = globalRegistry.get(cleanSrc);
   if (asset) return asset.dataUrl;
 
-  // Nếu chạy trên trình duyệt, tra cứu thêm từ sessionStorage
+  // Nếu chạy trên trình duyệt, tra cứu và đồng bộ từ storage
   if (typeof window !== 'undefined') {
+    hydrateAssetsFromBrowserStorage();
+    const rechecked = globalRegistry.get(cleanSrc);
+    if (rechecked) return rechecked.dataUrl;
+
     try {
-      const cached = sessionStorage.getItem(`asset_${cleanSrc}`);
-      if (cached) {
-        return cached;
+      const localDirect = localStorage.getItem(`asset_${cleanSrc}`);
+      if (localDirect) {
+        globalRegistry.set(cleanSrc, { id: cleanSrc, filename: cleanSrc, mimeType: '', dataUrl: localDirect, base64: '' });
+        return localDirect;
+      }
+      const sessionDirect = sessionStorage.getItem(`asset_${cleanSrc}`);
+      if (sessionDirect) {
+        globalRegistry.set(cleanSrc, { id: cleanSrc, filename: cleanSrc, mimeType: '', dataUrl: sessionDirect, base64: '' });
+        return sessionDirect;
       }
     } catch {}
   }
@@ -97,6 +200,9 @@ export function resolveAssetUrl(src: string): string {
  * Lấy tất cả assets hiện có trong Registry (để truyền từ Server về Client)
  */
 export function getAllExamAssets(): ExamAsset[] {
+  if (typeof window !== 'undefined') {
+    hydrateAssetsFromBrowserStorage();
+  }
   return Array.from(globalRegistry.values());
 }
 
@@ -108,6 +214,7 @@ export function setExamAsset(asset: ExamAsset): void {
     globalRegistry.set(asset.id, asset);
     if (typeof window !== 'undefined' && asset.dataUrl) {
       try {
+        localStorage.setItem(`asset_${asset.id}`, asset.dataUrl);
         sessionStorage.setItem(`asset_${asset.id}`, asset.dataUrl);
       } catch {}
     }
@@ -118,10 +225,23 @@ export function setExamAsset(asset: ExamAsset): void {
  * Nạp hàng loạt assets
  */
 export function loadExamAssets(assets: ExamAsset[]): void {
-  if (Array.isArray(assets)) {
-    for (const a of assets) {
-      setExamAsset(a);
-    }
+  if (!Array.isArray(assets) || assets.length === 0) return;
+  for (const a of assets) {
+    setExamAsset(a);
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const existing = localStorage.getItem('exam_assets');
+      let merged: ExamAsset[] = existing ? JSON.parse(existing) : [];
+      if (!Array.isArray(merged)) merged = [];
+      for (const a of assets) {
+        if (!merged.some((m) => m.id === a.id)) {
+          merged.push(a);
+        }
+      }
+      localStorage.setItem('exam_assets', JSON.stringify(merged));
+      sessionStorage.setItem('exam_assets', JSON.stringify(merged));
+    } catch {}
   }
 }
 

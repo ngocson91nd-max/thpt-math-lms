@@ -4,6 +4,7 @@ import React, { useState, useEffect, use, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import MathRenderer from '@/components/math/MathRenderer';
+import { loadExamAssets } from '@/lib/exam/assetRegistry';
 import { Exam, Question } from '@/types/database';
 import { MOCK_EXAMS } from '@/lib/supabase/mockStore';
 import {
@@ -72,6 +73,21 @@ export default function ExamPracticePage({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Nạp toàn bộ tài nguyên đồ họa (đồ thị, hình vẽ, SVG MathType) của đề thi vào Registry
+  useEffect(() => {
+    if (exam?.assets && Array.isArray(exam.assets) && exam.assets.length > 0) {
+      loadExamAssets(exam.assets);
+    } else if (exam?.id && typeof window !== 'undefined') {
+      try {
+        const cachedExamAssets = localStorage.getItem(`exam_assets_${exam.id}`);
+        if (cachedExamAssets) {
+          const list = JSON.parse(cachedExamAssets);
+          if (Array.isArray(list)) loadExamAssets(list);
+        }
+      } catch {}
+    }
+  }, [exam]);
 
   // 1. Tải đề thi
   useEffect(() => {

@@ -46,6 +46,7 @@ function unpackExam(exam: any, includeQuestions = true) {
     view_leaderboard_allowed: extra.view_leaderboard_allowed ?? true,
     shuffle_true_false: extra.shuffle_true_false ?? true,
     no_time_limit: extra.no_time_limit ?? false,
+    assets: Array.isArray(extra.assets) ? extra.assets : [],
   };
 }
 
@@ -216,6 +217,7 @@ export async function POST(req: NextRequest) {
       is_view_answer_allowed,
       is_locked,
       questions,
+      assets,
       format,
       category,
       exam_mode,
@@ -258,6 +260,7 @@ export async function POST(req: NextRequest) {
       text: typeof description === 'string' ? description.trim() : 'Đề kiểm tra Toán THPT Thầy Sơn.',
       code: code || examUuid.substring(0, 6).toUpperCase(),
       questions: Array.isArray(questions) ? questions : [],
+      assets: Array.isArray(assets) ? assets : [],
       format: format || 'standard_3_parts',
       category: category || (no_time_limit ? 'practice' : 'exam'),
       exam_mode: exam_mode || 'standard',
