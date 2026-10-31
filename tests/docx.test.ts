@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
-import { parseWordDocx, validateNoBase64InQuestions } from '../src/lib/word/wordExamParser';
+import { parseWordDocx, validateNoBase64InQuestions, convertMathTypeSvgToLatex } from '../src/lib/word/wordExamParser';
 import { getExamAsset } from '../src/lib/exam/assetRegistry';
 
 describe('Word Exam Parser', () => {
@@ -25,8 +25,8 @@ describe('Word Exam Parser', () => {
     // Công thức MathType cơ bản được chuyển đổi trực tiếp sang mã LaTeX chuẩn
     expect(q1.content).toContain('$y = x^{3} - 3x^{2} + 2$');
     expect(q1.options[0].text).toContain('$(2; -2)$');
-    // Công thức phân số phức tạp (như Câu 3) được bảo toàn qua vector SVG sắc nét
-    expect(result.questions[2].content).toContain('\\includegraphics');
+    // Công thức phân số MathType được chuyển đổi hoàn hảo sang mã LaTeX \frac{...}{...}
+    expect(result.questions[2].content).toContain('$y = \\frac{4x + 1}{2x - 2}$');
     expect(q1.content).not.toContain('data:image');
     expect(validateNoBase64InQuestions(result.questions)).toBe(true);
   }, 20000);
@@ -59,8 +59,8 @@ describe('Word Exam Parser', () => {
     expect(p3[2].correct_answer).toEqual(['6', '6']);
     expect(p3[3].correct_answer).toEqual(['7,46', '7.46']);
 
-    // Kiểm tra công thức MathType chuyển sang SVG tham chiếu \includegraphics sạch sẽ
-    expect(p1[0].content).toContain('\\includegraphics');
+    // Kiểm tra công thức phân số MathType chuyển thành mã LaTeX \frac{...}{...}
+    expect(p1[0].content).toContain('$y = \\frac{-x^{2} + 2x - 1}{x + 2}$');
     expect(p1[0].content).not.toContain('data:image');
     expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
@@ -128,8 +128,8 @@ describe('Word Exam Parser', () => {
       expect(q4.options[0].id).toBe('A');
       // Đảm bảo không còn chuỗi data URI trong content
       expect(q4.content).not.toContain('data:image');
-      // Công thức vectơ MathType được chuyển đổi hoàn hảo thành LaTeX
-      expect(q4.content).toContain('\\vec{u} = 3\\vec{j} - \\vec{i} - 5\\vec{k}');
+      // Công thức vectơ MathType được chuyển đổi hoàn hảo thành LaTeX dùng \overrightarrow theo chuẩn
+      expect(q4.content).toContain('\\overrightarrow{u} = 3\\overrightarrow{j} - \\overrightarrow{i} - 5\\overrightarrow{k}');
 
       // Đảm bảo các phương án A, B, C, D chuyển thành tọa độ LaTeX và không chứa data:image
       expect(q4.options[0].text).toContain('(6; -2; 10)');
@@ -159,5 +159,57 @@ describe('Word Exam Parser', () => {
       expect(q10.options[0].text).toContain('\\max_{[-1; 3]}');
       expect(q10.options[0].text).not.toContain('m_{[-1}');
     }
+  });
+
+  it('chuyển đổi hoàn hảo phân số và vectơ sang \\frac và \\overrightarrow trong SVG MathType', () => {
+    // Test phân số: y = (x^2 - 3x + 3) / (x - 2)
+    const fracSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
+        <text x="10" y="30" font-size="16" font-style="italic">y</text>
+        <text x="25" y="30" font-size="16">=</text>
+        <path d="M 40 25 L 140 25" stroke="#000000" stroke-width="1.5" />
+        <text x="45" y="18" font-size="16" font-style="italic">x</text>
+        <text x="55" y="10" font-size="11">2</text>
+        <text x="65" y="18" font-size="16">-</text>
+        <text x="75" y="18" font-size="16">3</text>
+        <text x="85" y="18" font-size="16" font-style="italic">x</text>
+        <text x="95" y="18" font-size="16">+</text>
+        <text x="105" y="18" font-size="16">3</text>
+        <text x="75" y="45" font-size="16" font-style="italic">x</text>
+        <text x="85" y="45" font-size="16">-</text>
+        <text x="95" y="45" font-size="16">2</text>
+      </svg>
+    `;
+    const fracLatex = convertMathTypeSvgToLatex(fracSvg);
+    expect(fracLatex).toBe('$y = \\frac{x^{2} - 3x + 3}{x - 2}$');
+
+    // Test vectơ: \overrightarrow{a} vuông góc \overrightarrow{b}
+    const vectorSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="200" height="40">
+        <path d="M 10 10 L 25 10 l -3 -2 m 3 2 l -3 2" stroke="#000000" />
+        <text x="12" y="25" font-size="16" font-style="italic">a</text>
+        <text x="35" y="25" font-size="16" font-family="Symbol">^</text>
+        <path d="M 55 10 L 70 10 l -3 -2 m 3 2 l -3 2" stroke="#000000" />
+        <text x="57" y="25" font-size="16" font-style="italic">b</text>
+      </svg>
+    `;
+    const vectorLatex = convertMathTypeSvgToLatex(vectorSvg);
+    expect(vectorLatex).toContain('\\overrightarrow{a}');
+    expect(vectorLatex).toContain('\\perp');
+    expect(vectorLatex).toContain('\\overrightarrow{b}');
+
+    // Test với mọi \forall trong Symbol font
+    const forallSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="200" height="40">
+        <text x="10" y="25" font-size="16" font-family="Symbol">"</text>
+        <text x="25" y="25" font-size="16" font-style="italic">x</text>
+        <text x="40" y="25" font-size="16">&#x2208;</text>
+        <text x="55" y="25" font-size="16">&#x211D;</text>
+      </svg>
+    `;
+    const forallLatex = convertMathTypeSvgToLatex(forallSvg);
+    expect(forallLatex).toContain('\\forall');
+    expect(forallLatex).toContain('\\in');
+    expect(forallLatex).toContain('\\mathbb{R}');
   });
 });
