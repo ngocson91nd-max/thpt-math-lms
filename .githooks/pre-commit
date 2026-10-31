@@ -1,0 +1,10 @@
+#!/bin/sh
+PATTERN='sb_secret_[A-Za-z0-9_-]{10,}|SERVICE_ROLE[A-Z_]*[[:space:]]*[=:][[:space:]]*["'"'"']?eyJ'
+if git diff --cached -U0 | grep -E "^\+" | grep -E "$PATTERN" >/dev/null; then
+  echo "BI CHAN: phat hien khoa bi mat trong thay doi chuan bi commit."
+  exit 1
+fi
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact || exit 1
+fi
+exit 0
