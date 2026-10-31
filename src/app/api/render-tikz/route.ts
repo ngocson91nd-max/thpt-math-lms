@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { renderTikzToSvg } from '@/lib/math/tikzSvgRenderer';
+import { parseTkzTabCode, generateTkzTabSvg } from '@/lib/math/tkzTabRenderer';
 
-// Bộ nhớ đệm RAM trên server để phản hồi tức thì 1ms cho các hình TikZ đã biên dịch
-const serverTikzCache = new Map<string, { url: string; width: number; height: number }>();
+// Bộ nhớ đệm RAM trên server cho các hình TikZ đã dựng sang SVG thuần túy
+const serverTikzCache = new Map<string, { svg: string }>();
 
 function hashString(str: string): string {
   let hash = 0;
@@ -15,7 +17,7 @@ function hashString(str: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { tikz, preamble: customPreamble } = body;
+    const { tikz } = body;
 
     if (!tikz || typeof tikz !== 'string') {
       return NextResponse.json({ error: 'Missing TikZ code' }, { status: 400 });
@@ -32,74 +34,45 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Preamble chuẩn chứa toàn bộ các gói TikZ Toán THPT Việt Nam
-    const defaultPreamble = [
-      '\\usepackage{amsmath}',
-      '\\usepackage{amsfonts}',
-      '\\usepackage{amssymb}',
-      '\\usepackage{esvect}',
-      '\\usepackage{tikz}',
-      '\\usepackage{tikz-3dplot}',
-      '\\usepackage{tkz-euclide}',
-      '\\usepackage{pgfplots}',
-      '\\pgfplotsset{compat=1.18}',
-      '\\usetikzlibrary{calc,arrows.meta,positioning,angles,quotes,intersections,patterns,3d,backgrounds,decorations.pathmorphing}',
-    ].join('\n');
+    // 1. Thử render Bảng biến thiên (tkz-tab) sang SVG siêu tốc 0ms
+    if (cleanTikz.includes('\\tkzTabInit') || cleanTikz.includes('tkzTab')) {
+      const parsedTab = parseTkzTabCode(cleanTikz);
+      if (parsedTab) {
+        const svg = generateTkzTabSvg(parsedTab);
+        const result = { svg };
+        serverTikzCache.set(cacheKey, result);
+        return NextResponse.json({
+          success: true,
+          cached: false,
+          ...result,
+        });
+      }
+    }
 
-    const preamble = customPreamble ? `${defaultPreamble}\n${customPreamble}` : defaultPreamble;
+    // 2. Thử render đồ thị hàm số và hình học Oxy sang SVG thuần túy (0ms)
+    const pureSvg = renderTikzToSvg(cleanTikz);
+    if (pureSvg) {
+      const result = { svg: pureSvg };
+      serverTikzCache.set(cacheKey, result);
+      return NextResponse.json({
+        success: true,
+        cached: false,
+        ...result,
+      });
+    }
 
-    // Chuẩn hóa thành tài liệu standalone hoàn chỉnh để QuickLaTeX biên dịch ở Mode 1 (100% không lỗi SVG)
-    const fullDoc = cleanTikz.includes('\\documentclass')
-      ? cleanTikz
-      : `\\documentclass[border=3pt]{standalone}\n${preamble}\n\\begin{document}\n${cleanTikz}\n\\end{document}`;
-
-    const postData = new URLSearchParams({
-      formula: fullDoc,
-      fsize: '18px',
-      fcolor: '000000',
-      mode: '1',
-      remhost: 'quicklatex.com',
-    }).toString();
-
-    const response = await fetch('https://quicklatex.com/latex3.f', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+    // 3. Đối với các hình 3D phức tạp, trả về false để client kích hoạt TikzJax WebAssembly
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Hình vẽ 3D/phức tạp được chuyển giao cho client WebAssembly TikzJax',
       },
-      body: postData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`QuickLaTeX returned status ${response.status}`);
-    }
-
-    const resultText = await response.text();
-    const lines = resultText.trim().split('\n');
-
-    // QuickLaTeX trả về dòng 1: mã lỗi (0 là thành công), dòng 2: URL ảnh PNG
-    const statusCode = parseInt(lines[0]?.trim() || '-1', 10);
-    if (statusCode !== 0) {
-      const errorMsg = lines.slice(1).join('\n') || 'TeX compilation error';
-      return NextResponse.json({ success: false, error: errorMsg }, { status: 422 });
-    }
-
-    const imgInfo = lines[1]?.trim().split(/\s+/) || [];
-    const imgUrl = imgInfo[0];
-    const width = parseInt(imgInfo[2] || '320', 10);
-    const height = parseInt(imgInfo[3] || '240', 10);
-
-    const result = { url: imgUrl, width, height };
-    serverTikzCache.set(cacheKey, result);
-
-    return NextResponse.json({
-      success: true,
-      cached: false,
-      ...result,
-    });
+      { status: 422 }
+    );
   } catch (error: any) {
     console.error('Error rendering TikZ via server API:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: error.message || 'Server render failed' },
       { status: 500 }
     );
   }

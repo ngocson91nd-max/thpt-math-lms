@@ -69,16 +69,43 @@ function parseTikzColor(col: string): string {
 
 function parseNumber(str: string, defs: DefMap = {}): number {
   let s = str.trim();
+  if (s.startsWith('{') && s.endsWith('}')) {
+    s = s.slice(1, -1).trim();
+  }
   for (const [k, v] of Object.entries(defs)) {
     s = s.replace(new RegExp(`\\\\${k}\\b`, 'g'), String(v));
   }
   s = s.replace(/pt|cm|mm/g, '');
+  // Chuyển đổi các hàm lượng giác theo độ sang Math của JS
+  s = s
+    .replace(/cos\(([^)]+)\)/g, 'Math.cos(($1)*Math.PI/180)')
+    .replace(/sin\(([^)]+)\)/g, 'Math.sin(($1)*Math.PI/180)')
+    .replace(/tan\(([^)]+)\)/g, 'Math.tan(($1)*Math.PI/180)');
   try {
     const val = Function(`"use strict"; return (${s});`)();
     return typeof val === 'number' && !isNaN(val) && isFinite(val) ? val : 0;
   } catch {
     return 0;
   }
+}
+
+function splitCoordParts(str: string): string[] {
+  const parts: string[] = [];
+  let cur = '';
+  let depth = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '{' || ch === '(') depth++;
+    else if (ch === '}' || ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts;
 }
 
 function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}): Point2D {
@@ -132,8 +159,8 @@ function parsePoint(coordStr: string, coords: CoordMap = {}, defs: DefMap = {}):
     }
   }
 
-  // Tọa độ 3D không gian: (x, y, z)
-  const parts = s.split(',').map((p) => p.trim());
+  // Tọa độ an toàn hỗ trợ cả biểu thức lượng giác ngoặc nhọn
+  const parts = splitCoordParts(s);
   if (parts.length === 3) {
     const x3d = parseNumber(parts[0], defs);
     const y3d = parseNumber(parts[1], defs);
@@ -455,8 +482,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0. Nếu là hình học không gian 3D, hoặc các hình học phức tạp (đèn chùm, trang sách ABCD-MNPQ, chóp S.ABCD):
-  // Nhường 100% cho Server TeX Engine để đạt độ chuẩn xác tuyệt đối từng milimet
+  // 0. Nếu là hình học không gian 3D, hoặc các hình học phức tạp (trang sách ABCD-MNPQ, chóp S.ABCD):
+  // Nhường cho WebAssembly TikzJax để đạt độ chuẩn xác
   const is3DOrComplex =
     /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|Oxyz|\[[^\]]*\b3d\b/i.test(
       rawTikz
@@ -464,10 +491,8 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     /\((?:-?[0-9.]+\s*,\s*){2}-?[0-9.]+\)/.test(rawTikz) || // Tọa độ 3D (x,y,z)
     /\bz\s*=\s*\{/.test(rawTikz) || // Trục z={(...)}
     /\b[A-Z]['′](?![a-zA-Z0-9(])/.test(rawTikz) || // Đỉnh lăng trụ / hình hộp A', B', C', D'
-    (/\bellipse\b/i.test(rawTikz) && /\b(?:S|top|dinh|day|treo)\b/i.test(rawTikz)) || // Đèn chùm đĩa elip và đỉnh treo S
-    (/\b(?:S|treo)\b/i.test(rawTikz) && /\b(?:A|B|C|D)\b/.test(rawTikz) && !rawTikz.includes('plot')) || // Đèn chùm dây treo S đến ABCD
     (/\b(?:S|top|dinh)\b/i.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz) && /--/.test(rawTikz)) || // Hình chóp S.ABCD
-    (/\b(?:M|N|P|Q)\b/.test(rawTikz) && /\b(?:A|B|C|D)\b/.test(rawTikz) && !rawTikz.includes('plot')); // Hình lồng nhau MNPQ trong ABCD (trang sách SGK)
+    (/\((?:M|N|P|Q)\)/.test(rawTikz) && /\((?:A|B|C|D)\)/.test(rawTikz) && /cycle/.test(rawTikz)); // Hình lồng nhau MNPQ trong ABCD (trang sách SGK)
 
   if (is3DOrComplex) {
     return null;
@@ -544,6 +569,16 @@ export function renderTikzToSvg(rawTikz: string): string | null {
       const text = cleanTikzNodeText(labelMatch[2].trim());
       drawItems.push({ type: 'node', pt, text, pos });
     }
+  }
+
+  // 3b. Phân tích cú pháp tọa độ: \path (x, y) coordinate (name) hoặc nhiều cặp liên tiếp
+  const pathCoordRegex = /(\([^)]+\))\s*coordinate(?:\s*\[[^\]]*\])?\s*\(([^)]+)\)/g;
+  let pcm: RegExpExecArray | null;
+  while ((pcm = pathCoordRegex.exec(rawTikz)) !== null) {
+    const pt = parsePoint(pcm[1], coords, defs);
+    const name = pcm[2].trim();
+    coords[name] = pt;
+    updateBounds(pt.x, pt.y);
   }
 
   // 4. Phân tích lưới tọa độ: \draw[thick] (0,0) grid (5,5);

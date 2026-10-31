@@ -45,7 +45,15 @@ export async function precompileTextTikz(text: string): Promise<string> {
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(`tikz_pre_${hash}`);
-        if (stored && stored.startsWith('<img') && stored.includes('src=')) {
+        if (
+          stored &&
+          (stored.includes('quicklatex') ||
+            stored.includes('border=3pt') ||
+            stored.includes('standalone') ||
+            stored.includes('ql_'))
+        ) {
+          localStorage.removeItem(`tikz_pre_${hash}`);
+        } else if (stored && (stored.startsWith('<img') || stored.startsWith('<div')) && stored.length > 50) {
           precompileCache.set(hash, stored);
           result = result.replace(rawTikz, stored);
           continue;
@@ -65,10 +73,26 @@ export async function precompileTextTikz(text: string): Promise<string> {
       }
     }
 
-    // 4. Gọi TeX Server API (/api/render-tikz) để biên dịch sang PNG/SVG sắc nét
+    // 4. Ưu tiên cao nhất: Pure TS Parser dựng SVG trực tiếp 0ms sắc nét chuẩn mực
+    try {
+      const pureSvg = renderTikzToSvg(rawTikz);
+      if (pureSvg) {
+        const svgTag = `<div class="tikz-rendered-svg my-2 flex justify-center max-w-full overflow-hidden select-none">${pureSvg}</div>`;
+        precompileCache.set(hash, svgTag);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`tikz_pre_${hash}`, svgTag);
+          } catch {}
+        }
+        result = result.replace(rawTikz, svgTag);
+        continue;
+      }
+    } catch {}
+
+    // 5. Thử gọi Server API (/api/render-tikz) nếu có server render
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 16000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const res = await fetch('/api/render-tikz', {
         method: 'POST',
@@ -80,31 +104,27 @@ export async function precompileTextTikz(text: string): Promise<string> {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.url) {
+        if (data.success && data.svg) {
+          const svgTag = `<div class="tikz-rendered-svg my-2 flex justify-center max-w-full overflow-hidden select-none">${data.svg}</div>`;
+          precompileCache.set(hash, svgTag);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`tikz_pre_${hash}`, svgTag);
+            } catch {}
+          }
+          result = result.replace(rawTikz, svgTag);
+          continue;
+        } else if (data.success && data.url && !data.url.includes('quicklatex.com')) {
           const imgTag = `<img src="${data.url}" alt="Hình vẽ TikZ" class="tikz-rendered-img max-w-full h-auto mx-auto block my-2 rounded-xl shadow-2xs select-none" style="max-height: 380px;" />`;
           precompileCache.set(hash, imgTag);
-
           if (typeof window !== 'undefined') {
             try {
               localStorage.setItem(`tikz_pre_${hash}`, imgTag);
             } catch {}
           }
-
           result = result.replace(rawTikz, imgTag);
           continue;
         }
-      }
-    } catch (e) {
-      console.warn('Biên dịch TikZ qua TeX Server không thành công, giữ nguyên để render client:', e);
-    }
-
-    // 5. Nếu Server chưa phản hồi, thử Pure TS Parser dựng SVG trực tiếp
-    try {
-      const pureSvg = renderTikzToSvg(rawTikz);
-      if (pureSvg) {
-        const svgTag = `<div class="tikz-rendered-svg my-2 flex justify-center max-w-full overflow-hidden select-none">${pureSvg}</div>`;
-        precompileCache.set(hash, svgTag);
-        result = result.replace(rawTikz, svgTag);
       }
     } catch {}
   }

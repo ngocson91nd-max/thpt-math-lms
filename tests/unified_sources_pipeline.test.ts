@@ -71,8 +71,8 @@ Một công ty dự kiến may các hộp quà hình trụ có thể tích $V = 
       const rawText = `\\immini{
   Cho hình lăng trụ tam giác $ABC.A'B'C'$. Thể tích khối lăng trụ bằng
 }{
-  \\begin{tikzpicture}
-    \\draw (0,0) -- (2,0) -- (1,1.5) -- cycle;
+  \\begin{tikzpicture}[tdplot_main_coords]
+    \\draw (0,0,0) -- (2,0,0) -- (1,1.5,0) -- cycle;
   \\end{tikzpicture}
 }`;
 

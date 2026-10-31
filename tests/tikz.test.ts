@@ -183,4 +183,34 @@ describe('TikZ 3D & Advanced Tests', () => {
     expect(svg).not.toContain('x1="137.7" y1="118.1" x2="190.0" y2="222.6"');
     expect(svg).not.toContain('x1="137.7" y1="118.1" x2="242.3" y2="327.1"');
   });
+
+  it('renders Câu 4 cubic derivative graph with plot, clip, and labels', () => {
+    const code = `\\begin{tikzpicture}[scale=0.55, font=\\footnotesize, line join=round, line cap=round, >=stealth]
+      \\clip (-3.8,-4.8) rectangle (2.5,2.2);
+      \\draw[thick, samples=150, domain=-3.3:1.5] plot (\\x, {((\\x)+2)*((\\x)-1)^2});
+      \\draw[dashed, thin] (-1,0) -- (-1,-2) -- (0,-2);
+      \\draw[->] (-3.8,0) -- (2.5,0) node[above left] {$x$};
+      \\draw[->] (0,-4.8) -- (0,2.2) node[left] {$y$};
+      \\node[below left] at (0,0) {$O$};
+      \\node[right] at (1.3,1.4) {$f'(x)$};
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).not.toBeNull();
+    expect(svg).toContain('<svg');
+  });
+
+  it('renders Câu 9 chandelier (đèn chùm) with coordinates, ellipse, and vectors directly as SVG', () => {
+    const code = `\\begin{tikzpicture}[line cap=round, line join=round, >=stealth, line width=0.6pt, font=\\footnotesize, scale=0.75]
+      \\path (0,2.5) coordinate (O) (0,-1) coordinate (G) (-1.7,-1) coordinate (A) ({1.7*cos(70)},{-1+0.45*sin(70)}) coordinate (B) ({1.7*cos(-35)},{-1+0.45*sin(-35)}) coordinate (C);
+      \\draw[cyan!20] (-2.2,2.5) rectangle (2.2,2.65);
+      \\draw[thick, fill=cyan!25] (G) ellipse (1.7 and 0.45);
+      \\draw[thick, blue!80!black] (A) -- (O) (B) -- (O) (C) -- (O);
+      \\draw[->, very thick, red!80!black] (G) -- (0,-2.6) node[right] {$\\vec{P}$};
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).not.toBeNull();
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('<ellipse');
+    expect(svg).toContain('P⃗');
+  });
 });

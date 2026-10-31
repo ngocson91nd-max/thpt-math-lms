@@ -39,6 +39,27 @@ import {
   Lock,
 } from 'lucide-react';
 
+// Khử sạch bất kỳ đoạn mã hay thẻ ảnh QuickLaTeX lỗi còn sót lại trong LocalStorage
+function cleanCorruptedContent(str: string): string {
+  if (!str) return str;
+  if (!str.includes('quicklatex.com') && !str.includes('[border=3pt]') && !str.includes('documentclass')) {
+    return str;
+  }
+  return str.replace(/<img[^>]*src="https:\/\/quicklatex\.com[^>]*\/?>/gi, '');
+}
+
+function sanitizeQuestionsList(list: Question[]): Question[] {
+  return (list || []).map((q) => ({
+    ...q,
+    content: cleanCorruptedContent(q.content),
+    explanation: cleanCorruptedContent(q.explanation || ''),
+    options: (q.options || []).map((opt: any) => ({
+      ...opt,
+      text: cleanCorruptedContent(opt.text),
+    })),
+  }));
+}
+
 function ExamEditorContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -150,7 +171,8 @@ function ExamEditorContent() {
         if (found.true_false_scoring) setTrueFalseScoring(found.true_false_scoring);
         if (found.assigned_classes) setAssignedClasses(found.assigned_classes);
 
-        const initialQ = found.questions && found.questions.length > 0 ? found.questions : MOCK_QUESTIONS.slice(0, 12);
+        const rawInitialQ = found.questions && found.questions.length > 0 ? found.questions : MOCK_QUESTIONS.slice(0, 12);
+        const initialQ = sanitizeQuestionsList(rawInitialQ);
         setQuestions(initialQ);
         setHistory([initialQ]);
         setHistoryIndex(0);
@@ -169,7 +191,7 @@ function ExamEditorContent() {
         // Mở ngay Cổng nạp một cửa để giáo viên chọn file nạp
         setShowSingleInputModal(true);
       } else {
-        const initial = MOCK_QUESTIONS.slice(0, 6);
+        const initial = sanitizeQuestionsList(MOCK_QUESTIONS.slice(0, 6));
         setQuestions(initial);
         setHistory([initial]);
         setHistoryIndex(0);
