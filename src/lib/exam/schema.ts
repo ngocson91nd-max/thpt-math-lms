@@ -12,7 +12,7 @@ export const safeText = z.string().refine(
 const commonPublic = {
   id: z.string(),
   content: safeText,
-  image_url: z.string().optional(),
+  image_url: z.string().nullish(),
   lock_options_order: z.boolean().default(false),
   group_id: z.string().nullish(),
 };
