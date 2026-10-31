@@ -22,6 +22,50 @@ export interface SingleUnifiedInputModalProps {
   onApplyQuestions: (questions: Question[], detectedTitle?: string) => void;
 }
 
+async function safeParseJsonResponse(res: Response): Promise<any> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (!res.ok || (data && data.success === false)) {
+    throw new Error(data?.error || `HTTP ${res.status}: Thao tác không thành công`);
+  }
+  return data;
+}
+
+function loadBrowserPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if ((window as any).pdfjsLib) return Promise.resolve((window as any).pdfjsLib);
+
+  return new Promise((resolve) => {
+    const existing = document.getElementById('pdfjs-cdn-script') as HTMLScriptElement | null;
+    if (existing) {
+      if ((window as any).pdfjsLib) return resolve((window as any).pdfjsLib);
+      existing.addEventListener('load', () => resolve((window as any).pdfjsLib));
+      existing.addEventListener('error', () => resolve(null));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'pdfjs-cdn-script';
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.async = true;
+    script.onload = () => {
+      const lib = (window as any).pdfjsLib;
+      if (lib) {
+        lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(lib);
+      } else {
+        resolve(null);
+      }
+    };
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+}
+
 export default function SingleUnifiedInputModal({
   isOpen,
   onClose,
@@ -33,10 +77,24 @@ export default function SingleUnifiedInputModal({
   const [fileMode, setPopoverFileMode] = useState<'thcs_thpt' | 'dinh_ky'>('thcs_thpt');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [pageProgressText, setPageProgressText] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   if (!isOpen) return null;
+
+  const handleCancelProcess = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setStatusMessage('');
+    setProgressPercent(0);
+    setPageProgressText('');
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -106,11 +164,7 @@ export default function SingleUnifiedInputModal({
           body: formData,
         });
 
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Không thể bóc tách file Word');
-        }
-
+        const data = await safeParseJsonResponse(res);
         if (!data.questions || data.questions.length === 0) {
           throw new Error('File Word không chứa câu hỏi nào nhận diện được.');
         }
@@ -138,29 +192,149 @@ export default function SingleUnifiedInputModal({
         return;
       }
 
-      // 3. FILE PDF (.PDF)
+      // 3. FILE PDF (.PDF) - SỐ HÓA TỪNG TRANG VỚI PDF.JS & CONCURRENCY
       if (fileName.endsWith('.pdf')) {
-        setStatusMessage('Đang truyền file PDF qua AI Multimodal Vision để nhận diện công thức & hình vẽ...');
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('grade', '12');
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
 
-        const res = await fetch('/api/digitize-pdf', {
-          method: 'POST',
-          body: formData,
-        });
+        setStatusMessage('Đang khởi tạo bộ phân tích PDF đa trang...');
+        setProgressPercent(5);
+        setPageProgressText('Chuẩn bị nạp trang...');
 
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Quá trình số hóa AI PDF gặp sự cố');
+        const arrayBuffer = await selectedFile.arrayBuffer();
+
+        // Nạp pdfjs-dist động an toàn cho trình duyệt qua CDN
+        const pdfjsLib = await loadBrowserPdfJs();
+
+        let allQuestions: Question[] = [];
+        const erroredPages: number[] = [];
+
+        if (pdfjsLib && typeof window !== 'undefined') {
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          const totalPages = pdf.numPages;
+
+          let completedCount = 0;
+
+          // Render từng trang ra JPEG canvas ở độ nét cao (scale 1.8 ~ 170 DPI)
+          const renderPageToJpeg = async (pageNumber: number): Promise<string> => {
+            const page = await pdf.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: 1.8 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Canvas 2D context không khả dụng');
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            return canvas.toDataURL('image/jpeg', 0.85);
+          };
+
+          // Gọi API cho 1 trang, thử lại tối đa 2 lần, timeout 25s
+          const processPage = async (pageNumber: number): Promise<Question[]> => {
+            let lastErr: any = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              if (abortController.signal.aborted) throw new Error('Đã hủy quá trình số hóa.');
+
+              try {
+                const jpegBase64 = await renderPageToJpeg(pageNumber);
+
+                const timeoutCtrl = new AbortController();
+                const timeoutId = setTimeout(() => timeoutCtrl.abort(), 25000);
+                const onAbort = () => timeoutCtrl.abort();
+                abortController.signal.addEventListener('abort', onAbort);
+
+                let res: Response;
+                try {
+                  res = await fetch('/api/digitize-page', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      imageBase64: jpegBase64,
+                      pageIndex: pageNumber,
+                      mimeType: 'image/jpeg',
+                    }),
+                    signal: timeoutCtrl.signal,
+                  });
+                } finally {
+                  clearTimeout(timeoutId);
+                  abortController.signal.removeEventListener('abort', onAbort);
+                }
+
+                const data = await safeParseJsonResponse(res);
+                if (data.questions && Array.isArray(data.questions)) {
+                  return data.questions;
+                }
+                return [];
+              } catch (err: any) {
+                lastErr = err;
+                if (abortController.signal.aborted) throw err;
+                if (attempt < 3) {
+                  await new Promise((r) => setTimeout(r, 1000));
+                }
+              }
+            }
+            console.warn(`Trang ${pageNumber} bị lỗi sau 2 lần thử lại:`, lastErr);
+            erroredPages.push(pageNumber);
+            return [];
+          };
+
+          // Chạy song song tối đa 3 trang một lúc
+          const pageList = Array.from({ length: totalPages }, (_, i) => i + 1);
+          const executingPool: Promise<any>[] = [];
+
+          for (const pageNumber of pageList) {
+            if (abortController.signal.aborted) break;
+
+            const task = (async () => {
+              try {
+                const qs = await processPage(pageNumber);
+                allQuestions.push(...qs);
+              } finally {
+                completedCount++;
+                const pct = Math.round((completedCount / totalPages) * 100);
+                setProgressPercent(pct);
+                setPageProgressText(`Trang ${completedCount}/${totalPages} (${pct}%)`);
+                setStatusMessage(`Đang số hóa AI: Trang ${completedCount}/${totalPages}`);
+              }
+            })();
+
+            executingPool.push(task);
+
+            if (executingPool.length >= 3) {
+              await Promise.race(executingPool);
+              for (let i = executingPool.length - 1; i >= 0; i--) {
+                const status = await Promise.race([executingPool[i], Promise.resolve('pending')]);
+                if (status !== 'pending') {
+                  executingPool.splice(i, 1);
+                }
+              }
+            }
+          }
+
+          await Promise.all(executingPool);
+        } else {
+          // Fallback một cổng nếu không render được canvas
+          setStatusMessage('Đang truyền file PDF qua AI Multimodal Vision...');
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+          formData.append('grade', '12');
+
+          const res = await fetch('/api/digitize-pdf', {
+            method: 'POST',
+            body: formData,
+            signal: abortController.signal,
+          });
+
+          const data = await safeParseJsonResponse(res);
+          allQuestions = data.questions || [];
         }
 
-        if (!data.questions || data.questions.length === 0) {
-          throw new Error('AI không tìm thấy câu hỏi trắc nghiệm nào trong file PDF');
+        if (allQuestions.length === 0) {
+          throw new Error('AI không tìm thấy câu hỏi trắc nghiệm nào trong file PDF này.');
         }
 
         const examTitle = selectedFile.name.replace(/\.pdf$/i, '').trim();
-        onApplyQuestions(data.questions, examTitle);
+        onApplyQuestions(allQuestions, examTitle);
         onClose();
         return;
       }
@@ -343,9 +517,37 @@ export default function SingleUnifiedInputModal({
 
           {/* Trạng thái xử lý */}
           {isProcessing && (
-            <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-800 text-xs flex items-center gap-3 animate-pulse">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
-              <span className="font-bold">{statusMessage || 'Đang xử lý dữ liệu đề thi...'}</span>
+            <div className="p-4 rounded-2xl bg-blue-50/90 border border-blue-200 text-blue-900 text-xs space-y-2.5 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 font-bold">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+                  <span>{statusMessage || 'Đang xử lý dữ liệu đề thi...'}</span>
+                </div>
+                {pageProgressText && (
+                  <span className="font-extrabold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full text-[11px]">
+                    {pageProgressText}
+                  </span>
+                )}
+              </div>
+
+              {progressPercent > 0 && (
+                <div className="w-full bg-blue-100/70 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={handleCancelProcess}
+                  className="px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-100/70 rounded-lg transition cursor-pointer"
+                >
+                  ✕ Dừng / Hủy tiến trình
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -354,11 +556,10 @@ export default function SingleUnifiedInputModal({
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
           <button
             type="button"
-            onClick={onClose}
-            disabled={isProcessing}
+            onClick={isProcessing ? handleCancelProcess : onClose}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70 transition cursor-pointer"
           >
-            Hủy bỏ
+            {isProcessing ? 'Dừng lại' : 'Hủy bỏ'}
           </button>
 
           <button
@@ -370,7 +571,7 @@ export default function SingleUnifiedInputModal({
             {isProcessing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Đang xử lý đề thi...</span>
+                <span>Đang xử lý ({progressPercent}%)...</span>
               </>
             ) : (
               <>

@@ -4,6 +4,11 @@ import { ommlToLatex } from 'dwml-ts';
 import { renderToSvg } from 'wmf-emf-renderer';
 import { Question, QuestionType, QuestionDifficulty } from '../../types/database';
 import { detectMathTopic } from '../latex/examParser';
+import {
+  registerExamAsset,
+  sanitizeNoBase64OrRawHtml,
+  containsBase64OrImgTag,
+} from '../exam/assetRegistry';
 
 let WMF: any = null;
 try {
@@ -169,13 +174,18 @@ export function postProcessMathTypeSvg(rawSvg: string): string {
   return svg;
 }
 
+export interface DocxMediaInfo {
+  assetId: string;
+  isMathType: boolean;
+}
+
 /**
  * Trích xuất toàn bộ hình ảnh và ánh xạ quan hệ rId trong file .docx
- * Tự động chuyển đổi công thức MathType (WMF/EMF) sang SVG vector siêu nét, hiển thị mượt mà trên mọi trình duyệt
+ * Tự động chuyển đổi công thức MathType (WMF/EMF) sang SVG vector siêu nét và lưu vào Asset Registry
  */
-async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
-  const rIdToDataUrl = new Map<string, string>();
-  const filenameToDataUrl = new Map<string, string>();
+export async function extractDocxImages(zip: JSZip): Promise<Map<string, DocxMediaInfo>> {
+  const rIdToMediaInfo = new Map<string, DocxMediaInfo>();
+  const filenameToMediaInfo = new Map<string, DocxMediaInfo>();
 
   // 1. Đọc tất cả các file ảnh trong thư mục word/media/
   const mediaFiles = Object.keys(zip.files).filter((p) => p.startsWith('word/media/'));
@@ -184,10 +194,11 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
     if (!file) continue;
 
     const lower = path.toLowerCase();
-    let dataUrl = '';
+    let assetId = '';
+    const isMathType = lower.endsWith('.wmf') || lower.endsWith('.emf');
 
     // Xử lý chuyển đổi WMF/EMF của MathType sang SVG vector chuẩn
-    if (lower.endsWith('.wmf') || lower.endsWith('.emf')) {
+    if (isMathType) {
       try {
         const rawBytes = await file.async('uint8array');
         // Giữ nguyên 22 byte APM header để SVG có đúng tỷ lệ khung hình thật (aspect ratio)
@@ -198,7 +209,7 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
           const base64 = typeof Buffer !== 'undefined'
             ? Buffer.from(cleanSvg).toString('base64')
             : btoa(unescape(encodeURIComponent(cleanSvg)));
-          dataUrl = `data:image/svg+xml;base64,${base64}`;
+          assetId = registerExamAsset(base64, 'image/svg+xml', 'svg', 'mathtype');
         }
       } catch (e) {
         // Fallback canvas nếu renderToSvg gặp sự cố
@@ -213,7 +224,9 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
             canvas.width = w;
             canvas.height = h;
             WMF.draw_canvas(cleanBytes, canvas);
-            dataUrl = canvas.toDataURL('image/png');
+            const dataUrl = canvas.toDataURL('image/png');
+            const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+            assetId = registerExamAsset(base64, 'image/png', 'png', 'mathtype');
           }
         } catch {
           //
@@ -221,18 +234,28 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
       }
     }
 
-    if (!dataUrl) {
+    if (!assetId) {
       const base64 = await file.async('base64');
       let mime = 'image/png';
-      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
-      else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
-      else if (lower.endsWith('.gif')) mime = 'image/gif';
-      else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) mime = 'image/wmf';
-      dataUrl = `data:${mime};base64,${base64}`;
+      let ext = 'png';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+        mime = 'image/jpeg';
+        ext = 'jpg';
+      } else if (lower.endsWith('.svg')) {
+        mime = 'image/svg+xml';
+        ext = 'svg';
+      } else if (lower.endsWith('.gif')) {
+        mime = 'image/gif';
+        ext = 'gif';
+      } else if (lower.endsWith('.wmf') || lower.endsWith('.emf')) {
+        mime = 'image/wmf';
+        ext = 'wmf';
+      }
+      assetId = registerExamAsset(base64, mime, ext, isMathType ? 'mathtype' : 'fig');
     }
 
     const filename = path.replace('word/media/', '').trim();
-    filenameToDataUrl.set(filename, dataUrl);
+    filenameToMediaInfo.set(filename, { assetId, isMathType });
   }
 
   // 2. Đọc file quan hệ word/_rels/document.xml.rels để liên kết rId -> filename
@@ -245,14 +268,14 @@ async function extractDocxImages(zip: JSZip): Promise<Map<string, string>> {
       const rId = match[1];
       const target = match[2];
       const filename = target.replace(/^.*[\\\/]/, '');
-      const dataUrl = filenameToDataUrl.get(filename);
-      if (dataUrl) {
-        rIdToDataUrl.set(rId, dataUrl);
+      const mediaInfo = filenameToMediaInfo.get(filename);
+      if (mediaInfo) {
+        rIdToMediaInfo.set(rId, mediaInfo);
       }
     }
   }
 
-  return rIdToDataUrl;
+  return rIdToMediaInfo;
 }
 
 export interface ParsedTailAnswers {
@@ -487,7 +510,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
   const docFile = zip.file('word/document.xml');
   if (!docFile) throw new Error('Không tìm thấy word/document.xml trong file .docx');
 
-  const rIdToDataUrl = await extractDocxImages(zip);
+  const rIdToMediaInfo = await extractDocxImages(zip);
   let xml = await docFile.async('text');
 
   // Chuẩn hóa ký tự khoảng trắng không ngắt \u00A0
@@ -529,7 +552,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     }
   });
 
-  // 2. Thay thế toàn bộ khối MathType (<w:object>) và <v:imagedata> thành hình ảnh công thức toán inline
+  // 2. Thay thế toàn bộ khối MathType (<w:object>) và <v:imagedata> thành \includegraphics chuẩn LaTeX
   xml = xml.replace(/<w:object\b[\s\S]*?<\/w:object>/gi, (objXml) => {
     const idMatch =
       objXml.match(/<v:imagedata[^>]+r:id="([^"]+)"/i) ||
@@ -537,8 +560,8 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
       objXml.match(/r:id="([^"]+)"/i);
     if (!idMatch) return '';
     const rId = idMatch[1];
-    const dataUrl = rIdToDataUrl.get(rId);
-    if (!dataUrl) return '';
+    const media = rIdToMediaInfo.get(rId);
+    if (!media) return '';
 
     // Trích xuất chiều cao từ Word XML (pt hoặc dxa) để tự động căn chỉnh tỷ lệ cân đối theo cỡ chữ
     let heightEm = 1.45;
@@ -554,21 +577,21 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
       }
     }
 
-    return ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:${heightEm.toFixed(2)}em;width:auto;vertical-align:-0.32em;" alt="công thức MathType" /> `;
+    return ` \\includegraphics[height=${heightEm.toFixed(2)}em]{${media.assetId}} `;
   });
 
   xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
-    const dataUrl = rIdToDataUrl.get(rId);
-    return dataUrl
-      ? ` <img src="${dataUrl}" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:1.45em;width:auto;vertical-align:-0.32em;" alt="công thức MathType" /> `
+    const media = rIdToMediaInfo.get(rId);
+    return media
+      ? ` \\includegraphics{${media.assetId}} `
       : '';
   });
 
-  // 3. Thay thế các hình ảnh vẽ đồ thị / hình học (<w:drawing> / <a:blip>)
+  // 3. Thay thế các hình ảnh vẽ đồ thị / hình học (<w:drawing> / <a:blip>) thành \includegraphics
   xml = xml.replace(/<a:blip[^>]+r:embed="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
-    const dataUrl = rIdToDataUrl.get(rId);
-    return dataUrl
-      ? `\n<div class="my-3 flex justify-center"><img src="${dataUrl}" class="max-w-md rounded-xl border border-slate-200 shadow-2xs" alt="Hình vẽ đề thi" /></div>\n`
+    const media = rIdToMediaInfo.get(rId);
+    return media
+      ? `\n\\begin{center}\n\\includegraphics{${media.assetId}}\n\\end{center}\n`
       : '';
   });
 
@@ -621,10 +644,14 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
 
   // 7. Giữ lại đánh dấu gạch chân (u), in đậm (b), và màu đỏ (đáp án) trong các text run <w:r>
   xml = xml.replace(/<w:r\b[\s\S]*?<\/w:r>/gi, (runXml) => {
+    // Trích xuất các lệnh \includegraphics nằm trong runXml (nếu có)
+    const includegraphicsMatches = runXml.match(/\\includegraphics(?:\[.*?\])?\{[^}]+\}/g) || [];
+    const includegraphicsStr = includegraphicsMatches.join(' ');
+
     const textMatches = runXml.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi);
     if (!textMatches) {
-      if (runXml.includes('<img') || runXml.includes('$')) {
-        return runXml.replace(/<w:[^>]+>/g, '').replace(/<\/w:[^>]+>/g, '');
+      if (runXml.includes('<img') || runXml.includes('$') || includegraphicsStr) {
+        return runXml.replace(/<w:[^>]+>/g, '').replace(/<\/w:[^>]+>/g, '').trim();
       }
       return '';
     }
@@ -638,6 +665,10 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     if (isUnderline) runText = `<u>${runText}</u>`;
     if (isBold) runText = `<b>${runText}</b>`;
     if (isRed) runText = `<span style="color:red">${runText}</span>`;
+
+    if (includegraphicsStr) {
+      runText = `${runText} ${includegraphicsStr}`;
+    }
 
     return runText;
   });
@@ -662,6 +693,111 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     .replace(/&quot;/g, '"');
 
   return { cleanText, tailAnswers };
+}
+
+export interface ExamSectionBlock {
+  part: 1 | 2 | 3 | 4;
+  title: string;
+  body: string;
+}
+
+/**
+ * Phân chia văn bản đề thi thành các Section chuẩn Bộ Giáo dục & Đào tạo 2025.
+ * Chịu được mọi lỗi OCR (hoa/thường, có dấu/không dấu: PHẦN, PHAN, Phần, Phan, phan)
+ * Dòng tiêu đề Section kết thúc câu trước và là mốc bắt đầu phần mới, KHÔNG thuộc câu nào!
+ */
+export function splitDocumentIntoSections(text: string): ExamSectionBlock[] {
+  const sectionHeaderRegex = /(?:^|\n)\s*(?:<[^>]+>|\s)*(?:(?:PHẦN|PHAN|Phần|Phan|phan|Ph\u1EA7n)\b(?:<[^>]+>|\s)*([I|V|X]+|[1-4])\b[^\n]*|(?:(?:PHẦN|PHAN|Phần|Phan|phan)\s+)?TỰ\s*LUẬN\b[^\n]*)/gi;
+  const matches = Array.from(text.matchAll(sectionHeaderRegex));
+
+  if (matches.length === 0) {
+    return [{ part: 1, title: '', body: text }];
+  }
+
+  const sections: ExamSectionBlock[] = [];
+
+  // Nếu trước section đầu tiên có câu hỏi (hoặc văn bản), cho vào phần mở đầu
+  const firstMatch = matches[0];
+  const firstIndex = firstMatch.index ?? 0;
+  if (firstIndex > 0) {
+    const preText = text.substring(0, firstIndex).trim();
+    if (preText && /(?:Câu|Bài)\s*\d+/i.test(preText)) {
+      sections.push({
+        part: 1,
+        title: 'MỞ ĐẦU',
+        body: preText,
+      });
+    }
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const cur = matches[i];
+    const next = matches[i + 1];
+    const headerStr = cur[0].trim();
+    let part: 1 | 2 | 3 | 4 = 1;
+
+    if (/TỰ\s*LUẬN/i.test(headerStr)) {
+      part = 4;
+    } else if (cur[1]) {
+      const p = cur[1].toUpperCase();
+      if (p === 'IV' || p === '4') part = 4;
+      else if (p === 'III' || p === '3') part = 3;
+      else if (p === 'II' || p === '2') part = 2;
+      else part = 1;
+    }
+
+    const startIdx = (cur.index ?? 0) + cur[0].length;
+    const endIdx = next ? (next.index ?? text.length) : text.length;
+    const bodyStr = text.substring(startIdx, endIdx).trim();
+
+    sections.push({
+      part,
+      title: headerStr,
+      body: bodyStr,
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Loại bỏ triệt để và di trú toàn bộ chuỗi base64 hoặc thẻ <img src="data:..."> khỏi Question
+ */
+export function cleanLegacyBase64FromQuestions(questions: Question[]): Question[] {
+  return questions.map((q) => {
+    const cleanContent = sanitizeNoBase64OrRawHtml(q.content);
+    const cleanOptions = (q.options || []).map((opt: any) => {
+      if (typeof opt === 'string') {
+        return sanitizeNoBase64OrRawHtml(opt);
+      }
+      return {
+        ...opt,
+        text: sanitizeNoBase64OrRawHtml(opt.text || ''),
+      };
+    });
+    const cleanExplanation = q.explanation ? sanitizeNoBase64OrRawHtml(q.explanation) : q.explanation;
+    return {
+      ...q,
+      content: cleanContent,
+      options: cleanOptions,
+      explanation: cleanExplanation,
+    };
+  });
+}
+
+/**
+ * Kiểm tra xem danh sách câu hỏi có còn bị dính base64 hoặc HTML thô <img> hay không
+ */
+export function validateNoBase64InQuestions(questions: Question[]): boolean {
+  for (const q of questions) {
+    if (containsBase64OrImgTag(q.content)) return false;
+    for (const opt of q.options || []) {
+      const text = typeof opt === 'string' ? opt : opt.text || '';
+      if (containsBase64OrImgTag(text)) return false;
+    }
+    if (q.explanation && containsBase64OrImgTag(q.explanation)) return false;
+  }
+  return true;
 }
 
 /**
@@ -698,264 +834,218 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
     console.warn('Fallback to mammoth parser:', err);
     const options = {
       convertImage: mammoth.images.imgElement((image: any) => {
-        return image.read('base64').then((buf: string) => ({
-          src: `data:${image.contentType};base64,${buf}`,
-        }));
+        return image.read('base64').then((buf: string) => {
+          const mime = image.contentType || 'image/png';
+          const ext = mime.split('/')[1] || 'png';
+          const assetId = registerExamAsset(buf, mime, ext, 'fig');
+          return { src: assetId };
+        });
       }),
     };
     const res = await mammoth.convertToHtml({ arrayBuffer }, options);
     examContent = res.value
+      .replace(/<img\b[^>]*src=["'](asset_[^"']+)["'][^>]*>/gi, '\\includegraphics{$1}')
       .replace(/<\/p>/gi, '\n')
       .replace(/<\/div>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n');
   }
 
-  // 0. BẢO VỆ TOÀN BỘ THẺ <img ...> VÀ DỮ LIỆU BASE64 TRƯỚC KHI TÁCH CÂU VÀ ĐÁP ÁN!
-  const imgPlaceholders = new Map<string, string>();
-  let imgCounter = 0;
-  const safeExamContent = examContent.replace(/<img\b[^>]*>/gi, (imgTag) => {
-    const token = `@@DOCX_IMG_${imgCounter++}@@`;
-    imgPlaceholders.set(token, imgTag);
-    return token;
-  });
-
-  const restoreDocxImages = (str: string): string => {
-    if (!str) return str;
-    return str.replace(/@@DOCX_IMG_\d+@@/g, (token) => imgPlaceholders.get(token) || token);
-  };
-
-  // Vị trí các phần trong tài liệu (hỗ trợ cả chữ La Mã, số Ả Rập và từ khóa Tự luận)
-  const p1Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:I\b|1\b)/i);
-  const p2Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:II\b|2\b)/i);
-  const p3Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:III\b|3\b)/i);
-  const p4Pos = safeExamContent.search(/(?:PHẦN|Phần)\s*(?:IV\b|4\b)|(?:PHẦN\s+)?TỰ\s*LUẬN\b|BÀI\s*TẬP\s*TỰ\s*LUẬN\b/i);
-
   // Tách câu hỏi theo biểu thức đa dạng, hỗ trợ mọi thẻ lồng giữa "Câu" và số
   const questionSplitter = /(?=(?:^|\n)\s*(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)\s*\d+(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s))/i;
-  const rawBlocks = safeExamContent.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
+  // 1. CHIA TÀI LIỆU THÀNH CÁC PHẦN (SECTION) ĐỘC LẬP TRƯỚC KHI TÁCH CÂU
+  const sections = splitDocumentIntoSections(examContent);
   const questions: Question[] = [];
-  let qIndex = 0;
-  let currentCursor = 0;
+  let globalQIndex = 0;
 
-  for (const block of rawBlocks) {
-    const matchHead = block.match(/^(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*(\d+)(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s)*(?:<[^>]+>|\s)*([\s\S]*)$/i);
-    if (!matchHead) continue;
+  for (const section of sections) {
+    const rawBlocks = section.body.split(questionSplitter).map((b) => b.trim()).filter(Boolean);
 
-    qIndex++;
-    const questionNumber = parseInt(matchHead[1], 10) || qIndex;
-    const body = matchHead[2].trim();
+    for (const block of rawBlocks) {
+      const matchHead = block.match(/^(?:<[^>]+>|\s)*(?:\[|\()? *(?:Câu|Bài|CÂU|BÀI)(?:<[^>]+>|\s)*(\d+)(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-|\s)*(?:<[^>]+>|\s)*([\s\S]*)$/i);
+      if (!matchHead) continue;
 
-    // 1. Tách Lời giải / Hướng dẫn giải inline
-    let contentAndChoices = body;
-    let explanation = '';
-    const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b)[\.:\s]*([\s\S]*)$/i);
-    if (lgMatch) {
-      explanation = lgMatch[1].trim();
-      contentAndChoices = body.substring(0, lgMatch.index).trim();
-    }
+      globalQIndex++;
+      const questionNumber = parseInt(matchHead[1], 10) || globalQIndex;
+      const body = matchHead[2].trim();
 
-    // Xác định phần của câu hỏi dựa trên vị trí con trỏ trong tài liệu
-    let blockPos = safeExamContent.indexOf(block, currentCursor);
-    if (blockPos === -1) {
-      blockPos = safeExamContent.indexOf(block);
-    } else {
-      currentCursor = blockPos + 20;
-    }
+      // Tách Lời giải / Hướng dẫn giải inline nếu có
+      let contentAndChoices = body;
+      let explanation = '';
+      const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b)[\.:\s]*([\s\S]*)$/i);
+      if (lgMatch) {
+        explanation = lgMatch[1].trim();
+        contentAndChoices = body.substring(0, lgMatch.index).trim();
+      }
 
-    const hasSections = p1Pos !== -1 || p2Pos !== -1 || p3Pos !== -1 || p4Pos !== -1;
-    let sectionPart: 1 | 2 | 3 | 4 = 1;
-    if (p4Pos !== -1 && blockPos >= p4Pos) sectionPart = 4;
-    else if (p3Pos !== -1 && blockPos >= p3Pos) sectionPart = 3;
-    else if (p2Pos !== -1 && blockPos >= p2Pos) sectionPart = 2;
-    else if (p1Pos !== -1 && blockPos >= p1Pos) sectionPart = 1;
+      // Đảm bảo không dính bất kỳ tiêu đề Section nào ở đuôi
+      contentAndChoices = contentAndChoices.replace(/(?:^|\n)\s*(?:PHẦN|PHAN|Phần|Phan|phan)\s*(?:[I|V|X]+|[1-4])\b[^\n]*/gi, '').trim();
 
-    // 2. Nhận diện các phương án trắc nghiệm A., B., C., D. và a), b), c), d)
-    const choiceRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([A-D])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
-    const tfRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([a-d])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
+      const choiceRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([A-D])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
+      const tfRegex = /(?:^|[\n\t\r\.\,\;]|\s+)(?:<[^>]+>|\s)*\s*(?:\[|\()?([a-d])(?:<[^>]+>|\s)*(?:\]|\)|\.|\:|\-)(?:<[^>]+>|\s)*/gi;
 
-    const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
-    const tfMatches = Array.from(contentAndChoices.matchAll(tfRegex));
+      const choicesMatches = Array.from(contentAndChoices.matchAll(choiceRegex));
+      const tfMatches = Array.from(contentAndChoices.matchAll(tfRegex));
 
-    let type: QuestionType = 'single_choice';
-    let part: 1 | 2 | 3 | 4 = sectionPart;
-    let points = 0.25;
-    let options: any[] = [];
-    let correctAnswer: any = null;
-    let questionContent = contentAndChoices;
+      let type: QuestionType = 'single_choice';
+      let part: 1 | 2 | 3 | 4 = section.part;
+      let points = 0.25;
+      let options: any[] = [];
+      let correctAnswer: any = null;
+      let questionContent = contentAndChoices;
 
-    // Kiểm tra câu tự luận rõ ràng hoặc nằm trong Phần Tự luận
-    const isExplicitEssay =
-      sectionPart === 4 ||
-      /(?:^|\s)(?:Tự\s*luận|TỰ\s*LUẬN|Bài\s*toán|Chứng\s*minh\s*rằng|Giải\s*phương\s*trình)/i.test(body);
+      if (part === 1) {
+        // PHẦN I: Trắc nghiệm 4 lựa chọn A, B, C, D
+        type = 'single_choice';
+        points = 0.25;
 
-    const hasTrueFalseKeywords = /(?:Đúng|Sai|\[Đ\]|\[S\])/i.test(contentAndChoices);
+        if (choicesMatches.length >= 3) {
+          const firstChoicePos = choicesMatches[0].index ?? 0;
+          questionContent = contentAndChoices.substring(0, firstChoicePos).trim();
 
-    const isPart1 = hasSections ? sectionPart === 1 : (choicesMatches.length >= 3 && !isExplicitEssay);
-    const isPart2 = hasSections ? sectionPart === 2 : (!isPart1 && tfMatches.length >= 3 && !isExplicitEssay && (hasTrueFalseKeywords || tailAnswers.part2.has(questionNumber)));
-    const isPart3 = hasSections ? sectionPart === 3 : (!isPart1 && !isPart2 && (body.includes('Điền kết quả') || body.includes('bằng bao nhiêu') || tailAnswers.part3.has(questionNumber)) && !isExplicitEssay);
+          for (let i = 0; i < choicesMatches.length; i++) {
+            const cur = choicesMatches[i];
+            const next = choicesMatches[i + 1];
+            const label = cur[1].toUpperCase();
+            const optStart = (cur.index ?? 0) + cur[0].length;
+            const optEnd = next ? (next.index ?? contentAndChoices.length) : contentAndChoices.length;
+            let optText = contentAndChoices.substring(optStart, optEnd).trim();
 
-    if (isPart1) {
-      // Dạng Trắc nghiệm 4 lựa chọn (Phần I)
-      type = 'single_choice';
-      part = 1;
-      points = 0.25;
+            // QUY TẮC CẮT BỎ TIÊU ĐỀ PHẦN KHỎI PHƯƠNG ÁN CUỐI CÙNG (CÂU 12 PHƯƠNG ÁN D)
+            optText = optText.replace(/(?:^|\n)\s*(?:PHẦN|PHAN|Phần|Phan|phan)\s*(?:[I|V|X]+|[1-4])\b[\s\S]*$/i, '').trim();
 
-      if (choicesMatches.length >= 3) {
-        const firstChoicePos = choicesMatches[0].index ?? 0;
-        questionContent = contentAndChoices.substring(0, firstChoicePos).trim();
+            const isMarked =
+              cur[0].includes('<u>') ||
+              optText.includes('<u>') ||
+              optText.includes('color:red') ||
+              optText.includes('color: red') ||
+              optText.includes('FF0000') ||
+              cur[0].includes('color:red') ||
+              cur[0].includes('color: red') ||
+              cur[0].includes('FF0000');
 
-        const choicePositions: { label: string; start: number; fullMatch: string }[] = [];
-        choicesMatches.forEach((m) => {
-          choicePositions.push({
-            label: m[1].toUpperCase(),
-            start: m.index ?? 0,
-            fullMatch: m[0],
-          });
-        });
+            optText = optText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
 
-        for (let i = 0; i < choicePositions.length; i++) {
-          const cur = choicePositions[i];
-          const next = choicePositions[i + 1];
-          const optStart = cur.start + cur.fullMatch.length;
-          const optEnd = next ? next.start : contentAndChoices.length;
-          let optText = contentAndChoices.substring(optStart, optEnd).trim();
+            if (isMarked && !correctAnswer) {
+              correctAnswer = label;
+            }
 
-          // Chỉ xem là được đánh dấu đáp án nếu gạch chân <u> hoặc có màu đỏ
-          const isMarked =
-            cur.fullMatch.includes('<u>') ||
-            optText.includes('<u>') ||
-            optText.includes('color:red') ||
-            optText.includes('color: red') ||
-            optText.includes('FF0000') ||
-            cur.fullMatch.includes('color:red') ||
-            cur.fullMatch.includes('color: red') ||
-            cur.fullMatch.includes('FF0000');
-
-          optText = optText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
-
-          if (isMarked && !correctAnswer) {
-            correctAnswer = cur.label;
+            options.push({
+              id: label,
+              text: optText,
+            });
           }
 
-          options.push({
-            id: cur.label,
-            text: optText,
-          });
-        }
-
-        // Ưu tiên lấy đáp án từ bảng đáp án ở cuối tài liệu nếu có
-        if (!correctAnswer && tailAnswers.part1.has(questionNumber)) {
-          correctAnswer = tailAnswers.part1.get(questionNumber);
-        }
-
-        if (!correctAnswer && explanation) {
-          const ansMatch = explanation.match(/(?:Chọn|Đáp án|Đ\/A)[\s:]*([A-D])/i);
-          if (ansMatch) correctAnswer = ansMatch[1].toUpperCase();
-        }
-        if (!correctAnswer) correctAnswer = 'A';
-      }
-    } else if (isPart2) {
-      // Dạng Đúng / Sai (Phần II)
-      type = 'true_false';
-      part = 2;
-      points = 1.0;
-
-      if (tfMatches.length >= 3) {
-        const firstTfPos = tfMatches[0].index ?? 0;
-        questionContent = contentAndChoices.substring(0, firstTfPos).trim();
-
-        const tailTf = tailAnswers.part2.get(questionNumber);
-        const correctMap: Record<string, boolean> = tailTf
-          ? { ...tailTf }
-          : { a: false, b: false, c: false, d: false };
-
-        for (let i = 0; i < tfMatches.length; i++) {
-          const cur = tfMatches[i];
-          const next = tfMatches[i + 1];
-          const label = cur[1].toLowerCase();
-          const start = (cur.index ?? 0) + cur[0].length;
-          const end = next ? (next.index ?? 0) : contentAndChoices.length;
-          let stmtText = contentAndChoices.substring(start, end).trim();
-
-          if (!tailTf) {
-            const isTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
-            if (isTrue) correctMap[label] = true;
+          // Lấy đáp án từ bảng đáp án nếu có
+          if (!correctAnswer && tailAnswers.part1.has(questionNumber)) {
+            correctAnswer = tailAnswers.part1.get(questionNumber);
           }
-
-          stmtText = stmtText.replace(/[\(\[]?\s*(?:Đúng|Sai)\s*[\)\]]?/gi, '').trim();
-          options.push({
-            id: label,
-            text: stmtText,
-          });
+          if (!correctAnswer && explanation) {
+            const ansMatch = explanation.match(/(?:Chọn|Đáp án|Đ\/A)[\s:]*([A-D])/i);
+            if (ansMatch) correctAnswer = ansMatch[1].toUpperCase();
+          }
+          if (!correctAnswer) correctAnswer = 'A';
         }
-        correctAnswer = correctMap;
-      }
-    } else if (isPart3) {
-      // Dạng Trả lời ngắn / điền số (Phần III)
-      type = 'short_answer';
-      part = 3;
-      points = 0.5;
+      } else if (part === 2) {
+        // PHẦN II: Trắc nghiệm Đúng / Sai 4 ý a, b, c, d
+        type = 'true_false';
+        points = 1.0;
 
-      if (tailAnswers.part3.has(questionNumber)) {
-        correctAnswer = tailAnswers.part3.get(questionNumber);
-      } else {
-        const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
-        if (numMatch) {
-          const rawAns = numMatch[1].trim();
-          correctAnswer = [rawAns, rawAns.replace(',', '.')];
+        if (tfMatches.length >= 3) {
+          const firstTfPos = tfMatches[0].index ?? 0;
+          questionContent = contentAndChoices.substring(0, firstTfPos).trim();
+
+          const tailTf = tailAnswers.part2.get(questionNumber);
+          const correctMap: Record<string, boolean> = tailTf
+            ? { ...tailTf }
+            : { a: false, b: false, c: false, d: false };
+
+          for (let i = 0; i < tfMatches.length; i++) {
+            const cur = tfMatches[i];
+            const next = tfMatches[i + 1];
+            const label = cur[1].toLowerCase();
+            const start = (cur.index ?? 0) + cur[0].length;
+            const end = next ? (next.index ?? contentAndChoices.length) : contentAndChoices.length;
+            let stmtText = contentAndChoices.substring(start, end).trim();
+
+            // Cắt bỏ bất kỳ chữ PHẦN nào còn sót
+            stmtText = stmtText.replace(/(?:^|\n)\s*(?:PHẦN|PHAN|Phần|Phan|phan)\s*(?:[I|V|X]+|[1-4])\b[\s\S]*$/i, '').trim();
+
+            if (!tailTf) {
+              const isTrue = /[\(\[]?\s*Đúng\s*[\)\]]?/i.test(stmtText);
+              if (isTrue) correctMap[label] = true;
+            }
+
+            stmtText = stmtText.replace(/[\(\[]?\s*(?:Đúng|Sai)\s*[\)\]]?/gi, '').trim();
+            stmtText = stmtText.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
+            options.push({
+              id: label,
+              text: stmtText,
+            });
+          }
+          correctAnswer = correctMap;
+        }
+      } else if (part === 3) {
+        // PHẦN III: Trả lời ngắn / Điền số
+        type = 'short_answer';
+        points = 0.5;
+        questionContent = contentAndChoices.trim();
+
+        if (tailAnswers.part3.has(questionNumber)) {
+          correctAnswer = tailAnswers.part3.get(questionNumber);
         } else {
-          correctAnswer = ['0'];
+          const numMatch = explanation.match(/(?:Đáp số|Kết quả)[\s:]*([\d\,\.\-\/]+)/i);
+          if (numMatch) {
+            const rawAns = numMatch[1].trim();
+            correctAnswer = [rawAns, rawAns.replace(',', '.')];
+          } else {
+            correctAnswer = ['0'];
+          }
         }
+      } else {
+        // PHẦN IV: Tự luận
+        type = 'essay';
+        points = 2.0;
+        questionContent = contentAndChoices.trim();
+        correctAnswer = explanation || 'Trình bày lời giải chi tiết';
       }
-    } else {
-      // Mặc định là Tự luận (Phần IV)
-      type = 'essay';
-      part = 4;
-      points = 2.0;
-      correctAnswer = explanation || 'Trình bày lời giải chi tiết';
+
+      // Bổ sung lời giải chi tiết từ đuôi đề nếu có
+      if (!explanation && tailAnswers.explanations.has(`q-${questionNumber}`)) {
+        explanation = tailAnswers.explanations.get(`q-${questionNumber}`)!;
+      }
+
+      // Làm sạch thẻ HTML OpenXML còn sót trong questionContent
+      questionContent = questionContent.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
+
+      const topic = detectMathTopic(questionContent + ' ' + explanation);
+      let difficulty: QuestionDifficulty = 'thong_hieu';
+      if (part === 1) difficulty = questionNumber <= 4 ? 'nhan_biet' : 'thong_hieu';
+      else if (part === 2 || part === 3) difficulty = 'van_dung';
+      else if (part === 4) difficulty = 'van_dung_cao';
+
+      questions.push({
+        id: `word-q-${Date.now()}-${questionNumber}`,
+        teacher_id: '11111111-1111-1111-1111-111111111111',
+        grade: 12,
+        topic,
+        part,
+        difficulty,
+        type,
+        content: questionContent,
+        options,
+        correct_answer: correctAnswer,
+        explanation,
+        points,
+        is_public: true,
+      });
     }
-
-    // Nếu chưa có lời giải inline, lấy từ phần HƯỚNG DẪN GIẢI CHI TIẾT ở đuôi tài liệu
-    if (!explanation && tailAnswers.explanations.has(`q-${questionNumber}`)) {
-      explanation = tailAnswers.explanations.get(`q-${questionNumber}`)!;
-    }
-
-    // Làm sạch câu hỏi nhưng giữ lại các thẻ <img> và <table>
-    questionContent = questionContent.replace(/<\/?(?:b|strong|u|span|p)[^>]*>/gi, '').trim();
-
-    // 3. Phục hồi toàn bộ thẻ ảnh <img> từ placeholders sau khi đã hoàn tất bóc tách câu hỏi và đáp án
-    questionContent = restoreDocxImages(questionContent);
-    explanation = restoreDocxImages(explanation);
-    const restoredOptions = options.map((opt: any) => ({
-      ...opt,
-      text: restoreDocxImages(opt.text),
-    }));
-
-    const topic = detectMathTopic(questionContent + ' ' + explanation);
-    let difficulty: QuestionDifficulty = 'thong_hieu';
-    if (part === 1) difficulty = questionNumber <= 4 ? 'nhan_biet' : 'thong_hieu';
-    else if (part === 2 || part === 3) difficulty = 'van_dung';
-    else if (part === 4) difficulty = 'van_dung_cao';
-
-    questions.push({
-      id: `word-q-${Date.now()}-${questionNumber}`,
-      teacher_id: '11111111-1111-1111-1111-111111111111',
-      grade: 12,
-      topic,
-      part,
-      difficulty,
-      type,
-      content: questionContent,
-      options: restoredOptions,
-      correct_answer: correctAnswer,
-      explanation,
-      points,
-      is_public: true,
-    });
   }
 
-  return { questions, rawText: examContent };
+  // Khử sạch 100% mọi chuỗi base64 hoặc thẻ <img trước khi trả về
+  const cleanQuestions = cleanLegacyBase64FromQuestions(questions);
+
+  return { questions: cleanQuestions, rawText: examContent };
 }
 
 /**

@@ -1,6 +1,7 @@
 import katex from 'katex';
 import { parseTkzTabCode, generateTkzTabSvg } from './tkzTabRenderer';
 import { renderTikzToSvg } from './tikzSvgRenderer';
+import { resolveAssetUrl } from '@/lib/exam/assetRegistry';
 
 export function extractBracedGroup(str: string, pos: number): { text: string; nextPos: number } | null {
   let depth = 0;
@@ -262,10 +263,17 @@ export function renderMathToHtml(content: string): string {
     return savePlaceholder(listHtml);
   });
 
-  // 7b. XỬ LÝ \includegraphics[...]{src}
-  text = text.replace(/\\includegraphics(?:\[.*?\])?\{([^}]+)\}/g, (_m, src) => {
+  // 7b. XỬ LÝ \includegraphics[...]{src} và tra cứu Asset từ Registry
+  text = text.replace(/\\includegraphics(?:\[(.*?)\])?\{([^}]+)\}/g, (_m, optionsStr, src) => {
     const cleanSrc = src.trim();
-    const imgHtml = `<img src="${cleanSrc}" alt="Hình minh họa" class="max-w-full h-auto mx-auto my-2 rounded-xl border border-slate-200 shadow-2xs block" />`;
+    const finalUrl = resolveAssetUrl(cleanSrc);
+    const isInline = cleanSrc.startsWith('mathtype_') || (optionsStr && optionsStr.includes('height'));
+    const heightMatch = optionsStr?.match(/height=([\d\.]+(?:em|pt|px)?)/i);
+    const customHeight = heightMatch ? heightMatch[1] : '1.35em';
+
+    const imgHtml = isInline
+      ? `<img src="${finalUrl}" alt="Công thức MathType" class="inline-math-svg inline align-middle mx-1 my-0.5 object-contain" style="height:${customHeight};width:auto;vertical-align:-0.3em;" />`
+      : `<img src="${finalUrl}" alt="Hình minh họa" class="max-w-full h-auto mx-auto my-2 rounded-xl border border-slate-200 shadow-2xs block" />`;
     return savePlaceholder(imgHtml);
   });
 

@@ -819,13 +819,13 @@ function ExamEditorContent() {
                         <label className="text-[11px] font-bold text-slate-600 block">
                           Phương án lựa chọn (Click nút tròn để chọn đáp án đúng):
                         </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-start">
                           {q.options.map((opt) => {
                             const isCorrect = q.correct_answer === opt.id;
                             return (
                               <div
                                 key={opt.id}
-                                className={`flex items-center gap-2 p-1.5 rounded-xl border transition ${
+                                className={`flex items-start gap-2 p-1.5 rounded-xl border transition ${
                                   isCorrect ? 'bg-emerald-50/60 border-emerald-300' : 'bg-slate-50/60 border-slate-200'
                                 }`}
                               >
@@ -1087,7 +1087,7 @@ function ExamEditorContent() {
 
                           {/* Các phương án A, B, C, D */}
                           {Array.isArray(q.options) && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1 pl-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1 pl-4 items-start">
                               {q.options.map((opt) => {
                                 const isCorrect = q.correct_answer === opt.id;
                                 return (

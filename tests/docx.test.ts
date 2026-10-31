@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
-import { parseWordDocx } from '../src/lib/word/wordExamParser';
+import { parseWordDocx, validateNoBase64InQuestions } from '../src/lib/word/wordExamParser';
+import { getExamAsset } from '../src/lib/exam/assetRegistry';
 
 describe('Word Exam Parser', () => {
   it('loads tables.docx without throwing', async () => {
@@ -21,10 +22,9 @@ describe('Word Exam Parser', () => {
     expect(q1.options.length).toBe(4);
     expect(q1.options.map((o: any) => o.id)).toEqual(['A', 'B', 'C', 'D']);
     expect(q1.content).toContain('Điểm cực tiểu của đồ thị hàm số có tọa độ là');
-    expect(q1.content).toContain('<img src="data:');
-    const textWithoutImg = q1.content.replace(/<img[^>]+>/g, '');
-    expect(textWithoutImg).not.toContain('hUeXBlAABQ');
-    expect(q1.explanation).not.toContain('hUeXBlAABQ');
+    expect(q1.content).toContain('\\includegraphics');
+    expect(q1.content).not.toContain('data:image');
+    expect(validateNoBase64InQuestions(result.questions)).toBe(true);
   }, 20000);
 
   it('bóc tách chính xác đề thi và bảng đáp án THPT Xuân Trường', async () => {
@@ -55,8 +55,10 @@ describe('Word Exam Parser', () => {
     expect(p3[2].correct_answer).toEqual(['6', '6']);
     expect(p3[3].correct_answer).toEqual(['7,46', '7.46']);
 
-    // Kiểm tra công thức MathType chuyển sang SVG
-    expect(p1[0].content).toContain('data:image/svg+xml;base64,');
+    // Kiểm tra công thức MathType chuyển sang SVG tham chiếu \includegraphics sạch sẽ
+    expect(p1[0].content).toContain('\\includegraphics');
+    expect(p1[0].content).not.toContain('data:image');
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
 
   it('bóc tách chính xác đề thi và bảng đáp án THPT Nguyễn Công Trứ', async () => {
@@ -86,6 +88,7 @@ describe('Word Exam Parser', () => {
     expect(p3[0].correct_answer).toEqual(['25', '25']);
     expect(p3[1].correct_answer).toEqual(['3', '3']);
     expect(p3[2].correct_answer).toEqual(['4', '4']);
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
 
   it('nhận diện đầy đủ phương án A và số lượng câu ở file A Phủ Lý', async () => {
@@ -99,7 +102,8 @@ describe('Word Exam Parser', () => {
     const q1 = res.questions[0];
     expect(q1.options.length).toBe(4);
     expect(q1.options[0].id).toBe('A');
-    expect(q1.content).toContain('data:image/svg+xml;base64,');
+    expect(q1.content).not.toContain('data:image');
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
 
   it('nhận diện hoàn hảo công thức MathType và bóc tách đề thi THPT Giao Thủy B', async () => {
@@ -118,20 +122,26 @@ describe('Word Exam Parser', () => {
       expect(q4.type).toBe('single_choice');
       expect(q4.options.length).toBe(4);
       expect(q4.options[0].id).toBe('A');
-      // Đảm bảo không còn ký tự 'r' từ font MT Extra hiển thị đè lên chữ vector
-      expect(q4.content).not.toContain('font-family="MT Extra">r</text>');
-      // Đảm bảo các mũi tên vector đã được chuyển đổi thành thẻ vector path chuẩn SVG
-      const b64 = q4.content.match(/data:image\/svg\+xml;base64,([^"]+)/);
-      expect(b64).toBeTruthy();
-      if (b64) {
-        const decodedSvg = Buffer.from(b64[1], 'base64').toString('utf8');
-        expect(decodedSvg).toContain('<path d="M');
-        expect(decodedSvg).not.toContain('font-family="MT Extra"');
+      // Đảm bảo không còn chuỗi data URI trong content
+      expect(q4.content).not.toContain('data:image');
+      expect(q4.content).toContain('\\includegraphics');
+
+      // Tra cứu asset từ Asset Registry để kiểm tra đường vẽ vector SVG
+      const assetMatch = q4.content.match(/\\includegraphics(?:\[.*?\])?\{([^}]+)\}/);
+      expect(assetMatch).toBeTruthy();
+      if (assetMatch) {
+        const asset = getExamAsset(assetMatch[1]);
+        expect(asset).toBeDefined();
+        if (asset) {
+          const decodedSvg = Buffer.from(asset.base64, 'base64').toString('utf8');
+          expect(decodedSvg).toContain('<path d="M');
+          expect(decodedSvg).not.toContain('font-family="MT Extra"');
+        }
       }
 
-      // Đảm bảo các phương án A, B, C, D có tỷ lệ chiều cao/rộng tự nhiên (style="height:...;width:auto")
-      expect(q4.options[0].text).toContain('style="height:');
-      expect(q4.options[0].text).toContain('width:auto');
+      // Đảm bảo các phương án A, B, C, D không chứa data:image
+      expect(q4.options[0].text).toContain('\\includegraphics');
+      expect(q4.options[0].text).not.toContain('data:image');
     }
 
     // Kiểm tra Câu 5 (điểm A, B và vectơ BA)
@@ -141,5 +151,6 @@ describe('Word Exam Parser', () => {
     expect(q5.options.length).toBe(4);
     expect(q5.options[0].id).toBe('A');
     expect(q5.content).toContain('cho hai điểm');
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
   });
 });
