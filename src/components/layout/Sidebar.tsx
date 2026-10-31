@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed = false, onToggle 
         {
           title: 'TRỢ LÝ SƯ PHẠM',
           links: [
-            { href: '/ai-assistant', label: 'AI Trợ lý Toán', icon: Sparkles, badge: 'AI 2025' },
+            { href: '/ai-assistant', label: 'AI Trợ lý Toán', icon: Sparkles, badge: 'AI 2026' },
           ],
         },
       ]

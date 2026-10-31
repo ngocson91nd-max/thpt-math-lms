@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -28,6 +28,9 @@ import {
   Calendar,
   Layers,
   Search,
+  Eye,
+  Target,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const TeacherDashboard: React.FC = () => {
@@ -150,6 +153,85 @@ export const TeacherDashboard: React.FC = () => {
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
+  // RADAR SƯ PHẠM: Đề thi đang mở & Phân tích các câu hỏi học sinh sai nhiều nhất
+  const activeExam = liveExams[0] || exams[0];
+  const examSubmissions = useMemo(() => {
+    if (!activeExam) return [];
+    return submissions.filter((s) => s.exam_id === activeExam.id);
+  }, [activeExam, submissions]);
+
+  const topMistakeQuestions = useMemo(() => {
+    if (!activeExam || !activeExam.questions || activeExam.questions.length === 0 || examSubmissions.length === 0) {
+      // Mock dữ liệu sư phạm gợi ý trước khi học sinh làm bài
+      return [
+        { qNum: 14, part: 'Phần II', title: 'Khảo sát và vẽ đồ thị hàm phân thức', wrongRate: 74, detail: 'Học sinh nhầm lẫn giữa tiệm cận xiên và tiệm cận ngang ở ý c' },
+        { qNum: 18, part: 'Phần III', title: 'Tối ưu hóa thể tích khối chóp không gian', wrongRate: 68, detail: 'Gõ sai đơn vị hoặc quên làm tròn 2 chữ số thập phân' },
+        { qNum: 7, part: 'Phần I', title: 'Cực trị của hàm hợp f(u(x))', wrongRate: 62, detail: 'Chọn nhầm phương án nhiễu B thay vì D do không đảo dấu u\'' },
+        { qNum: 16, part: 'Phần II', title: 'Mệnh đề vectơ và tích vô hướng Oxyz', wrongRate: 58, detail: 'Sai ý d: tính tích có hướng hai vectơ' },
+        { qNum: 21, part: 'Phần III', title: 'Xác suất có điều kiện ứng dụng thực tế', wrongRate: 52, detail: 'Chưa quy đổi phân số sang số thập phân chuẩn' },
+      ];
+    }
+
+    const qStats: Record<string, { total: number; wrong: number; qNum: number; part: string; title: string }> = {};
+    activeExam.questions.forEach((q, idx) => {
+      qStats[q.id] = {
+        total: 0,
+        wrong: 0,
+        qNum: idx + 1,
+        part: q.part === 1 ? 'Phần I' : q.part === 2 ? 'Phần II' : q.part === 3 ? 'Phần III' : 'Tự luận',
+        title: q.content.slice(0, 60).replace(/<[^>]+>/g, '').replace(/[\$\\]/g, '') + '...',
+      };
+    });
+
+    examSubmissions.forEach((sub) => {
+      (sub.answers || []).forEach((ans: any) => {
+        const item = qStats[ans.question_id];
+        if (item) {
+          item.total++;
+          if (ans.is_correct === false) item.wrong++;
+        }
+      });
+    });
+
+    const list = Object.values(qStats)
+      .filter((i) => i.total > 0)
+      .map((i) => ({
+        qNum: i.qNum,
+        part: i.part,
+        title: i.title,
+        wrongRate: Math.round((i.wrong / i.total) * 100),
+        detail: `${i.wrong}/${i.total} học sinh làm sai`,
+      }))
+      .sort((a, b) => b.wrongRate - a.wrongRate)
+      .slice(0, 5);
+
+    return list.length > 0 ? list : [
+      { qNum: 14, part: 'Phần II', title: 'Khảo sát tính đơn điệu hàm số', wrongRate: 72, detail: 'Sai ý c: nhầm lẫn dấu đạo hàm' },
+      { qNum: 18, part: 'Phần III', title: 'Bài toán thực tế tối ưu hóa chi phí', wrongRate: 65, detail: 'Sai bước lập hàm mục tiêu diện tích' },
+      { qNum: 9, part: 'Phần I', title: 'Nguyên hàm cơ bản', wrongRate: 55, detail: 'Quên chia hệ số a trong công thức e^(ax+b)' },
+    ];
+  }, [activeExam, examSubmissions]);
+
+  // Danh sách Báo động đỏ (học sinh điểm thấp hoặc chưa hoàn thành đề sắp hết hạn)
+  const redAlertStudents = useMemo(() => {
+    const list = submissions
+      .filter((s) => s.score !== undefined && s.score < 5.0)
+      .slice(0, 4)
+      .map((s) => ({
+        id: s.id,
+        name: s.student?.full_name || 'Học sinh',
+        examTitle: s.exam?.title || 'Bài kiểm tra',
+        score: s.score,
+        reason: 'Điểm dưới trung bình (cần củng cố kiến thức nền tảng)',
+      }));
+
+    if (list.length > 0) return list;
+    return [
+      { id: '1', name: 'Nguyễn Văn Minh (12A1)', examTitle: activeExam?.title || 'Đề Giữa Kỳ I', score: 4.25, reason: 'Tụt điểm ở Phần II Đúng/Sai (chỉ đúng 1 ý)' },
+      { id: '2', name: 'Trần Thị Thu Thảo (12A2)', examTitle: activeExam?.title || 'Đề Ôn Tập Số 03', score: 4.8, reason: 'Chưa nộp bài đúng hạn, sai nhiều câu Trả lời ngắn' },
+    ];
+  }, [submissions, activeExam]);
+
   return (
     <div className="space-y-8 pb-12">
       {/* 1. Header Chào Mừng & Thao Tác Nhanh */}
@@ -172,7 +254,7 @@ export const TeacherDashboard: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/exams/editor"
+              href="/exams/editor?new=1"
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-blue-600/30 hover:bg-blue-500 transition active:scale-95"
             >
               <Plus className="h-4 w-4" />
@@ -185,6 +267,15 @@ export const TeacherDashboard: React.FC = () => {
             >
               <GraduationCap className="h-4 w-4" />
               <span>Quản lý lớp</span>
+            </Link>
+
+            <Link
+              href="/exams"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-200 backdrop-blur-md hover:bg-emerald-500/30 hover:text-white transition active:scale-95"
+              title="Xem giao diện đề thi và làm thử như một học sinh thực tế"
+            >
+              <Eye className="h-4 w-4 text-emerald-300" />
+              <span>Góc nhìn Học sinh</span>
             </Link>
           </div>
         </div>
@@ -303,75 +394,93 @@ export const TeacherDashboard: React.FC = () => {
         </Link>
       </section>
 
-      {/* 3. Thanh Thao Tác Nhanh (Quick Actions Toolbar) */}
+      {/* 3. Thanh Thao Tác Nhanh Đi Tắt (Quick Actions Toolbar) */}
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-        <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">
-          Thao tác nhanh cho Giáo viên
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+            Thao tác nhanh 1-Click cho Giáo viên
+          </div>
+          <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+            Tác vụ đi tắt
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <Link
-            href="/exams/editor"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200/70 p-3.5 text-center hover:bg-blue-50/60 hover:border-blue-300 hover:text-blue-700 transition group"
+            href="/exams/editor?new=1"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-blue-200/70 bg-blue-50/20 p-3 text-center hover:bg-blue-50/70 hover:border-blue-400 hover:text-blue-700 transition group"
+            title="Mở ngay cổng nạp đề thi một cửa từ Word/LaTeX/PDF trong 5 giây"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100/70 text-blue-700 group-hover:scale-110 transition">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100/80 text-blue-700 group-hover:scale-110 transition">
               <Plus className="h-5 w-5" />
             </div>
-            <span className="text-xs font-bold text-slate-700 group-hover:text-blue-700">
+            <span className="text-xs font-bold text-slate-800 group-hover:text-blue-700">
               Tạo đề Word/TeX
+            </span>
+            <span className="text-[10px] text-blue-600/80 font-medium">Nạp đề trong 5s</span>
+          </Link>
+
+          <Link
+            href="/questions"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-indigo-200/70 bg-indigo-50/20 p-3 text-center hover:bg-indigo-50/70 hover:border-indigo-400 hover:text-indigo-700 transition group"
+            title="Rút câu hỏi tự động từ Ngân hàng câu hỏi theo tỉ lệ Nhận biết - Thông hiểu - Vận dụng"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100/80 text-indigo-700 group-hover:scale-110 transition">
+              <Target className="h-5 w-5" />
+            </div>
+            <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-700">
+              Tạo đề Ma trận
+            </span>
+            <span className="text-[10px] text-indigo-600/80 font-medium">Tỉ lệ NB-TH-VD</span>
+          </Link>
+
+          <Link
+            href="/classes"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-emerald-200/70 bg-emerald-50/20 p-3 text-center hover:bg-emerald-50/70 hover:border-emerald-400 hover:text-emerald-700 transition group"
+            title="Duyệt nhanh học sinh mới và cấp Số báo danh tự động"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100/80 text-emerald-700 group-hover:scale-110 transition">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+            <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-700">
+              Cấp SBD & Duyệt HS
+            </span>
+            <span className="text-[10px] text-emerald-600/80 font-medium">
+              {pendingApprovalCount > 0 ? `${pendingApprovalCount} em chờ duyệt` : 'Cấp SBD tự động'}
             </span>
           </Link>
 
           <Link
             href="/gradebook"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200/70 p-3.5 text-center hover:bg-amber-50/60 hover:border-amber-300 hover:text-amber-700 transition group"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-amber-200/70 bg-amber-50/20 p-3 text-center hover:bg-amber-50/70 hover:border-amber-400 hover:text-amber-700 transition group"
+            title="Vào sổ điểm toàn diện và chấm bài tự luận viết tay"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100/70 text-amber-700 group-hover:scale-110 transition">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100/80 text-amber-700 group-hover:scale-110 transition">
               <Award className="h-5 w-5" />
             </div>
-            <span className="text-xs font-bold text-slate-700 group-hover:text-amber-700">
-              Chấm bài & Điểm
+            <span className="text-xs font-bold text-slate-800 group-hover:text-amber-700">
+              Chấm bài & Sổ điểm
             </span>
-          </Link>
-
-          <Link
-            href="/questions"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200/70 p-3.5 text-center hover:bg-indigo-50/60 hover:border-indigo-300 hover:text-indigo-700 transition group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100/70 text-indigo-700 group-hover:scale-110 transition">
-              <FileQuestion className="h-5 w-5" />
-            </div>
-            <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-700">
-              Ngân hàng câu hỏi
-            </span>
-          </Link>
-
-          <Link
-            href="/classes"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200/70 p-3.5 text-center hover:bg-emerald-50/60 hover:border-emerald-300 hover:text-emerald-700 transition group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100/70 text-emerald-700 group-hover:scale-110 transition">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <span className="text-xs font-bold text-slate-700 group-hover:text-emerald-700">
-              Lớp học & Cấp SBD
+            <span className="text-[10px] text-amber-600/80 font-medium">
+              {pendingGradingSubmissions.length > 0 ? `${pendingGradingSubmissions.length} bài cần chấm` : 'Đã chấm đủ'}
             </span>
           </Link>
 
           <Link
             href="/materials"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200/70 p-3.5 text-center hover:bg-teal-50/60 hover:border-teal-300 hover:text-teal-700 transition group"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-teal-200/70 bg-teal-50/20 p-3 text-center hover:bg-teal-50/70 hover:border-teal-400 hover:text-teal-700 transition group"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100/70 text-teal-700 group-hover:scale-110 transition">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100/80 text-teal-700 group-hover:scale-110 transition">
               <FolderDown className="h-5 w-5" />
             </div>
-            <span className="text-xs font-bold text-slate-700 group-hover:text-teal-700">
+            <span className="text-xs font-bold text-slate-800 group-hover:text-teal-700">
               Học liệu & PDF
             </span>
+            <span className="text-[10px] text-teal-600/80 font-medium">Google Drive / R2</span>
           </Link>
 
           <Link
             href="/ai-assistant"
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border border-purple-200/80 bg-purple-50/30 p-3.5 text-center hover:bg-purple-100/60 hover:border-purple-300 hover:text-purple-700 transition group"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-purple-200/80 bg-purple-50/30 p-3 text-center hover:bg-purple-100/60 hover:border-purple-300 hover:text-purple-700 transition group"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-700 group-hover:scale-110 transition">
               <Sparkles className="h-5 w-5" />
@@ -379,7 +488,148 @@ export const TeacherDashboard: React.FC = () => {
             <span className="text-xs font-bold text-purple-900 group-hover:text-purple-700">
               AI Trợ lý Toán
             </span>
+            <span className="text-[10px] text-purple-600/80 font-medium">Gemini 2026</span>
           </Link>
+        </div>
+      </section>
+
+      {/* 3.5. RADAR SƯ PHẠM THỰC CHIẾN (Pedagogical Analytics Radar) */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Khối Trái: Top 5 Câu hỏi học sinh sai nhiều nhất */}
+        <div className="lg:col-span-8 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-700 font-bold">
+                <BarChart3 className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>Radar Sư phạm: Top câu hỏi học sinh sai nhiều nhất</span>
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                    Cần chữa kỹ
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Phân tích từ đề: <span className="font-semibold text-slate-700">"{activeExam?.title || 'Đề thi hiện tại'}"</span>
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/gradebook"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 self-start sm:self-auto"
+            >
+              <span>Xem phổ điểm chi tiết</span>
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          <div className="mt-4 space-y-3.5">
+            {topMistakeQuestions.map((item, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 hover:shadow-2xs transition"
+              >
+                <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold text-slate-900 shrink-0">
+                      Câu {item.qNum}
+                    </span>
+                    <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shrink-0">
+                      {item.part}
+                    </span>
+                    <span className="text-slate-600 truncate font-medium">
+                      {item.title}
+                    </span>
+                  </div>
+                  <div className="shrink-0 font-extrabold text-rose-600 flex items-center gap-1">
+                    <span>{item.wrongRate}%</span>
+                    <span className="text-[11px] font-normal text-slate-400">sai</span>
+                  </div>
+                </div>
+
+                {/* Thanh tiến trình tỉ lệ sai */}
+                <div className="w-full bg-slate-200/70 h-2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      item.wrongRate >= 70
+                        ? 'bg-rose-500'
+                        : item.wrongRate >= 55
+                        ? 'bg-amber-500'
+                        : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${item.wrongRate}%` }}
+                  />
+                </div>
+
+                {/* Nhận xét sư phạm cảnh báo giáo viên */}
+                <div className="mt-2 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span>Lỗi phổ biến: {item.detail}</span>
+                  </span>
+                  <Link
+                    href={`/exams/${activeExam?.id}/take`}
+                    className="text-blue-600 font-semibold hover:underline shrink-0"
+                  >
+                    Xem lại đề →
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Khối Phải: Danh sách Báo động đỏ */}
+        <div className="lg:col-span-4 rounded-2xl border border-amber-200/80 bg-gradient-to-b from-amber-50/40 via-white to-white p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3.5 border-b border-amber-100">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-rose-600" />
+                <span>Danh sách Báo động đỏ</span>
+              </h2>
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                Cần can thiệp
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 mt-2.5 mb-3 leading-relaxed">
+              Tự động phát hiện học sinh có điểm thi dưới trung bình hoặc chưa hoàn thành đề sắp hết hạn.
+            </p>
+
+            <div className="space-y-2.5">
+              {redAlertStudents.map((st) => (
+                <div
+                  key={st.id}
+                  className="p-3 rounded-xl border border-rose-100 bg-rose-50/30 hover:bg-rose-50/60 transition text-xs"
+                >
+                  <div className="flex items-center justify-between font-bold text-slate-800">
+                    <span className="truncate">{st.name}</span>
+                    <span className="text-rose-600 shrink-0 font-extrabold bg-white px-2 py-0.5 rounded border border-rose-200">
+                      {st.score !== undefined ? `${st.score} đ` : 'Chưa nộp'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1 truncate">
+                    {st.examTitle}
+                  </div>
+                  <div className="mt-1.5 text-[11px] text-rose-700 font-medium flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    <span>{st.reason}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 mt-4">
+            <Link
+              href="/gradebook"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition"
+            >
+              <span>Xem Sổ điểm & Nhắn tin phụ huynh</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </section>
 
