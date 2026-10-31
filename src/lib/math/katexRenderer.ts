@@ -125,6 +125,10 @@ export function renderMathToHtml(content: string): string {
 
   let text = content;
 
+  // 0. Bảo vệ các thẻ <img> và <svg>...</svg> có sẵn (từ file Word, TikZ tiền biên dịch hoặc ảnh upload)
+  text = text.replace(/<img\b[^>]*\/?>/gi, (imgTag) => savePlaceholder(imgTag));
+  text = text.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, (svgTag) => savePlaceholder(svgTag));
+
   // 1. Chuyển đổi dấu ngoặc kép tiếng Việt
   text = text.replace(/\\lq\\lq/g, '“').replace(/\\rq\\rq/g, '”');
   text = text.replace(/\\lq/g, '‘').replace(/\\rq/g, '’');

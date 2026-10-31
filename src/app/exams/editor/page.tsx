@@ -13,6 +13,8 @@ import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount, maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
 import { savePdfToIndexedDb, getPdfFromIndexedDb } from '@/lib/pdf/pdfStorage';
+import UnifiedDraftReviewModal from '@/components/exam/UnifiedDraftReviewModal';
+import { digitizePdfExam } from '@/lib/pdf/pdfDigitizer';
 
 const PdfExamViewer = dynamic(() => import('@/components/exam/PdfExamViewer'), { ssr: false });
 import {
@@ -205,6 +207,16 @@ function ExamEditorContent() {
 
   // Lưu thông báo lưu thành công
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Màn hình Duyệt Nháp Hợp nhất (Unified Draft Review) cho TeX, Word, PDF
+  const [showDraftReview, setShowDraftReview] = useState(false);
+  const [draftSourceType, setDraftSourceType] = useState<'latex' | 'word' | 'pdf_ai' | 'pdf_quick'>('word');
+  const [draftSourceName, setDraftSourceName] = useState('');
+  const [draftQuestions, setDraftQuestions] = useState<Question[]>([]);
+  const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
+  const [isDigitizingPdf, setIsDigitizingPdf] = useState(false);
+  const [digitizeStatus, setDigitizeStatus] = useState<string | null>(null);
+  const [pdfSubTab, setPdfSubTab] = useState<'ai_digitize' | 'quick_view'>('ai_digitize');
 
   // Quản lý Dựng lại hình qua TeX Server & Đổi ảnh minh họa
   const [isRecompilingTikz, setIsRecompilingTikz] = useState(false);
@@ -855,14 +867,15 @@ function ExamEditorContent() {
         if (extractedQuestions.length > 0) {
           const { convertWmfQuestionsToPng } = await import('@/lib/word/wordExamParser');
           extractedQuestions = convertWmfQuestionsToPng(extractedQuestions);
-          setQuestionsWithHistory(extractedQuestions);
-          setActiveQuestionId(extractedQuestions[0]?.id);
-          setExamMode('interactive');
           setTitle(file.name.replace(/\.[^/.]+$/, ''));
-          setWordNotice(`Đã trích xuất thành công ${extractedQuestions.length} câu hỏi từ file "${file.name}"!`);
+          setDraftSourceType('word');
+          setDraftSourceName(file.name);
+          setDraftQuestions(extractedQuestions);
+          setDraftWarnings([]);
+          setShowDraftReview(true);
           setShowImportModal(false);
           setShowUploadPopover(false);
-          setSaveToast(`Đã nạp thành công ${extractedQuestions.length} câu hỏi từ file Word "${file.name}"!`);
+          setSaveToast(`Đã bóc tách thành công ${extractedQuestions.length} câu hỏi từ file Word "${file.name}"!`);
           setTimeout(() => setSaveToast(null), 3500);
         } else {
           const msg = 'Không tìm thấy câu hỏi nào hợp lệ trong file Word! Hệ thống hỗ trợ định dạng "Câu 1:", "Bài 1:" kèm phương án A, B, C, D hoặc [Đúng]/[Sai].';
@@ -902,12 +915,14 @@ function ExamEditorContent() {
             setSaveToast(`Đang dựng hình vẽ TikZ: ${done}/${total} câu...`);
           });
 
-          setQuestionsWithHistory(precompiledQ);
-          setActiveQuestionId(precompiledQ[0]?.id);
-          setExamMode('interactive');
+          setDraftSourceType('latex');
+          setDraftSourceName(file.name);
+          setDraftQuestions(precompiledQ);
+          setDraftWarnings([]);
+          setShowDraftReview(true);
           setShowImportModal(false);
           setShowUploadPopover(false);
-          setSaveToast(`Đã nạp thành công ${precompiledQ.length} câu hỏi hoàn chỉnh từ file LaTeX "${file.name}"!`);
+          setSaveToast(`Đã bóc tách thành công ${precompiledQ.length} câu hỏi hoàn chỉnh từ file LaTeX "${file.name}"!`);
           setTimeout(() => setSaveToast(null), 3500);
         } else {
           setImportTab('latex');
@@ -1005,14 +1020,73 @@ function ExamEditorContent() {
         setSaveToast(`Đang dựng hình vẽ TikZ: ${done}/${total} câu...`);
       });
 
-      setQuestionsWithHistory(precompiledQ);
-      setActiveQuestionId(precompiledQ[0]?.id);
-      setExamMode('interactive');
+      setDraftSourceType('latex');
+      setDraftSourceName('Mã nguồn LaTeX ex_test');
+      setDraftQuestions(precompiledQ);
+      setDraftWarnings([]);
+      setShowDraftReview(true);
       setShowImportModal(false);
-      setSaveToast(`Đã nạp thành công ${precompiledQ.length} câu hỏi LaTeX hoàn chỉnh với hình vẽ sắc nét!`);
+      setSaveToast(`Đã bóc tách thành công ${precompiledQ.length} câu hỏi LaTeX hoàn chỉnh!`);
       setTimeout(() => setSaveToast(null), 3500);
     } catch (err: any) {
       setLatexNotice(`Lỗi phân tích cú pháp LaTeX: ${err?.message || 'Không xác định'}`);
+    }
+  };
+
+  // Xử lý số hóa đề thi PDF bằng AI Vision (Gemini)
+  const handleDigitizePdfWithAi = async (file: File) => {
+    setIsDigitizingPdf(true);
+    setDigitizeStatus('Đang chuẩn bị file PDF...');
+    try {
+      const res = await digitizePdfExam(file, (msg) => setDigitizeStatus(msg));
+      setDraftSourceType('pdf_ai');
+      setDraftSourceName(file.name);
+      setDraftQuestions(res.questions);
+      setDraftWarnings(res.metadata.warnings);
+      if (res.metadata.title) setTitle(res.metadata.title);
+      if (res.metadata.duration) setDuration(res.metadata.duration);
+      setShowDraftReview(true);
+      setShowImportModal(false);
+      setSaveToast(`Đã số hóa thành công ${res.questions.length} câu hỏi từ file PDF!`);
+      setTimeout(() => setSaveToast(null), 3500);
+    } catch (err: any) {
+      alert(`Lỗi số hóa PDF: ${err.message || 'Không thể đọc đề thi'}`);
+    } finally {
+      setIsDigitizingPdf(false);
+      setDigitizeStatus(null);
+    }
+  };
+
+  // Áp dụng câu hỏi đã duyệt nháp vào đề thi
+  const handleApplyDraftQuestions = (approved: Question[]) => {
+    setQuestionsWithHistory(approved);
+    setActiveQuestionId(approved[0]?.id);
+    setExamMode('interactive');
+    setShowDraftReview(false);
+    setSaveToast(`Đã nạp ${approved.length} câu hỏi vào đề thi thành công!`);
+    setTimeout(() => setSaveToast(null), 3500);
+  };
+
+  // Lưu câu hỏi duyệt nháp vào ngân hàng câu hỏi
+  const handleSaveDraftToBank = (qs: Question[]) => {
+    try {
+      const savedQ = localStorage.getItem('lms_questions');
+      let qList: Question[] = savedQ ? JSON.parse(savedQ) : [];
+      const qIds = new Set(qList.map((q) => q.id));
+      const newItems = qs.filter((q) => !qIds.has(q.id));
+      if (newItems.length > 0) {
+        const combined = [...newItems, ...qList];
+        localStorage.setItem('lms_questions', JSON.stringify(combined));
+        fetch('/api/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questions: newItems }),
+        }).catch(() => {});
+      }
+      setSaveToast(`Đã lưu ${qs.length} câu hỏi vào Ngân hàng câu hỏi thành công!`);
+      setTimeout(() => setSaveToast(null), 3500);
+    } catch (err) {
+      console.warn('Lỗi lưu ngân hàng câu hỏi:', err);
     }
   };
 
@@ -3211,102 +3285,163 @@ function ExamEditorContent() {
               </div>
             ) : (
               <div className="space-y-4 py-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* File PDF Đề Bài */}
-                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-rose-300 rounded-2xl p-5 bg-rose-50/20 hover:bg-rose-50/50 transition text-center">
-                    <FileText className="h-8 w-8 text-rose-600 mb-2" />
-                    <p className="font-bold text-xs text-slate-800 mb-1">1. File PDF Đề Bài (*)</p>
-                    <p className="text-[11px] text-slate-500 mb-3 truncate max-w-full">
-                      {pdfFileName ? `Đã chọn: ${pdfFileName}` : 'Đề thi trọn vẹn gồm công thức & hình vẽ'}
-                    </p>
-                    <label className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-500 transition cursor-pointer">
-                      <span>{pdfFileName ? 'Đổi File PDF' : 'Tải File PDF Đề Thi'}</span>
-                      <input type="file" accept=".pdf" onChange={handleUploadPdfFile} className="hidden" />
-                    </label>
-                  </div>
-
-                  {/* File PDF Lời Giải Chi Tiết (Tùy chọn) */}
-                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-indigo-200 rounded-2xl p-5 bg-indigo-50/20 hover:bg-indigo-50/50 transition text-center">
-                    <BookOpen className="h-8 w-8 text-indigo-600 mb-2" />
-                    <p className="font-bold text-xs text-slate-800 mb-1">2. File Lời Giải PDF (Tùy chọn)</p>
-                    <p className="text-[11px] text-slate-500 mb-3 truncate max-w-full">
-                      {solutionPdfFileName ? `Đã chọn: ${solutionPdfFileName}` : 'Hiển thị sau khi học sinh nộp bài'}
-                    </p>
-                    <label className="rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-500 transition cursor-pointer">
-                      <span>{solutionPdfFileName ? 'Đổi Lời Giải' : 'Tải File Lời Giải PDF'}</span>
-                      <input type="file" accept=".pdf" onChange={handleUploadSolutionPdf} className="hidden" />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Hiển thị số trang & Tùy chọn tự động che bảng đáp án ở đáy trang cuối */}
-                {pdfUrl && (
-                  <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-3.5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-900">
-                        📄 File PDF gồm: <strong>{pdfTotalPages} trang</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleMaskPdfExam(0.32)}
-                        className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-500 transition cursor-pointer"
-                        title="Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy"
-                      >
-                        Tự động che đáp án ngay
-                      </button>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-900 select-none">
-                      <input
-                        type="checkbox"
-                        checked={cutLastPage}
-                        onChange={(e) => setCutLastPage(e.target.checked)}
-                        className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
-                      />
-                      <span>✂️ Tự động che bảng đáp án ở đáy trang cuối (Giữ trọn vẹn 100% câu hỏi, không cắt cả trang)</span>
-                    </label>
-                  </div>
-                )}
-
-                {/* Chuỗi Đáp Án Nhanh 1 Chạm */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-800">
-                      Bảng Đáp Án Chuẩn (Dán chuỗi đáp án 1 chạm):
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQuickAnswerText(
-                          '1A 2B 3C 4D 5A 6B 7C 8D 9A 10B 11C 12D\n13: aD bS cD dS\n14: aS bD cD dS\n15: aD bD cS dS\n16: aD bD cS dD\n17: 1440\n18: -2.5\n19: 12\n20: 3/4\n21: 5\n22: 10'
-                        )
-                      }
-                      className="text-[11px] font-semibold text-purple-700 hover:underline cursor-pointer"
-                    >
-                      Dán mẫu chuẩn 22 câu
-                    </button>
-                  </div>
-                  <textarea
-                    rows={4}
-                    value={quickAnswerText}
-                    onChange={(e) => setQuickAnswerText(e.target.value)}
-                    placeholder="VD: 1A 2B 3C... &#10;13: aD bS cD dS &#10;17: 1440..."
-                    className="w-full font-mono text-xs rounded-xl border border-slate-300 p-2.5 bg-slate-50 text-slate-900"
-                  />
-                  <p className="text-[10.5px] text-slate-500 italic">
-                    Hỗ trợ: Phần I (1A 2B...), Phần II (13: aD bS cD dS hoặc D S D S), Phần III (17: 1440, 18: -2.5).
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                {/* 2 Chế độ xử lý PDF: Số hóa AI vs Thi nhanh */}
+                <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
                   <button
                     type="button"
-                    onClick={handleApplyPdfExam}
-                    disabled={!pdfUrl}
-                    className="rounded-xl bg-rose-600 disabled:opacity-50 px-5 py-2 text-xs font-bold text-white hover:bg-rose-500 shadow-sm transition cursor-pointer"
+                    onClick={() => setPdfSubTab('ai_digitize')}
+                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      pdfSubTab === 'ai_digitize'
+                        ? 'bg-white text-rose-600 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    Tạo Đề Thi PDF Ngay
+                    <Sparkles className="h-3.5 w-3.5 text-rose-500" />
+                    ⚡ Số Hóa Bằng AI Vision (Khuyên dùng)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPdfSubTab('quick_view')}
+                    className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      pdfSubTab === 'quick_view'
+                        ? 'bg-white text-rose-600 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5 text-slate-500" />
+                    📄 Thi Nhanh Nguyên Bản (30s)
                   </button>
                 </div>
+
+                {pdfSubTab === 'ai_digitize' ? (
+                  <div className="space-y-3 py-2">
+                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-rose-300 rounded-2xl p-8 bg-rose-50/20 hover:bg-rose-50/40 transition text-center">
+                      <div className="h-12 w-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-3">
+                        <Sparkles className="h-6 w-6" />
+                      </div>
+                      <p className="font-extrabold text-sm text-slate-900 mb-1">
+                        Số Hóa Tự Động Bằng Trí Tuệ Nhân Tạo (Gemini Vision)
+                      </p>
+                      <p className="text-xs text-slate-500 max-w-md mb-4 leading-relaxed">
+                        Tự động đọc toàn bộ file PDF đề thi, bóc tách chính xác công thức toán, hình vẽ, bảng biến thiên và đáp án thành các câu hỏi tương tác để đưa vào Ngân hàng câu hỏi hoặc đảo mã đề.
+                      </p>
+                      <label className="rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:from-rose-500 hover:to-indigo-500 transition cursor-pointer flex items-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        <span>{isDigitizingPdf ? 'Đang số hóa đề thi...' : 'Chọn File PDF Đề Thi Cần Số Hóa'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          disabled={isDigitizingPdf}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleDigitizePdfWithAi(file);
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* File PDF Đề Bài */}
+                      <div className="flex flex-col items-center justify-center border-2 border-dashed border-rose-300 rounded-2xl p-5 bg-rose-50/20 hover:bg-rose-50/50 transition text-center">
+                        <FileText className="h-8 w-8 text-rose-600 mb-2" />
+                        <p className="font-bold text-xs text-slate-800 mb-1">1. File PDF Đề Bài (*)</p>
+                        <p className="text-[11px] text-slate-500 mb-3 truncate max-w-full">
+                          {pdfFileName ? `Đã chọn: ${pdfFileName}` : 'Đề thi trọn vẹn gồm công thức & hình vẽ'}
+                        </p>
+                        <label className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-500 transition cursor-pointer">
+                          <span>{pdfFileName ? 'Đổi File PDF' : 'Tải File PDF Đề Thi'}</span>
+                          <input type="file" accept=".pdf" onChange={handleUploadPdfFile} className="hidden" />
+                        </label>
+                      </div>
+
+                      {/* File PDF Lời Giải Chi Tiết (Tùy chọn) */}
+                      <div className="flex flex-col items-center justify-center border-2 border-dashed border-indigo-200 rounded-2xl p-5 bg-indigo-50/20 hover:bg-indigo-50/50 transition text-center">
+                        <BookOpen className="h-8 w-8 text-indigo-600 mb-2" />
+                        <p className="font-bold text-xs text-slate-800 mb-1">2. File Lời Giải PDF (Tùy chọn)</p>
+                        <p className="text-[11px] text-slate-500 mb-3 truncate max-w-full">
+                          {solutionPdfFileName ? `Đã chọn: ${solutionPdfFileName}` : 'Hiển thị sau khi học sinh nộp bài'}
+                        </p>
+                        <label className="rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-500 transition cursor-pointer">
+                          <span>{solutionPdfFileName ? 'Đổi Lời Giải' : 'Tải File Lời Giải PDF'}</span>
+                          <input type="file" accept=".pdf" onChange={handleUploadSolutionPdf} className="hidden" />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Hiển thị số trang & Tùy chọn tự động che bảng đáp án ở đáy trang cuối */}
+                    {pdfUrl && (
+                      <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-900">
+                            📄 File PDF gồm: <strong>{pdfTotalPages} trang</strong>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleMaskPdfExam(0.32)}
+                            className="rounded-lg bg-amber-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-amber-500 transition cursor-pointer"
+                            title="Tự động che bảng đáp án ở đáy trang cuối để học sinh không nhìn thấy"
+                          >
+                            Tự động che đáp án ngay
+                          </button>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-900 select-none">
+                          <input
+                            type="checkbox"
+                            checked={cutLastPage}
+                            onChange={(e) => setCutLastPage(e.target.checked)}
+                            className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
+                          />
+                          <span>✂️ Tự động che bảng đáp án ở đáy trang cuối (Giữ trọn vẹn 100% câu hỏi, không cắt cả trang)</span>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Chuỗi Đáp Án Nhanh 1 Chạm */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-slate-800">
+                          Bảng Đáp Án Chuẩn (Dán chuỗi đáp án 1 chạm):
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuickAnswerText(
+                              '1A 2B 3C 4D 5A 6B 7C 8D 9A 10B 11C 12D\n13: aD bS cD dS\n14: aS bD cD dS\n15: aD bD cS dS\n16: aD bD cS dD\n17: 1440\n18: -2.5\n19: 12\n20: 3/4\n21: 5\n22: 10'
+                            )
+                          }
+                          className="text-[11px] font-semibold text-purple-700 hover:underline cursor-pointer"
+                        >
+                          Dán mẫu chuẩn 22 câu
+                        </button>
+                      </div>
+                      <textarea
+                        rows={4}
+                        value={quickAnswerText}
+                        onChange={(e) => setQuickAnswerText(e.target.value)}
+                        placeholder="VD: 1A 2B 3C... &#10;13: aD bS cD dS &#10;17: 1440..."
+                        className="w-full font-mono text-xs rounded-xl border border-slate-300 p-2.5 bg-slate-50 text-slate-900"
+                      />
+                      <p className="text-[10.5px] text-slate-500 italic">
+                        Hỗ trợ: Phần I (1A 2B...), Phần II (13: aD bS cD dS hoặc D S D S), Phần III (17: 1440, 18: -2.5).
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={handleApplyPdfExam}
+                        disabled={!pdfUrl}
+                        className="rounded-xl bg-rose-600 disabled:opacity-50 px-5 py-2 text-xs font-bold text-white hover:bg-rose-500 shadow-sm transition cursor-pointer"
+                      >
+                        Tạo Đề Thi PDF Ngay
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3594,6 +3729,31 @@ function ExamEditorContent() {
           </div>
         </div>
       )}
+
+      {/* 11. OVERLAY LOADING KHI ĐANG SỐ HÓA PDF BẰNG AI VISION */}
+      {isDigitizingPdf && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="rounded-3xl bg-white p-6 shadow-2xl flex flex-col items-center gap-3 max-w-sm text-center border border-slate-200">
+            <Sparkles className="h-10 w-10 animate-spin text-rose-600" />
+            <h4 className="font-extrabold text-slate-800 text-sm">Đang số hóa đề PDF bằng AI Vision...</h4>
+            <p className="text-xs text-slate-500 leading-relaxed font-medium">
+              {digitizeStatus || 'Đang bóc tách toàn bộ công thức toán, hình vẽ và đáp án từ file PDF...'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 12. MÀN HÌNH DUYỆT NHÁP HỢP NHẤT (UNIFIED DRAFT REVIEW) CHO TEX, WORD, PDF */}
+      <UnifiedDraftReviewModal
+        isOpen={showDraftReview}
+        onClose={() => setShowDraftReview(false)}
+        sourceType={draftSourceType}
+        sourceName={draftSourceName}
+        initialQuestions={draftQuestions}
+        warnings={draftWarnings}
+        onApplyToExam={handleApplyDraftQuestions}
+        onSaveToBank={handleSaveDraftToBank}
+      />
     </div>
   );
 }
