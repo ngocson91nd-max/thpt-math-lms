@@ -735,7 +735,19 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     }
     if (hasRectangle) continue;
 
-    const normalizedBody = bodyWithoutNodes.replace(/\s+to(?:\s*\[[^\]]*\])?\s+/g, ' -- ');
+    let normalizedBody = bodyWithoutNodes.replace(/\s+to(?:\s*\[[^\]]*\])?\s+/g, ' -- ');
+
+    // Chuẩn hóa toán tử góc vuông TikZ: |- và -| (ví dụ nét đứt nối trục tọa độ)
+    normalizedBody = normalizedBody.replace(/\(([^)]+)\)\s*\|-\s*\(([^)]+)\)/g, (_m, p1Str, p2Str) => {
+      const p1 = parsePoint(p1Str, coords, defs);
+      const p2 = parsePoint(p2Str, coords, defs);
+      return `(${p1.x},${p1.y}) -- (${p1.x},${p2.y}) -- (${p2.x},${p2.y})`;
+    });
+    normalizedBody = normalizedBody.replace(/\(([^)]+)\)\s*-\|\s*\(([^)]+)\)/g, (_m, p1Str, p2Str) => {
+      const p1 = parsePoint(p1Str, coords, defs);
+      const p2 = parsePoint(p2Str, coords, defs);
+      return `(${p1.x},${p1.y}) -- (${p2.x},${p1.y}) -- (${p2.x},${p2.y})`;
+    });
 
     // Tách các chuỗi subpaths: "(A) -- (B) -- (C)" hoặc "(A) -- (B) -- cycle"
     const subpaths = normalizedBody.match(/(?:\([^)]+\)\s*--\s*)+(?:\([^)]+\)|cycle)/g) || [];
@@ -760,20 +772,12 @@ export function renderTikzToSvg(rawTikz: string): string | null {
         }
       }
     } else {
+      // Tuyệt đối không tự ý nối đoạn thẳng giữa các điểm khi câu lệnh không có toán tử nối (-- hoặc to hoặc |-)
+      // Tránh triệt để lỗi vẽ nét thừa nối các điểm cực trị với nhau hoặc với gốc tọa độ
       const ptMatches = bodyWithoutNodes.match(/\(([^)]+)\)/g) || [];
-      for (let i = 0; i < ptMatches.length - 1; i++) {
-        const p1 = parsePoint(ptMatches[i], coords, defs);
-        const p2 = parsePoint(ptMatches[i + 1], coords, defs);
-        drawItems.push({
-          type: 'line',
-          p1,
-          p2,
-          isArrow: isArrow && (i === ptMatches.length - 2),
-          isDashed,
-          isThick,
-        });
-        updateBounds(p1.x, p1.y, p1);
-        updateBounds(p2.x, p2.y, p2);
+      for (const ptStr of ptMatches) {
+        const p = parsePoint(ptStr, coords, defs);
+        updateBounds(p.x, p.y, p);
       }
     }
   }

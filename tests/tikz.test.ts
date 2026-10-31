@@ -163,4 +163,24 @@ describe('TikZ 3D & Advanced Tests', () => {
     const svg = renderTikzToSvg(code);
     expect(svg).toBeNull();
   });
+
+  it('renders Câu 2 cubic graph with fill circles at extrema without drawing extraneous diagonal lines', () => {
+    const code = `\\begin{tikzpicture}[>=stealth,scale=1]
+      \\draw[->] (-2.5,0) -- (2.5,0) node[below] {$x$};
+      \\draw[->] (0,-3) -- (0,3) node[right] {$y$};
+      \\draw (0,0) node[below right] {$O$};
+      \\draw[dashed] (-1,0) -- (-1,2) -- (0,2);
+      \\draw[dashed] (1,0) -- (1,-2) -- (0,-2);
+      \\draw[thick,domain=-2.1:2.1,samples=100] plot (\\x, {(\\x)^3 - 3*(\\x)});
+      \\fill (-1,2) circle (1.5pt) (1,-2) circle (1.5pt);
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).not.toBeNull();
+    // Check that there is no line connecting (-1,2) to (1,-2) or (0,0)
+    const lines = svg!.match(/<line[^>]+>/g) || [];
+    // Only 6 lines: 2 axes + 4 dashed segments
+    expect(lines.length).toBe(6);
+    expect(svg).not.toContain('x1="137.7" y1="118.1" x2="190.0" y2="222.6"');
+    expect(svg).not.toContain('x1="137.7" y1="118.1" x2="242.3" y2="327.1"');
+  });
 });
