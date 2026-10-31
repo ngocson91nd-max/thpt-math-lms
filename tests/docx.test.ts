@@ -212,4 +212,32 @@ describe('Word Exam Parser', () => {
     expect(forallLatex).toContain('\\in');
     expect(forallLatex).toContain('\\mathbb{R}');
   });
+
+  it('bóc tách hoàn hảo 22 câu đề thi có đánh số tự động OpenXML (Chuyên LHP 2025)', async () => {
+    const filePath = 'Tổ 22_Đợt 3_Giải đề giữa hk 1_lớp 12_Chuyên LHP _Ninh Bình năm 2025.docx';
+    if (!fs.existsSync(filePath)) return;
+
+    const buf = fs.readFileSync(filePath);
+    const res = await parseWordDocx(buf);
+
+    expect(res.questions.length).toBe(22);
+    const p1 = res.questions.filter((q) => q.part === 1);
+    const p2 = res.questions.filter((q) => q.part === 2);
+    const p3 = res.questions.filter((q) => q.part === 3);
+
+    expect(p1.length).toBe(12);
+    expect(p2.length).toBe(4);
+    expect(p3.length).toBe(6);
+
+    // Kiểm tra câu 1 Phần I có đủ 4 phương án và đáp án
+    expect(p1[0].options.length).toBe(4);
+    expect(p1[0].correct_answer).toBe('A');
+
+    // Kiểm tra câu 4 Phần II chỉ có đúng 4 mệnh đề a, b, c, d
+    expect(p2[3].options.length).toBe(4);
+    expect(p2[3].options.map((o: any) => o.id)).toEqual(['a', 'b', 'c', 'd']);
+
+    // Kiểm tra không chứa base64
+    expect(validateNoBase64InQuestions(res.questions)).toBe(true);
+  });
 });

@@ -887,8 +887,78 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
   // Chuẩn hóa ký tự khoảng trắng không ngắt \u00A0
   xml = xml.replace(/\u00A0/g, ' ');
 
+  // 0. Xử lý danh sách đánh số tự động (Automatic Numbering <w:numPr>) từ word/numbering.xml
+  // Giáo viên thường dùng tính năng Numbering tự động của Word khiến text "Câu 1.", "Câu 2." không nằm trong <w:t>
+  const numFile = zip.file('word/numbering.xml');
+  if (numFile) {
+    try {
+      const numXml = await numFile.async('text');
+      const numIdToAbstractId = new Map<string, string>();
+      const abstractIdToDef = new Map<string, { prefix: string; start: number }>();
+
+      const abstractRegex = /<w:abstractNum\s+w:abstractNumId="(\d+)"[\s\S]*?<\/w:abstractNum>/gi;
+      let am;
+      while ((am = abstractRegex.exec(numXml)) !== null) {
+        const absId = am[1];
+        const aXml = am[0];
+        const lvl0Match = aXml.match(/<w:lvl\s+w:ilvl="0"[\s\S]*?<\/w:lvl>/i);
+        const lvlXml = lvl0Match ? lvl0Match[0] : aXml;
+        const textMatch = lvlXml.match(/<w:lvlText\s+w:val="([^"]*)"/i);
+        const startMatch = lvlXml.match(/<w:start\s+w:val="(\d+)"/i);
+        abstractIdToDef.set(absId, {
+          prefix: textMatch ? textMatch[1] : 'Câu %1:',
+          start: startMatch ? parseInt(startMatch[1], 10) : 1,
+        });
+      }
+
+      const numRegex = /<w:num\s+w:numId="(\d+)"[\s\S]*?<\/w:num>/gi;
+      let nm;
+      while ((nm = numRegex.exec(numXml)) !== null) {
+        const numId = nm[1];
+        const absMatch = nm[0].match(/<w:abstractNumId\s+w:val="(\d+)"/i);
+        if (absMatch) numIdToAbstractId.set(numId, absMatch[1]);
+      }
+
+      const numCounters = new Map<string, number>();
+
+      xml = xml.replace(/<w:p\b([\s\S]*?)<\/w:p>/gi, (pFull, pInner) => {
+        const numMatch = pInner.match(/<w:numId\s+w:val="(\d+)"/i);
+        const ilvlMatch = pInner.match(/<w:ilvl\s+w:val="(\d+)"/i);
+        if (!numMatch) return pFull;
+
+        const numId = numMatch[1];
+        const ilvl = ilvlMatch ? parseInt(ilvlMatch[1], 10) : 0;
+        if (ilvl !== 0) return pFull;
+
+        const absId = numIdToAbstractId.get(numId);
+        const def = absId ? abstractIdToDef.get(absId) : null;
+        let prefixPattern = def?.prefix || 'Câu %1:';
+        if (!prefixPattern.toLowerCase().includes('câu') && !prefixPattern.toLowerCase().includes('bài')) {
+          prefixPattern = 'Câu %1.';
+        }
+
+        const curCount = (numCounters.get(numId) ?? ((def?.start ?? 1) - 1)) + 1;
+        numCounters.set(numId, curCount);
+
+        const resolvedText = prefixPattern.replace('%1', String(curCount));
+        const prefixRun = `<w:r><w:rPr><w:b/></w:rPr><w:t>${resolvedText} </w:t></w:r>`;
+
+        const pPrEndIdx = pInner.indexOf('</w:pPr>');
+        if (pPrEndIdx !== -1) {
+          const before = pInner.substring(0, pPrEndIdx + '</w:pPr>'.length);
+          const after = pInner.substring(pPrEndIdx + '</w:pPr>'.length);
+          return `<w:p${before}${prefixRun}${after}</w:p>`;
+        }
+        return `<w:p>${prefixRun}${pInner}</w:p>`;
+      });
+    } catch {
+      // Bỏ qua nếu numbering.xml có cấu trúc bất thường
+    }
+  }
+
   // BÓC TÁCH ĐÁP ÁN VÀ LỜI GIẢI TỪ RAW XML TRƯỚC KHI BỎ CÁC THẺ BẢNG VÀ ĐOẠN VĂN!
-  const tailRegex = /(?:BẢNG\s+ĐÁP\s+ÁN|HƯỚNG\s+DẪN\s+CHẤM|HƯỚNG\s+DẪN\s+GIẢI|ĐÁP\s+ÁN\s+VÀ\s+LỜI\s+GIẢI|ĐÁP\s+ÁN\s+CÁC\s+CÂU|ĐÁP\s+ÁN\s+ĐỀ\s+KIỂM\s+TRA|ĐÁP\s+ÁN)/i;
+  // Chỉ khớp tiêu đề bắt đầu thẻ <w:t>, tránh nhầm lẫn với cụm từ "điền đáp án", "chọn đáp án"
+  const tailRegex = /<w:t[^>]*>\s*(?:BẢNG\s+ĐÁP\s+ÁN|HƯỚNG\s+DẪN\s+CHẤM|HƯỚNG\s+DẪN\s+GIẢI|ĐÁP\s+ÁN\s+VÀ\s+LỜI\s+GIẢI|ĐÁP\s+ÁN\s+CÁC\s+CÂU|ĐÁP\s+ÁN\s+KIỂM\s+TRA|ĐÁP\s+ÁN\s+ĐỀ\s+KIỂM\s+TRA|LỜI\s+GIẢI\s+CHI\s+TIẾT|LỜI\s+GIẢI|ĐÁP\s+ÁN)\b/i;
   const tailMatch = xml.match(tailRegex);
   let tailAnswers: ParsedTailAnswers = {
     part1: new Map(),
@@ -898,10 +968,12 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
   };
 
   if (tailMatch && tailMatch.index) {
-    const answerKeyXml = xml.substring(tailMatch.index);
+    const pStart = xml.lastIndexOf('<w:p', tailMatch.index);
+    const cutPos = pStart !== -1 ? pStart : tailMatch.index;
+    const answerKeyXml = xml.substring(cutPos);
     tailAnswers = parseAnswerKeySection(answerKeyXml);
     // Cắt bỏ phần đáp án/hướng dẫn giải khỏi nội dung đề bài chính
-    xml = xml.substring(0, tailMatch.index);
+    xml = xml.substring(0, cutPos);
   }
 
   // 1. Chuyển đổi mọi khối công thức toán OMML <m:oMath> và <m:oMathPara> sang LaTeX
@@ -1276,7 +1348,7 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
       // Tách Lời giải / Hướng dẫn giải inline nếu có
       let contentAndChoices = body;
       let explanation = '';
-      const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b)[\.:\s]*([\s\S]*)$/i);
+      const lgMatch = body.match(/(?:^|\n)\s*(?:<b>|<strong>|<u>|<p[^>]*>)?\s*(?:Lời\s*giải|Hướng\s*dẫn\s*giải|\bHDG\b|\bBeginLG\b|\bFB\s*tác\s*giả\b)[\.:\s]*([\s\S]*)$/i);
       if (lgMatch) {
         explanation = lgMatch[1].trim();
         contentAndChoices = body.substring(0, lgMatch.index).trim();
@@ -1311,6 +1383,12 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
             const cur = choicesMatches[i];
             const next = choicesMatches[i + 1];
             const label = cur[1].toUpperCase();
+            if (options.some((o) => o.id === label)) {
+              if (!explanation) {
+                explanation = contentAndChoices.substring(cur.index ?? 0).trim();
+              }
+              break;
+            }
             const optStart = (cur.index ?? 0) + cur[0].length;
             const optEnd = next ? (next.index ?? contentAndChoices.length) : contentAndChoices.length;
             let optText = contentAndChoices.substring(optStart, optEnd).trim();
@@ -1368,6 +1446,12 @@ export async function parseWordDocx(fileOrBuffer: File | ArrayBuffer | Uint8Arra
             const cur = tfMatches[i];
             const next = tfMatches[i + 1];
             const label = cur[1].toLowerCase();
+            if (options.some((o) => o.id === label)) {
+              if (!explanation) {
+                explanation = contentAndChoices.substring(cur.index ?? 0).trim();
+              }
+              break;
+            }
             const start = (cur.index ?? 0) + cur[0].length;
             const end = next ? (next.index ?? contentAndChoices.length) : contentAndChoices.length;
             let stmtText = contentAndChoices.substring(start, end).trim();
