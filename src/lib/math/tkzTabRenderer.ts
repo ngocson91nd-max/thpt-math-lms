@@ -61,7 +61,10 @@ function replaceNestedFractions(s: string): string {
     res = before + `${replaceNestedFractions(num)}/${replaceNestedFractions(den)}` + after;
   }
   return res
+    .replace(/\\d?frac\s*\{([^}]+)\}\s*\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\d?frac\s*\{([^}]+)\}/g, '$1')
     .replace(/\\d?frac\s*([0-9a-zA-Z])\s+([0-9a-zA-Z])/g, '$1/$2')
+    .replace(/\\d?frac\s*([0-9a-zA-Z]+)/g, '$1')
     .replace(/\\d?frac\s*/g, '');
 }
 
@@ -79,6 +82,7 @@ export function cleanLatexSymbol(s: string): string {
     .replace(/\\ln/g, 'ln ')
     .replace(/\\log/g, 'log ')
     .replace(/\\exp/g, 'e^')
+    .replace(/e\^\{([^}]+)\}/g, 'e^($1)')
     .replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛$1')
     .replace(/\\sqrt\{([^}]+)\}/g, '√$1')
     .replace(/\\cdot/g, '·')
@@ -274,8 +278,11 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   const totalW = headerW + colCount * colW + 40;
 
   // Nâng chiều cao các hàng để bảng to rõ, thoáng đạt, font lớn.
-  // Tự động ẩn hàng 3 nếu chỉ là Bảng xét dấu đạo hàm (không có \tkzTabVar)
-  const hasRow3 = variations.length > 0;
+  // Tự động ẩn hàng 3 nếu chỉ là Bảng xét dấu đạo hàm (không có \tkzTabVar hoặc các biến thiên rỗng)
+  const hasRealVariations = variations.some(
+    (v) => (v.val && v.val.trim() !== '') || (v.leftVal && v.leftVal.trim() !== '') || (v.rightVal && v.rightVal.trim() !== '')
+  );
+  const hasRow3 = hasRealVariations;
   const row1H = 50;
   const row2H = 50;
   const row3H = hasRow3 ? 150 : 0;
@@ -405,9 +412,10 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     const isStartHigh = startY === highY;
     const isEndHigh = endY === highY;
 
-    // Khoảng cách an toàn để mũi tên không đè lên chữ số
-    const arrowStartX = startX + 22;
-    const arrowEndX = endX - 22;
+    // Khoảng cách an toàn để mũi tên không đè lên chữ số và luôn hướng về phía trước
+    const midX = (startX + endX) / 2;
+    const arrowStartX = Math.min(startX + 22, midX - 6);
+    const arrowEndX = Math.max(endX - 22, midX + 6);
     const arrowStartY = isStartHigh ? startY + 14 : startY - 14;
     const arrowEndY = isEndHigh ? endY + 14 : endY - 14;
 

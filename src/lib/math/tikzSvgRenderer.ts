@@ -284,8 +284,13 @@ function extractBracedContent(str: string, startIndex: number): { content: strin
  * Làm sạch triệt để nhãn node TeX (xử lý \mathrm, \text, số mũ, chỉ số dưới, ký tự Hy Lạp)
  * Ví dụ: "{$y\ (\mathrm{m}^3/\text{giờ})$}" -> "y (m³/giờ)"
  */
-function cleanTikzNodeText(raw: string): string {
+export function cleanTikzNodeText(raw: string): string {
   let text = raw.replace(/\$/g, '').trim();
+
+  // Vector TeX: \overrightarrow{F}_C -> F⃗_C, \vec{P} -> P⃗, \vv{AB} -> AB⃗
+  text = text
+    .replace(/\\(?:overrightarrow|vec|vv)\{([^{}]+)\}/g, '$1⃗')
+    .replace(/\\(?:overrightarrow|vec|vv)\s*([a-zA-Z])/g, '$1⃗');
 
   // Bóc lớp \mathrm{...}, \text{...}, \mathbf{...} lồng nhau
   let prevText = '';
@@ -319,14 +324,16 @@ function cleanTikzNodeText(raw: string): string {
     .replace(/\^\{\\circ\}/g, '°')
     .replace(/\^\\circ/g, '°');
 
-  // Chỉ số dưới (subscript) toán học: A_1 -> A₁, x_0 -> x₀, G_1 -> G₁
+  // Chỉ số dưới (subscript) toán học: A_1 -> A₁, x_0 -> x₀, G_1 -> G₁, F_C -> F_C
   const subscriptMap: { [k: string]: string } = {
     '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
     '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
     'x': 'ₓ', 'y': 'ᵧ',
+    'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ',
+    'a': 'ₐ', 'b': 'ᵦ', 'c': '꜀',
   };
-  text = text.replace(/_\{([0-9xy])\}/g, (_m, d) => subscriptMap[d] || d);
-  text = text.replace(/_([0-9xy])/g, (_m, d) => subscriptMap[d] || d);
+  text = text.replace(/_\{([0-9a-zA-Z])\}/g, (_m, d) => subscriptMap[d] || `_${d}`);
+  text = text.replace(/_([0-9a-zA-Z])\b/g, (_m, d) => subscriptMap[d] || `_${d}`);
   text = text.replace(/([A-Za-z])([0-9])\b/g, (_m, l, d) => l + (subscriptMap[d] || d));
 
   // Ký tự Hy Lạp & Toán học
@@ -448,13 +455,15 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0. Nếu là hình học không gian 3D hoặc chứa vector phức tạp, nhường 100% cho Server TeX Engine để tuyệt đối không có nét thừa
+  // 0. Nếu là hình học không gian 3D hoặc chứa gói chuyên sâu, nhường 100% cho Server TeX Engine để tuyệt đối không có nét thừa
   const is3DOrComplex =
-    /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|\\overrightarrow|\\vec\{|Oxyz|\[[^\]]*\b3d\b/i.test(
+    /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|Oxyz|\[[^\]]*\b3d\b/i.test(
       rawTikz
     ) ||
     /\((?:-?[0-9.]+\s*,\s*){2}-?[0-9.]+\)/.test(rawTikz) || // Tọa độ 3D (x,y,z)
-    /\bz\s*=\s*\{/.test(rawTikz); // Trục z={(...)}
+    /\bz\s*=\s*\{/.test(rawTikz) || // Trục z={(...)}
+    /\b[A-Z]['′](?![a-zA-Z0-9(])/.test(rawTikz) || // Đỉnh lăng trụ / hình hộp A', B', C', D'
+    (/\bellipse\b/.test(rawTikz) && /\b(?:--|\bto\b)[^;]*\((?:[S]|top|dinh)\)/i.test(rawTikz)); // Đèn chùm, hình nón, trụ nối đỉnh S
 
   if (is3DOrComplex) {
     return null;

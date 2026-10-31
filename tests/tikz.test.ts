@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderTikzToSvg } from '../src/lib/math/tikzSvgRenderer';
+import { renderTikzToSvg, cleanTikzNodeText } from '../src/lib/math/tikzSvgRenderer';
 import { cleanLatexSymbol, parseTkzTabCode, generateTkzTabSvg } from '../src/lib/math/tkzTabRenderer';
 
 describe('TikZ 3D & Advanced Tests', () => {
@@ -66,7 +66,7 @@ describe('TikZ 3D & Advanced Tests', () => {
     // 1. Kiểm tra cleanLatexSymbol với các biểu thức phân số và hàm số
     expect(cleanLatexSymbol('\\dfrac{1000}{e}')).toBe('1000/e');
     expect(cleanLatexSymbol('\\dfrac1000')).toBe('1000');
-    expect(cleanLatexSymbol('\\dfrac{1000}{e^{0,4}}')).toBe('1000/e^0,4');
+    expect(cleanLatexSymbol('\\dfrac{1000}{e^{0,4}}')).toBe('1000/e^(0,4)');
 
     // 2. Bảng xét dấu đạo hàm (chỉ có dòng x và f'(x), KHÔNG có \tkzTabVar)
     const signTableCode = `\\begin{tikzpicture}
@@ -82,6 +82,17 @@ describe('TikZ 3D & Advanced Tests', () => {
     expect(svgSign).toContain('viewBox="0 0 ');
     expect(svgSign).toContain(' 100"');
 
+    // 2b. Bảng xét dấu có \tkzTabVar rỗng/dummy cũng tự động triệt tiêu hàng 3
+    const dummyVarTableCode = `\\begin{tikzpicture}
+      \\tkzTabInit{$x$/1,$f'(x)$/1}{$-\\infty$,$0$,$+\\infty$}
+      \\tkzTabLine{,-,0,+,}
+      \\tkzTabVar{-/, +/}
+    \\end{tikzpicture}`;
+    const parsedDummy = parseTkzTabCode(dummyVarTableCode);
+    expect(parsedDummy).not.toBeNull();
+    const svgDummy = generateTkzTabSvg(parsedDummy!);
+    expect(svgDummy).toContain(' 100"');
+
     // 3. Bảng biến thiên có phân số lồng nhau trong \tkzTabVar
     const varTableCode = `\\begin{tikzpicture}
       \\tkzTabInit{$t$/1,$v'(t)$/1,$v(t)$/2}{$0$,$2{,}5\\ln 5$,$+\\infty$}
@@ -96,5 +107,27 @@ describe('TikZ 3D & Advanced Tests', () => {
     const svgVar = generateTkzTabSvg(parsedVar!);
     expect(svgVar).toContain('1000/e');
     expect(svgVar).toContain(' 250"');
+  });
+
+  it('formats vector node labels cleanly without leaking backslashes or broken characters', () => {
+    expect(cleanTikzNodeText('$\\overrightarrow{P}$')).toBe('P⃗');
+    expect(cleanTikzNodeText('$\\overrightarrow{F}_C$')).toBe('F⃗ᴄ');
+    expect(cleanTikzNodeText('$\\vec{F}_A$')).toBe('F⃗ᴀ');
+    expect(cleanTikzNodeText('$\\vv{AB}$')).toBe('AB⃗');
+  });
+
+  it('detects 3D prism vertices (A\', B\', C\', D\') and delegates directly to Server TeX', () => {
+    const code = `\\begin{tikzpicture}
+      \\coordinate (A) at (0,0);
+      \\coordinate (B) at (3,0);
+      \\coordinate (C) at (1,2);
+      \\coordinate (A') at (0,3);
+      \\coordinate (B') at (3,3);
+      \\coordinate (C') at (1,5);
+      \\draw (A) -- (B) -- (C) -- cycle;
+      \\draw (A') -- (B') -- (C') -- cycle;
+    \\end{tikzpicture}`;
+    const svg = renderTikzToSvg(code);
+    expect(svg).toBeNull();
   });
 });

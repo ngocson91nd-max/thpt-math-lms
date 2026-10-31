@@ -37,10 +37,13 @@ export async function POST(req: NextRequest) {
       '\\usepackage{amsmath}',
       '\\usepackage{amsfonts}',
       '\\usepackage{amssymb}',
+      '\\usepackage{esvect}',
       '\\usepackage{tikz}',
       '\\usepackage{tikz-3dplot}',
+      '\\usepackage{tkz-euclide}',
       '\\usepackage{pgfplots}',
-      '\\usetikzlibrary{calc,arrows.meta,positioning,angles,quotes,intersections,patterns,3d}',
+      '\\pgfplotsset{compat=1.18}',
+      '\\usetikzlibrary{calc,arrows.meta,positioning,angles,quotes,intersections,patterns,3d,backgrounds,decorations.pathmorphing}',
     ].join('\n');
 
     const preamble = customPreamble ? `${defaultPreamble}\n${customPreamble}` : defaultPreamble;

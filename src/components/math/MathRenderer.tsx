@@ -130,7 +130,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
       const rawTikz = decodeURIComponent(target.getAttribute('data-tikz') || '');
       if (!rawTikz) return;
 
-      const cacheKey = `tikz_v9_${hashTikz(rawTikz)}`;
+      const cacheKey = `tikz_v20_${hashTikz(rawTikz)}`;
 
       // A. KIỂM TRA BỘ NHỚ RAM -> HIỂN THỊ TỨC THÌ 0ms!
       if (inMemoryTikzCache.has(cacheKey)) {
@@ -149,6 +149,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             cachedSvg.includes('\\pos') ||
             cachedSvg.includes('\\x') ||
             cachedSvg.includes('\\mathrm') ||
+            cachedSvg.includes('overrigh') ||
             cachedSvg.includes('\\text'))
         ) {
           localStorage.removeItem(cacheKey);
