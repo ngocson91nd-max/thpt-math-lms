@@ -253,6 +253,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [user]);
 
   const isTakeExamPage = pathname.includes('/take');
+  const isEditorPage = pathname.includes('/exams/editor');
   const isAuthPage = pathname === '/login' || pathname === '/register';
 
   // Xác định nội dung cần hiển thị theo phân quyền
@@ -312,7 +313,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      {!isTakeExamPage && (
+      {!isTakeExamPage && !isEditorPage && (
         <Sidebar
           isCollapsed={isSidebarCollapsed}
           onToggle={toggleSidebar}
@@ -320,7 +321,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       )}
 
       {/* Nút nổi "Hiện thanh bên" khi thanh bên đang bị ẩn trên Desktop */}
-      {isSidebarCollapsed && !isTakeExamPage && (
+      {isSidebarCollapsed && !isTakeExamPage && !isEditorPage && (
         <button
           type="button"
           onClick={toggleSidebar}
@@ -334,10 +335,16 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
       <div
         className={`flex-1 flex flex-col min-h-screen transition-[padding] duration-300 ease-in-out ${
-          isTakeExamPage || isSidebarCollapsed ? 'w-full lg:pl-0' : 'lg:pl-64'
+          isTakeExamPage || isEditorPage || isSidebarCollapsed ? 'w-full lg:pl-0' : 'lg:pl-64'
         }`}
       >
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main
+          className={
+            isEditorPage
+              ? 'flex-1 w-full h-screen overflow-hidden p-0'
+              : 'flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6'
+          }
+        >
           {renderContent()}
         </main>
       </div>
