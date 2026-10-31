@@ -56,7 +56,42 @@ import {
   CheckCircle,
   X,
   Lock,
+  Loader2,
 } from 'lucide-react';
+
+function generateSubmissionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function safeSaveLocalStorage(key: string, value: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (err: any) {
+    console.warn(`[safeSaveLocalStorage] Lỗi lưu vào key "${key}":`, err);
+    try {
+      const allSubsRaw = localStorage.getItem('lms_all_submissions');
+      if (allSubsRaw) {
+        const parsed = JSON.parse(allSubsRaw);
+        if (Array.isArray(parsed) && parsed.length > 20) {
+          localStorage.setItem('lms_all_submissions', JSON.stringify(parsed.slice(0, 20)));
+        }
+      }
+      localStorage.setItem(key, value);
+    } catch {
+      // Bỏ qua nếu vẫn đầy để ưu tiên chuyển hướng xem kết quả
+    }
+  }
+}
 
 export default function TakeExamPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -822,10 +857,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       trueFalseScoring: exam.true_false_scoring || 'standard_thpt',
       partPoints: exam.part_points,
     });
-    const newSubId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : '99999999-9999-9999-9999-999999999999';
+    const newSubId = generateSubmissionId();
 
     const startTimeIso = exam.no_time_limit
       ? new Date(Date.now() - timeLeft * 1000).toISOString()
@@ -845,10 +877,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     const allowedLimit = exam.max_violations || 3;
     const violationDetail = logs.length > 0 ? `\nNhật ký vi phạm:\n${logs.join('\n')}` : '';
 
+    const sanitizedExam = {
+      ...exam,
+      assets: undefined,
+    };
+
     const newSubmission = {
       id: newSubId,
       exam_id: exam.id,
-      exam,
+      exam: sanitizedExam,
       student_id: studentId,
       student: user || undefined,
       attempt_number: 1,
@@ -862,34 +899,72 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       answers: submissionAnswers,
     };
 
+    const resultUrl = `/exams/${exam.id}/result/${newSubId}`;
+
     try {
-      await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSubmission),
-      });
-    } catch {}
+      // 1. Lưu ngay vào memory và localStorage an toàn
+      MOCK_SUBMISSIONS.unshift(newSubmission as any);
+      safeSaveLocalStorage(`submission_${newSubId}`, JSON.stringify(newSubmission));
 
-    MOCK_SUBMISSIONS.unshift(newSubmission as any);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
-      const mySubmissionsKey = `my_submissions_${studentId}`;
-      const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
-      existingMySubs.unshift(newSubmission);
-      localStorage.setItem(mySubmissionsKey, JSON.stringify(existingMySubs));
+      if (typeof window !== 'undefined') {
+        try {
+          const mySubmissionsKey = `my_submissions_${studentId}`;
+          const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
+          existingMySubs.unshift(newSubmission);
+          safeSaveLocalStorage(mySubmissionsKey, JSON.stringify(existingMySubs.slice(0, 50)));
+        } catch {}
 
-      const allSubsKey = 'lms_all_submissions';
-      const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
-      const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
-      filteredAll.unshift(newSubmission);
-      localStorage.setItem(allSubsKey, JSON.stringify(filteredAll));
+        try {
+          const allSubsKey = 'lms_all_submissions';
+          const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
+          const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
+          filteredAll.unshift(newSubmission);
+          safeSaveLocalStorage(allSubsKey, JSON.stringify(filteredAll.slice(0, 100)));
+        } catch {}
 
-      broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
-      broadcastDataChange('EXAMS_UPDATED');
-      localStorage.removeItem(storageKey);
+        try {
+          broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
+          broadcastDataChange('EXAMS_UPDATED');
+          localStorage.removeItem(storageKey);
+        } catch {}
+      }
+
+      // 2. Đồng bộ lên API với timeout 3.5s
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSubmission),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (err) {
+        console.warn('API submission save error or timeout (tiếp tục điều hướng):', err);
+      }
+    } catch (err) {
+      console.error('Lỗi khi nộp bài vi phạm (tiếp tục điều hướng):', err);
+    } finally {
+      setIsSubmitting(false);
+
+      // 3. Điều hướng an toàn tuyệt đối
+      try {
+        router.push(resultUrl);
+      } catch {
+        if (typeof window !== 'undefined') {
+          window.location.href = resultUrl;
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          if (window.location.pathname.includes('/take')) {
+            window.location.href = resultUrl;
+          }
+        }, 1000);
+      }
     }
-
-    router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
 
   // Kiểm tra thời gian tối thiểu trước khi mở modal nộp bài
@@ -908,7 +983,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
 
   // Xử lý nộp bài chủ động
   const handleFinalSubmit = async () => {
-    if (!exam) return;
+    if (!exam || isSubmitting) return;
 
     if (user && isStudent && exam.submission_restriction === 'min_time') {
       const minMins = exam.submission_min_minutes || 0;
@@ -928,10 +1003,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       partPoints: exam.part_points,
     });
 
-    const newSubId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : '99999999-9999-9999-9999-999999999999';
+    const newSubId = generateSubmissionId();
 
     const startTimeIso = exam.no_time_limit
       ? new Date(Date.now() - timeLeft * 1000).toISOString()
@@ -949,10 +1021,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       max_points: r.maxPoints,
     }));
 
+    const sanitizedExam = {
+      ...exam,
+      assets: undefined,
+    };
+
     const newSubmission = {
       id: newSubId,
       exam_id: exam.id,
-      exam,
+      exam: sanitizedExam,
       student_id: studentId,
       student: user || undefined,
       attempt_number: 1,
@@ -968,58 +1045,90 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
       answers: submissionAnswers,
     };
 
-    // 1. Đồng bộ lên Supabase Cloud API qua /api/submissions (đảm bảo 100% giáo viên nhận được)
+    const resultUrl = `/exams/${exam.id}/result/${newSubId}`;
+
     try {
-      await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSubmission),
-      });
-    } catch (err) {
-      console.warn('API submission save error:', err);
-    }
+      // 1. Lưu ngay vào memory và localStorage
+      MOCK_SUBMISSIONS.unshift(newSubmission as any);
+      safeSaveLocalStorage(`submission_${newSubId}`, JSON.stringify(newSubmission));
 
-    MOCK_SUBMISSIONS.unshift(newSubmission as any);
+      if (typeof window !== 'undefined') {
+        // A. Lưu vào danh sách cá nhân của học sinh
+        try {
+          const mySubmissionsKey = `my_submissions_${studentId}`;
+          const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
+          existingMySubs.unshift(newSubmission);
+          safeSaveLocalStorage(mySubmissionsKey, JSON.stringify(existingMySubs.slice(0, 50)));
+        } catch {}
 
-    // 2. Lưu vào localStorage đa người dùng (để cả học sinh và giáo viên cùng xem được tức thì)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`submission_${newSubId}`, JSON.stringify(newSubmission));
+        // B. Lưu vào SỔ ĐIỂM TOÀN TRƯỜNG (lms_all_submissions) để Giáo viên / Admin thấy ngay tức thì!
+        try {
+          const allSubsKey = 'lms_all_submissions';
+          const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
+          const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
+          filteredAll.unshift(newSubmission);
+          safeSaveLocalStorage(allSubsKey, JSON.stringify(filteredAll.slice(0, 100)));
+        } catch {}
 
-      // A. Lưu vào danh sách cá nhân của học sinh
-      const mySubmissionsKey = `my_submissions_${studentId}`;
-      const existingMySubs = JSON.parse(localStorage.getItem(mySubmissionsKey) || '[]');
-      existingMySubs.unshift(newSubmission);
-      localStorage.setItem(mySubmissionsKey, JSON.stringify(existingMySubs));
-
-      // B. Lưu vào SỔ ĐIỂM TOÀN TRƯỜNG (lms_all_submissions) để Giáo viên / Admin thấy ngay tức thì!
-      const allSubsKey = 'lms_all_submissions';
-      const existingAllSubs = JSON.parse(localStorage.getItem(allSubsKey) || '[]');
-      const filteredAll = existingAllSubs.filter((s: any) => s.id !== newSubId);
-      filteredAll.unshift(newSubmission);
-      localStorage.setItem(allSubsKey, JSON.stringify(filteredAll));
-
-      // C. Tự động tăng số lượt làm bài (submissions_count) của đề thi trên card Đề thi
-      try {
-        const savedExamsRaw = localStorage.getItem('lms_exams');
-        if (savedExamsRaw) {
-          const listExams = JSON.parse(savedExamsRaw);
-          const eIdx = listExams.findIndex((e: any) => e.id === exam.id);
-          if (eIdx >= 0) {
-            listExams[eIdx].submissions_count = (listExams[eIdx].submissions_count || 0) + 1;
-            localStorage.setItem('lms_exams', JSON.stringify(listExams));
+        // C. Tự động tăng số lượt làm bài (submissions_count) của đề thi trên card Đề thi
+        try {
+          const savedExamsRaw = localStorage.getItem('lms_exams');
+          if (savedExamsRaw) {
+            const listExams = JSON.parse(savedExamsRaw);
+            const eIdx = listExams.findIndex((e: any) => e.id === exam.id);
+            if (eIdx >= 0) {
+              listExams[eIdx].submissions_count = (listExams[eIdx].submissions_count || 0) + 1;
+              safeSaveLocalStorage('lms_exams', JSON.stringify(listExams));
+            }
           }
+        } catch {}
+
+        // D. Phát tín hiệu thời gian thực 0ms tới tất cả các tab của Giáo viên
+        try {
+          broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
+          broadcastDataChange('EXAMS_UPDATED');
+          localStorage.removeItem(storageKey);
+        } catch {}
+      }
+
+      // 2. Đồng bộ lên Supabase Cloud API qua /api/submissions (timeout 3.5s an toàn)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSubmission),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (err) {
+        console.warn('API submission save error or timeout (tiếp tục điều hướng):', err);
+      }
+    } catch (submissionErr) {
+      console.error('Lỗi trong quá trình nộp bài (tiếp tục điều hướng):', submissionErr);
+    } finally {
+      setShowSubmitModal(false);
+      setIsSubmitting(false);
+
+      // 3. Điều hướng xem kết quả (Next.js router.push + fallback window.location)
+      try {
+        router.push(resultUrl);
+      } catch (navErr) {
+        console.error('router.push error, falling back to window.location:', navErr);
+        if (typeof window !== 'undefined') {
+          window.location.href = resultUrl;
         }
-      } catch {}
+      }
 
-      // D. Phát tín hiệu thời gian thực 0ms tới tất cả các tab của Giáo viên
-      broadcastDataChange('SUBMISSIONS_UPDATED', newSubmission);
-      broadcastDataChange('EXAMS_UPDATED');
-
-      // Xóa bộ nhớ tạm tiến độ bài thi sau khi nộp thành công
-      localStorage.removeItem(storageKey);
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          if (window.location.pathname.includes('/take')) {
+            window.location.href = resultUrl;
+          }
+        }, 1000);
+      }
     }
-
-    router.push(`/exams/${exam.id}/result/${newSubId}`);
   };
 
   // 1. Kiểm tra phòng thi chưa mở hoặc đã đóng đối với học sinh
@@ -2645,9 +2754,16 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleFinalSubmit}
-                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer"
+                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition cursor-pointer disabled:opacity-80 flex items-center gap-1.5"
               >
-                {isSubmitting ? 'Đang chấm điểm...' : 'Xác Nhận Nộp Bài'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Đang nộp & chấm điểm...</span>
+                  </>
+                ) : (
+                  'Xác Nhận Nộp Bài'
+                )}
               </button>
             </div>
           </div>
