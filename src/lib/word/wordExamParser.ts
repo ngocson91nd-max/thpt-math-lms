@@ -174,9 +174,232 @@ export function postProcessMathTypeSvg(rawSvg: string): string {
   return svg;
 }
 
+interface MathTextElement {
+  char: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  isItalic: boolean;
+}
+
+/**
+ * Kiểm tra xem công thức có chứa cấu trúc 2D phức tạp (phân số nhiều tầng, ma trận, căn thức nhiều tầng) không.
+ * Nếu có các ký tự cỡ chữ cơ sở chồng chéo theo phương ngang nhưng lệch hẳn theo phương đứng,
+ * trả về true để giữ nguyên ảnh vector SVG sắc nét 100% thay vì chuyển đổi lỗi.
+ */
+function hasComplexVerticalOverlap(elements: MathTextElement[], maxFontSize: number): boolean {
+  for (let i = 0; i < elements.length; i++) {
+    for (let j = i + 1; j < elements.length; j++) {
+      const e1 = elements[i];
+      const e2 = elements[j];
+      const dy = Math.abs(e1.y - e2.y);
+      const isE1Small = e1.fontSize < maxFontSize * 0.75;
+      const isE2Small = e2.fontSize < maxFontSize * 0.75;
+      if (dy > maxFontSize * 0.65 && !isE1Small && !isE2Small) {
+        const dx = Math.abs(e1.x - e2.x);
+        if (dx < maxFontSize * 0.6) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Chuyển đổi SVG sinh ra từ MathType WMF thành công thức toán LaTeX chuẩn ($...$)
+ * Hỗ trợ hoàn hảo:
+ * - Tên biến, hằng số, tham số: x, y, z, t, a, b, c, d, m, B, h, V, S, I, P, Q, N, M...
+ * - Tọa độ không gian và mặt phẳng: Oxyz, Oxy, (Oxy), (Oxyz), (P), (Q), (ABC)...
+ * - Khoảng, đoạn, nửa khoảng: (-1; 2), (0; 1), [0; 2], (-∞; 1), (1; +∞)...
+ * - Điểm và tọa độ điểm: A(1; 2; 3), M(1; -1), B(0; 2; 1)...
+ * - Ký hiệu hàm số: y = f(x), f(x), f'(x), y = f'(x), f(0), f(1)...
+ * - Tập hợp số: \mathbb{R}, \mathbb{Z}, \mathbb{N}, \mathbb{Q}, \mathbb{C}
+ * - Đa thức và phương trình: y = x^3 - 3x^2 + 2, x = 3, y = 2, V = Bh...
+ * - Vectơ toán học: \vec{u}, \vec{v}, \vec{a}, \vec{b}, \vec{i}, \vec{j}, \vec{k}, \vec{AB}, \vec{BA}...
+ * 
+ * Khi phát hiện công thức quá phức tạp (phân số nhiều tầng, ma trận...), hàm trả về null
+ * để hệ thống tự động giữ nguyên vector SVG siêu nét, không bao giờ làm sai lệch công thức của giáo viên.
+ */
+export function convertMathTypeSvgToLatex(svg: string): string | null {
+  if (!svg || !svg.includes('<svg')) return null;
+
+  // 1. Trích xuất tất cả các text element bằng attribute matcher chính xác
+  const tagRegex = /<text\b([^>]*)>([\s\S]*?)<\/text>/gi;
+  const elements: MathTextElement[] = [];
+
+  let match;
+  while ((match = tagRegex.exec(svg)) !== null) {
+    const attrs = match[1];
+    const xMatch = attrs.match(/\bx="([^"]+)"/i);
+    const yMatch = attrs.match(/\by="([^"]+)"/i);
+    const fsMatch = attrs.match(/\bfont-size="([^"]+)"/i);
+
+    if (!xMatch || !yMatch || !fsMatch) continue;
+    const x = parseFloat(xMatch[1]);
+    const y = parseFloat(yMatch[1]);
+    const fontSize = parseFloat(fsMatch[1]);
+    let char = match[2].trim();
+    if (!char) continue;
+
+    // Decode HTML entities và ký tự toán học Unicode
+    char = char
+      .replace(/&#x2212;/g, '-')
+      .replace(/&#x211D;/g, '\\mathbb{R}')
+      .replace(/&#x2124;/g, '\\mathbb{Z}')
+      .replace(/&#x2115;/g, '\\mathbb{N}')
+      .replace(/&#x211A;/g, '\\mathbb{Q}')
+      .replace(/&#x2102;/g, '\\mathbb{C}')
+      .replace(/&#x2032;/g, "'")
+      .replace(/&#x221E;/g, '\\infty')
+      .replace(/&#x2208;/g, '\\in')
+      .replace(/&#x2209;/g, '\\notin')
+      .replace(/&#x2264;/g, '\\le')
+      .replace(/&#x2265;/g, '\\ge')
+      .replace(/&#x2260;/g, '\\ne')
+      .replace(/&#x00B1;/g, '\\pm')
+      .replace(/&#x2248;/g, '\\approx')
+      .replace(/&#x2192;/g, '\\to')
+      .replace(/&#x03B1;/g, '\\alpha')
+      .replace(/&#x03B2;/g, '\\beta')
+      .replace(/&#x03C0;/g, '\\pi')
+      .replace(/&#x0394;/g, '\\Delta')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/∞/g, '\\infty')
+      .replace(/∈/g, '\\in')
+      .replace(/∉/g, '\\notin')
+      .replace(/≤/g, '\\le')
+      .replace(/≥/g, '\\ge')
+      .replace(/≠/g, '\\ne')
+      .replace(/±/g, '\\pm')
+      .replace(/≈/g, '\\approx')
+      .replace(/→/g, '\\to')
+      .replace(/π/g, '\\pi')
+      .replace(/Δ/g, '\\Delta')
+      .replace(/′/g, "'");
+
+    const isItalic = attrs.includes('font-style="italic"');
+    elements.push({ char, x, y, fontSize, isItalic });
+  }
+
+  if (elements.length === 0) return null;
+
+  // 2. Kiểm tra nếu có phân số nhiều tầng hoặc cấu trúc 2D chồng chéo -> fallback về SVG vector nét 100%
+  const fontSizes = elements.map((e) => e.fontSize);
+  const maxFontSize = Math.max(...fontSizes);
+  if (hasComplexVerticalOverlap(elements, maxFontSize)) {
+    return null;
+  }
+
+  // 3. Trích xuất các vector arrows (<path ...>) sinh ra từ postProcessMathTypeSvg
+  const vectorPaths: { startX: number; endX: number }[] = [];
+  const pathRegex = /<path\s+d="M\s*([\d\.]+)\s+[\d\.]+\s+L\s*([\d\.]+)[^"]*l\s*-\d/gi;
+  let pm;
+  while ((pm = pathRegex.exec(svg)) !== null) {
+    vectorPaths.push({
+      startX: parseFloat(pm[1]),
+      endX: parseFloat(pm[2]),
+    });
+  }
+
+  // 4. Sắp xếp các text elements theo tọa độ x từ trái qua phải
+  elements.sort((a, b) => a.x - b.x);
+
+  // Cao độ y trung bình của các phần tử cỡ lớn (dòng cơ sở)
+  const baseElements = elements.filter((e) => e.fontSize >= maxFontSize * 0.85);
+  const avgBaseY = baseElements.length > 0
+    ? baseElements.reduce((acc, e) => acc + e.y, 0) / baseElements.length
+    : elements[0].y;
+
+  // Gom các element thành chuỗi LaTeX
+  let latex = '';
+  let inSup = false;
+  let inSub = false;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+
+    // Kiểm tra xem ký tự này có nằm dưới vector arrow không
+    const hasVector = vectorPaths.some(
+      (vp) => el.x >= vp.startX - el.fontSize * 0.3 && el.x <= vp.endX + el.fontSize * 0.3
+    );
+
+    // Kiểm tra superscript / subscript dựa trên font-size và độ lệch y so với avgBaseY
+    const isSmaller = el.fontSize <= maxFontSize * 0.82;
+    const dy = el.y - avgBaseY; // dy âm -> nằm phía trên (superscript), dy dương -> nằm phía dưới (subscript)
+    const isSup = isSmaller && dy < -el.fontSize * 0.25;
+    const isSub = isSmaller && dy > el.fontSize * 0.15;
+
+    if (isSup && !inSup) {
+      latex += '^{';
+      inSup = true;
+    } else if (!isSup && inSup) {
+      latex += '}';
+      inSup = false;
+    }
+
+    if (isSub && !inSub) {
+      latex += '_{';
+      inSub = true;
+    } else if (!isSub && inSub) {
+      latex += '}';
+      inSub = false;
+    }
+
+    let charText = el.char;
+    if (hasVector && /^[a-zA-Z]$/.test(charText)) {
+      charText = `\\vec{${charText}}`;
+    }
+
+    // Định dạng khoảng cách toán học
+    if (charText === '=') {
+      latex += ' = ';
+    } else if (charText === '+') {
+      latex += ' + ';
+    } else if (charText === '-') {
+      const prev = elements[i - 1]?.char;
+      if (prev && /[0-9a-zA-Z\)\}]/.test(prev)) {
+        latex += ' - ';
+      } else {
+        latex += '-';
+      }
+    } else if (charText === ';') {
+      latex += '; ';
+    } else if (charText === ',') {
+      latex += ', ';
+    } else {
+      latex += charText;
+    }
+  }
+
+  if (inSup) latex += '}';
+  if (inSub) latex += '}';
+
+  latex = latex.trim();
+  latex = latex.replace(/\s+/g, ' ');
+
+  // Gộp các vector liên tiếp: ví dụ \vec{A}\vec{B} -> \vec{AB} hoặc \vec{BA}
+  latex = latex.replace(/\\vec\{([A-Z])\}\\vec\{([A-Z])\}/g, '\\vec{$1$2}');
+
+  // Di chuyển dấu chấm hoặc dấu phẩy ở cuối công thức ra ngoài dấu $
+  let trailingPunct = '';
+  if (latex.endsWith('.')) {
+    trailingPunct = '.';
+    latex = latex.slice(0, -1).trim();
+  } else if (latex.endsWith(',')) {
+    trailingPunct = ',';
+    latex = latex.slice(0, -1).trim();
+  }
+
+  return `$${latex}$${trailingPunct}`;
+}
+
 export interface DocxMediaInfo {
   assetId: string;
   isMathType: boolean;
+  latexText?: string | null;
 }
 
 /**
@@ -195,6 +418,7 @@ export async function extractDocxImages(zip: JSZip): Promise<Map<string, DocxMed
 
     const lower = path.toLowerCase();
     let assetId = '';
+    let latexText: string | null = null;
     const isMathType = lower.endsWith('.wmf') || lower.endsWith('.emf');
 
     // Xử lý chuyển đổi WMF/EMF của MathType sang SVG vector chuẩn
@@ -206,6 +430,7 @@ export async function extractDocxImages(zip: JSZip): Promise<Map<string, DocxMed
         const svg = renderToSvg(cleanBytes);
         if (svg && svg.includes('<svg')) {
           const cleanSvg = postProcessMathTypeSvg(svg);
+          latexText = convertMathTypeSvgToLatex(cleanSvg);
           const base64 = typeof Buffer !== 'undefined'
             ? Buffer.from(cleanSvg).toString('base64')
             : btoa(unescape(encodeURIComponent(cleanSvg)));
@@ -255,7 +480,7 @@ export async function extractDocxImages(zip: JSZip): Promise<Map<string, DocxMed
     }
 
     const filename = path.replace('word/media/', '').trim();
-    filenameToMediaInfo.set(filename, { assetId, isMathType });
+    filenameToMediaInfo.set(filename, { assetId, isMathType, latexText });
   }
 
   // 2. Đọc file quan hệ word/_rels/document.xml.rels để liên kết rId -> filename
@@ -552,7 +777,7 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     }
   });
 
-  // 2. Thay thế toàn bộ khối MathType (<w:object>) và <v:imagedata> thành \includegraphics chuẩn LaTeX
+  // 2. Thay thế toàn bộ khối MathType (<w:object>) và <v:imagedata> thành công thức LaTeX hoặc \includegraphics chuẩn
   xml = xml.replace(/<w:object\b[\s\S]*?<\/w:object>/gi, (objXml) => {
     const idMatch =
       objXml.match(/<v:imagedata[^>]+r:id="([^"]+)"/i) ||
@@ -562,6 +787,12 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
     const rId = idMatch[1];
     const media = rIdToMediaInfo.get(rId);
     if (!media) return '';
+
+    // Ưu tiên hiển thị trực tiếp công thức LaTeX ($...$) nếu đã chuyển đổi thành công
+    // Giúp giáo viên đọc, sửa dễ dàng trong Textarea và KaTeX hiển thị 0ms không bao giờ bị vỡ ảnh
+    if (media.latexText) {
+      return ` ${media.latexText} `;
+    }
 
     // Trích xuất chiều cao từ Word XML (pt hoặc dxa) để tự động căn chỉnh tỷ lệ cân đối theo cỡ chữ
     let heightEm = 1.45;
@@ -582,9 +813,11 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
 
   xml = xml.replace(/<v:imagedata[^>]+(?:r:id|o:relid|id)="([^"]+)"[^>]*\/?>/gi, (_m, rId) => {
     const media = rIdToMediaInfo.get(rId);
-    return media
-      ? ` \\includegraphics{${media.assetId}} `
-      : '';
+    if (!media) return '';
+    if (media.latexText) {
+      return ` ${media.latexText} `;
+    }
+    return ` \\includegraphics{${media.assetId}} `;
   });
 
   // 3. Thay thế các hình ảnh vẽ đồ thị / hình học (<w:drawing> / <a:blip>) thành \includegraphics
@@ -644,9 +877,12 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
 
   // 7. Giữ lại đánh dấu gạch chân (u), in đậm (b), và màu đỏ (đáp án) trong các text run <w:r>
   xml = xml.replace(/<w:r\b[\s\S]*?<\/w:r>/gi, (runXml) => {
-    // Trích xuất các lệnh \includegraphics nằm trong runXml (nếu có)
+    // Trích xuất các lệnh \includegraphics hoặc math $...$ nằm trong runXml (nếu có)
     const includegraphicsMatches = runXml.match(/\\includegraphics(?:\[.*?\])?\{[^}]+\}/g) || [];
     const includegraphicsStr = includegraphicsMatches.join(' ');
+
+    const mathMatches = runXml.match(/\$[^$]+\$/g) || [];
+    const mathStr = mathMatches.join(' ');
 
     const textMatches = runXml.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/gi);
     if (!textMatches) {
@@ -668,6 +904,9 @@ async function parseDocxXmlDirectly(arrayBuffer: ArrayBuffer): Promise<{
 
     if (includegraphicsStr) {
       runText = `${runText} ${includegraphicsStr}`;
+    }
+    if (mathStr && !runText.includes(mathStr)) {
+      runText = `${runText} ${mathStr}`;
     }
 
     return runText;

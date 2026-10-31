@@ -79,7 +79,50 @@ export function resolveAssetUrl(src: string): string {
   const cleanSrc = src.trim();
   const asset = globalRegistry.get(cleanSrc);
   if (asset) return asset.dataUrl;
+
+  // Nếu chạy trên trình duyệt, tra cứu thêm từ sessionStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = sessionStorage.getItem(`asset_${cleanSrc}`);
+      if (cached) {
+        return cached;
+      }
+    } catch {}
+  }
+
   return cleanSrc;
+}
+
+/**
+ * Lấy tất cả assets hiện có trong Registry (để truyền từ Server về Client)
+ */
+export function getAllExamAssets(): ExamAsset[] {
+  return Array.from(globalRegistry.values());
+}
+
+/**
+ * Nạp asset từ ngoài vào Registry (ví dụ Client nhận danh sách asset từ API)
+ */
+export function setExamAsset(asset: ExamAsset): void {
+  if (asset && asset.id) {
+    globalRegistry.set(asset.id, asset);
+    if (typeof window !== 'undefined' && asset.dataUrl) {
+      try {
+        sessionStorage.setItem(`asset_${asset.id}`, asset.dataUrl);
+      } catch {}
+    }
+  }
+}
+
+/**
+ * Nạp hàng loạt assets
+ */
+export function loadExamAssets(assets: ExamAsset[]): void {
+  if (Array.isArray(assets)) {
+    for (const a of assets) {
+      setExamAsset(a);
+    }
+  }
 }
 
 /**

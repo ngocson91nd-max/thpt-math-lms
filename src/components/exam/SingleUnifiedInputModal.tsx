@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Question } from '@/types/database';
 import { parseExamLatex } from '@/lib/latex/examParser';
+import { loadExamAssets } from '@/lib/exam/assetRegistry';
 import {
   Upload,
   FileText,
@@ -165,6 +166,13 @@ export default function SingleUnifiedInputModal({
         });
 
         const data = await safeParseJsonResponse(res);
+        if (data.assets && Array.isArray(data.assets)) {
+          loadExamAssets(data.assets);
+          try {
+            sessionStorage.setItem('exam_assets', JSON.stringify(data.assets));
+          } catch {}
+        }
+
         if (!data.questions || data.questions.length === 0) {
           throw new Error('File Word không chứa câu hỏi nào nhận diện được.');
         }

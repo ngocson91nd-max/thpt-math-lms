@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseWordDocx } from '@/lib/word/wordExamParser';
+import { getAllExamAssets } from '@/lib/exam/assetRegistry';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,12 +13,14 @@ export async function POST(req: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer();
     const { questions, rawText } = await parseWordDocx(arrayBuffer);
+    const assets = getAllExamAssets();
 
     return NextResponse.json({
       success: true,
       filename: file.name,
       count: questions.length,
       questions,
+      assets,
       rawText: rawText.substring(0, 500) + '...',
     });
   } catch (error: any) {

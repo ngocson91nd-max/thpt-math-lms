@@ -22,7 +22,11 @@ describe('Word Exam Parser', () => {
     expect(q1.options.length).toBe(4);
     expect(q1.options.map((o: any) => o.id)).toEqual(['A', 'B', 'C', 'D']);
     expect(q1.content).toContain('Điểm cực tiểu của đồ thị hàm số có tọa độ là');
-    expect(q1.content).toContain('\\includegraphics');
+    // Công thức MathType cơ bản được chuyển đổi trực tiếp sang mã LaTeX chuẩn
+    expect(q1.content).toContain('$y = x^{3} - 3x^{2} + 2$');
+    expect(q1.options[0].text).toContain('$(2; -2)$');
+    // Công thức phân số phức tạp (như Câu 3) được bảo toàn qua vector SVG sắc nét
+    expect(result.questions[2].content).toContain('\\includegraphics');
     expect(q1.content).not.toContain('data:image');
     expect(validateNoBase64InQuestions(result.questions)).toBe(true);
   }, 20000);
@@ -124,23 +128,11 @@ describe('Word Exam Parser', () => {
       expect(q4.options[0].id).toBe('A');
       // Đảm bảo không còn chuỗi data URI trong content
       expect(q4.content).not.toContain('data:image');
-      expect(q4.content).toContain('\\includegraphics');
+      // Công thức vectơ MathType được chuyển đổi hoàn hảo thành LaTeX
+      expect(q4.content).toContain('\\vec{u} = 3\\vec{j} - \\vec{i} - 5\\vec{k}');
 
-      // Tra cứu asset từ Asset Registry để kiểm tra đường vẽ vector SVG
-      const assetMatch = q4.content.match(/\\includegraphics(?:\[.*?\])?\{([^}]+)\}/);
-      expect(assetMatch).toBeTruthy();
-      if (assetMatch) {
-        const asset = getExamAsset(assetMatch[1]);
-        expect(asset).toBeDefined();
-        if (asset) {
-          const decodedSvg = Buffer.from(asset.base64, 'base64').toString('utf8');
-          expect(decodedSvg).toContain('<path d="M');
-          expect(decodedSvg).not.toContain('font-family="MT Extra"');
-        }
-      }
-
-      // Đảm bảo các phương án A, B, C, D không chứa data:image
-      expect(q4.options[0].text).toContain('\\includegraphics');
+      // Đảm bảo các phương án A, B, C, D chuyển thành tọa độ LaTeX và không chứa data:image
+      expect(q4.options[0].text).toContain('(6; -2; 10)');
       expect(q4.options[0].text).not.toContain('data:image');
     }
 

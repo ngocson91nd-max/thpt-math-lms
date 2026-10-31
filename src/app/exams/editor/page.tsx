@@ -11,6 +11,7 @@ import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import SingleUnifiedInputModal from '@/components/exam/SingleUnifiedInputModal';
 import ExamSettingsDrawer from '@/components/exam/ExamSettingsDrawer';
+import { loadExamAssets } from '@/lib/exam/assetRegistry';
 import {
   Upload,
   Save,
@@ -135,6 +136,18 @@ function ExamEditorContent() {
   const [showSingleInputModal, setShowSingleInputModal] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Nạp lại Exam Asset Registry từ sessionStorage (giữ ảnh SVG MathType không bị vỡ)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cached = sessionStorage.getItem('exam_assets');
+      if (cached) {
+        const parsedAssets = JSON.parse(cached);
+        loadExamAssets(parsedAssets);
+      }
+    } catch {}
+  }, []);
 
   // Tải đề thi từ cache hoặc params
   useEffect(() => {
