@@ -123,6 +123,7 @@ export interface Question {
   difficulty: QuestionDifficulty;
   type: QuestionType;
   content: string; // Đề bài có LaTeX KaTeX
+  image_url?: string; // Ảnh minh họa câu hỏi (PNG/SVG/WebP)
   options?: any; // SingleChoiceOption[] hoặc TrueFalseStatement[]
   correct_answer?: any; // Ẩn khi học sinh đang làm bài thi
   explanation?: string; // Ẩn khi học sinh chưa nộp bài

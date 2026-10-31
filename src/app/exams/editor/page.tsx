@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Exam, Question, QuestionType, QuestionDifficulty, ClassItem } from '@/types/database';
 import { MOCK_EXAMS, MOCK_QUESTIONS, MOCK_CLASSES } from '@/lib/supabase/mockStore';
 import { parseExamLatex } from '@/lib/latex/examParser';
+import { precompileQuestionsTikz } from '@/lib/latex/tikzPrecompiler';
 import MathRenderer from '@/components/math/MathRenderer';
 import MathEditor from '@/components/math/MathEditor';
 import { parseQuickAnswerKey, buildPdfExamQuestions, trimPdfPages, getPdfPageCount, maskPdfAnswerKey } from '@/lib/pdf/pdfExamHelper';
@@ -204,6 +205,11 @@ function ExamEditorContent() {
 
   // Lưu thông báo lưu thành công
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Quản lý Dựng lại hình qua TeX Server & Đổi ảnh minh họa
+  const [isRecompilingTikz, setIsRecompilingTikz] = useState(false);
+  const [selectedQuestionForImage, setSelectedQuestionForImage] = useState<string | null>(null);
+  const questionImageInputRef = useRef<HTMLInputElement>(null);
 
   // Tải dữ liệu đề thi và lớp học khi vào trang
   useEffect(() => {
@@ -585,6 +591,147 @@ function ExamEditorContent() {
     setQuestionsWithHistory(newArr);
   };
 
+  // Tiền biên dịch lại toàn bộ hình vẽ TikZ trong đề bằng TeX Server
+  const handleRecompileAllTikz = async () => {
+    if (isRecompilingTikz || questions.length === 0) return;
+    setIsRecompilingTikz(true);
+    setSaveToast('Đang quét và dựng lại toàn bộ hình vẽ qua TeX Server...');
+    try {
+      const updated = await precompileQuestionsTikz(questions, (done, total) => {
+        setSaveToast(`Đang dựng hình vẽ TeX: ${done}/${total} câu...`);
+      });
+      setQuestionsWithHistory(updated);
+      setSaveToast(`Đã hoàn tất dựng hình TeX cho toàn bộ ${updated.length} câu hỏi!`);
+    } catch (err: any) {
+      setSaveToast(`Lỗi khi dựng hình: ${err?.message || 'Không thể kết nối TeX Server'}`);
+    } finally {
+      setIsRecompilingTikz(false);
+      setTimeout(() => setSaveToast(null), 3500);
+    }
+  };
+
+  // Mở hộp thoại chọn ảnh thay thế cho một câu hỏi
+  const handleOpenImageUploadForQuestion = (qId: string) => {
+    setSelectedQuestionForImage(qId);
+    if (questionImageInputRef.current) {
+      questionImageInputRef.current.value = '';
+      questionImageInputRef.current.click();
+    }
+  };
+
+  // Xử lý nạp ảnh thay thế cho câu hỏi
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedQuestionForImage) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn một file ảnh hợp lệ (PNG, JPG, SVG, WebP)!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      if (!dataUrl) return;
+
+      const targetQ = questions.find((q) => q.id === selectedQuestionForImage);
+      const qNum = targetQ ? questions.indexOf(targetQ) + 1 : '';
+
+      setQuestionsWithHistory((prev) =>
+        prev.map((q) => {
+          if (q.id !== selectedQuestionForImage) return q;
+
+          let newContent = q.content;
+          const imgTag = `<img src="${dataUrl}" alt="Hình vẽ minh họa" class="tikz-rendered-img max-w-full h-auto mx-auto block my-2 rounded-lg shadow-2xs select-none" style="max-height: 380px;" />`;
+
+          // Thay thế thẻ <img> ảnh cũ hoặc khối TikZ cũ nếu có
+          if (newContent.includes('tikz-rendered-img') || newContent.includes('<img')) {
+            newContent = newContent.replace(/<img[^>]*class=["'][^"']*tikz-rendered-img[^"']*["'][^>]*>/i, imgTag);
+            if (!newContent.includes(dataUrl)) {
+              newContent = newContent.replace(/<img[^>]*>/i, imgTag);
+            }
+          } else if (newContent.includes('\\begin{tikzpicture}')) {
+            newContent = newContent.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/, imgTag);
+          } else {
+            newContent = `${newContent}\n\n${imgTag}`;
+          }
+
+          return {
+            ...q,
+            content: newContent,
+            image_url: dataUrl,
+          };
+        })
+      );
+
+      setSaveToast(`Đã cập nhật ảnh minh họa thành công cho Câu ${qNum}!`);
+      setTimeout(() => setSaveToast(null), 3000);
+      setSelectedQuestionForImage(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Lắng nghe phím Ctrl+V để dán trực tiếp ảnh từ Clipboard vào câu hỏi đang chọn
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (!file) continue;
+
+          const targetId = editingQuestionId || activeQuestionId;
+          if (!targetId) return;
+
+          const reader = new FileReader();
+          reader.onload = (uploadEvent) => {
+            const dataUrl = uploadEvent.target?.result as string;
+            if (!dataUrl) return;
+
+            const targetQ = questions.find((q) => q.id === targetId);
+            const qNum = targetQ ? questions.indexOf(targetQ) + 1 : '';
+
+            setQuestionsWithHistory((prev) =>
+              prev.map((q) => {
+                if (q.id !== targetId) return q;
+
+                let newContent = q.content;
+                const imgTag = `<img src="${dataUrl}" alt="Hình vẽ minh họa" class="tikz-rendered-img max-w-full h-auto mx-auto block my-2 rounded-lg shadow-2xs select-none" style="max-height: 380px;" />`;
+
+                if (newContent.includes('tikz-rendered-img') || newContent.includes('<img')) {
+                  newContent = newContent.replace(/<img[^>]*class=["'][^"']*tikz-rendered-img[^"']*["'][^>]*>/i, imgTag);
+                  if (!newContent.includes(dataUrl)) {
+                    newContent = newContent.replace(/<img[^>]*>/i, imgTag);
+                  }
+                } else if (newContent.includes('\\begin{tikzpicture}')) {
+                  newContent = newContent.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/, imgTag);
+                } else {
+                  newContent = `${newContent}\n\n${imgTag}`;
+                }
+
+                return {
+                  ...q,
+                  content: newContent,
+                  image_url: dataUrl,
+                };
+              })
+            );
+
+            setSaveToast(`Đã dán ảnh minh họa thành công cho Câu ${qNum}!`);
+            setTimeout(() => setSaveToast(null), 3000);
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [activeQuestionId, editingQuestionId, questions]);
+
   // Thêm câu hỏi rỗng vào một phần cụ thể
   const handleAddEmptyQuestion = (targetPart: 1 | 2 | 3 | 4) => {
     let type: QuestionType = 'single_choice';
@@ -750,12 +897,17 @@ function ExamEditorContent() {
           else setTitle(file.name.replace(/\.[^/.]+$/, ''));
           if (metadata.duration) setDuration(metadata.duration);
 
-          setQuestionsWithHistory(parsedQ);
-          setActiveQuestionId(parsedQ[0]?.id);
+          setSaveToast(`Đang bóc tách và tiền biên dịch hình vẽ TikZ...`);
+          const precompiledQ = await precompileQuestionsTikz(parsedQ, (done, total) => {
+            setSaveToast(`Đang dựng hình vẽ TikZ: ${done}/${total} câu...`);
+          });
+
+          setQuestionsWithHistory(precompiledQ);
+          setActiveQuestionId(precompiledQ[0]?.id);
           setExamMode('interactive');
           setShowImportModal(false);
           setShowUploadPopover(false);
-          setSaveToast(`Đã trích xuất thành công ${parsedQ.length} câu hỏi từ file LaTeX "${file.name}"!`);
+          setSaveToast(`Đã nạp thành công ${precompiledQ.length} câu hỏi hoàn chỉnh từ file LaTeX "${file.name}"!`);
           setTimeout(() => setSaveToast(null), 3500);
         } else {
           setImportTab('latex');
@@ -832,7 +984,7 @@ function ExamEditorContent() {
   };
 
   // Xử lý nạp mã LaTeX
-  const handleParseLatexInput = () => {
+  const handleParseLatexInput = async () => {
     if (!latexInput.trim()) {
       setLatexNotice('Vui lòng dán mã nguồn LaTeX gói ex_test vào ô bên dưới!');
       return;
@@ -848,11 +1000,16 @@ function ExamEditorContent() {
       if (metadata.title) setTitle(metadata.title);
       if (metadata.duration) setDuration(metadata.duration);
 
-      setQuestionsWithHistory(parsedQ);
-      setActiveQuestionId(parsedQ[0]?.id);
+      setSaveToast(`Đang bóc tách và tiền biên dịch hình vẽ TikZ...`);
+      const precompiledQ = await precompileQuestionsTikz(parsedQ, (done, total) => {
+        setSaveToast(`Đang dựng hình vẽ TikZ: ${done}/${total} câu...`);
+      });
+
+      setQuestionsWithHistory(precompiledQ);
+      setActiveQuestionId(precompiledQ[0]?.id);
       setExamMode('interactive');
       setShowImportModal(false);
-      setSaveToast(`Đã trích xuất thành công ${parsedQ.length} câu hỏi LaTeX vào trang soạn thảo!`);
+      setSaveToast(`Đã nạp thành công ${precompiledQ.length} câu hỏi LaTeX hoàn chỉnh với hình vẽ sắc nét!`);
       setTimeout(() => setSaveToast(null), 3500);
     } catch (err: any) {
       setLatexNotice(`Lỗi phân tích cú pháp LaTeX: ${err?.message || 'Không xác định'}`);
@@ -1094,6 +1251,26 @@ function ExamEditorContent() {
             />
           </div>
 
+          {/* Ảnh minh họa & Đổi ảnh */}
+          <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-blue-200 text-xs">
+            <div className="flex items-center gap-2 text-slate-700 font-medium">
+              <ImageIcon className="h-4 w-4 text-blue-600 shrink-0" />
+              <span>Ảnh minh họa:</span>
+              <span className="text-slate-500 text-[11px]">
+                {tempQuestionEdit.content.includes('<img') || tempQuestionEdit.image_url ? 'Đã có ảnh minh họa' : 'Chưa có ảnh (có thể bấm Ctrl+V để dán)'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleOpenImageUploadForQuestion(tempQuestionEdit.id)}
+                className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 font-semibold shadow-2xs transition cursor-pointer"
+              >
+                📷 {tempQuestionEdit.content.includes('<img') || tempQuestionEdit.image_url ? 'Đổi ảnh khác' : 'Tải ảnh lên'}
+              </button>
+            </div>
+          </div>
+
           {/* Soạn thảo các phương án A, B, C, D (cho Phần I) */}
           {tempQuestionEdit.type === 'single_choice' && Array.isArray(tempQuestionEdit.options) && (
             <div className="space-y-2 pt-2 border-t border-blue-100">
@@ -1237,6 +1414,17 @@ function ExamEditorContent() {
       >
         {/* Thanh công cụ nổi khi hover vào câu hỏi */}
         <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenImageUploadForQuestion(q.id);
+            }}
+            className="p-1 hover:bg-emerald-50 text-emerald-600 rounded-md transition cursor-pointer"
+            title="Đổi hoặc thêm ảnh minh họa cho câu hỏi (hoặc bấm Ctrl+V)"
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={(e) => {
@@ -1627,9 +1815,28 @@ function ExamEditorContent() {
               <Wand2 className="h-3.5 w-3.5" />
               <span>Format Đề Tự Động</span>
             </button>
+            <button
+              type="button"
+              onClick={handleRecompileAllTikz}
+              disabled={isRecompilingTikz || questions.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50 shadow-2xs transition cursor-pointer"
+              title="Biên dịch toàn bộ hình vẽ TikZ/3D trong đề thi sang ảnh chuẩn TeX Server sắc nét 100%"
+            >
+              <Sparkles className={`h-3.5 w-3.5 text-blue-600 ${isRecompilingTikz ? 'animate-spin' : ''}`} />
+              <span>{isRecompilingTikz ? 'Đang dựng hình...' : '⚡ Dựng lại hình TeX'}</span>
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Input ẩn để chọn file ảnh thay thế cho câu hỏi */}
+      <input
+        type="file"
+        ref={questionImageInputRef}
+        onChange={handleImageFileChange}
+        accept="image/*"
+        className="hidden"
+      />
 
       {/* THÔNG BÁO TOAST */}
       {saveToast && (

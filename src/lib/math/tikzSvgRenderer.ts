@@ -448,8 +448,15 @@ export function renderTikzToSvg(rawTikz: string): string | null {
     return null;
   }
 
-  // 0. Nếu sử dụng các gói mở rộng chuyên sâu (tikz-3dplot, tkz-euclide), nhường quyền cho Server TeX Engine để đạt độ chuẩn xác 100%
-  if (/tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw/i.test(rawTikz)) {
+  // 0. Nếu là hình học không gian 3D hoặc chứa vector phức tạp, nhường 100% cho Server TeX Engine để tuyệt đối không có nét thừa
+  const is3DOrComplex =
+    /tdplot|\\tdplotsetmaincoords|tkz-euclide|\\tkzDefPoint|\\tkzDraw|\\overrightarrow|\\vec\{|Oxyz|\[[^\]]*\b3d\b/i.test(
+      rawTikz
+    ) ||
+    /\((?:-?[0-9.]+\s*,\s*){2}-?[0-9.]+\)/.test(rawTikz) || // Tọa độ 3D (x,y,z)
+    /\bz\s*=\s*\{/.test(rawTikz); // Trục z={(...)}
+
+  if (is3DOrComplex) {
     return null;
   }
 

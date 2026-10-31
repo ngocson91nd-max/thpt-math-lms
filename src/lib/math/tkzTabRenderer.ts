@@ -21,15 +21,64 @@ export interface TkzTabParsed {
   variations: TkzTabParsedItem[];
 }
 
+function replaceNestedFractions(s: string): string {
+  let res = s;
+  const fracRegex = /\\d?frac\s*\{/;
+  let match;
+  let safety = 0;
+  while ((match = res.match(fracRegex)) !== null && safety < 10) {
+    safety++;
+    const numStart = match.index! + match[0].length;
+    let depth = 1;
+    let i = numStart;
+    while (i < res.length && depth > 0) {
+      if (res[i] === '{') depth++;
+      else if (res[i] === '}') depth--;
+      i++;
+    }
+    if (depth !== 0) break;
+    const num = res.slice(numStart, i - 1);
+
+    const rest = res.slice(i);
+    const denMatch = rest.match(/^\s*\{/);
+    if (!denMatch) {
+      res = res.slice(0, match.index!) + replaceNestedFractions(num) + res.slice(i);
+      break;
+    }
+    const denStart = i + denMatch[0].length;
+    depth = 1;
+    let j = denStart;
+    while (j < res.length && depth > 0) {
+      if (res[j] === '{') depth++;
+      else if (res[j] === '}') depth--;
+      j++;
+    }
+    if (depth !== 0) break;
+    const den = res.slice(denStart, j - 1);
+
+    const before = res.slice(0, match.index!);
+    const after = res.slice(j);
+    res = before + `${replaceNestedFractions(num)}/${replaceNestedFractions(den)}` + after;
+  }
+  return res
+    .replace(/\\d?frac\s*([0-9a-zA-Z])\s+([0-9a-zA-Z])/g, '$1/$2')
+    .replace(/\\d?frac\s*/g, '');
+}
+
 export function cleanLatexSymbol(s: string): string {
   if (!s) return '';
   let str = s
     .replace(/\\limits/g, '')
     .replace(/\\left/g, '')
     .replace(/\\right/g, '')
-    .replace(/\\infty/g, '∞')
-    .replace(/\\dfrac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\infty/g, '∞');
+
+  str = replaceNestedFractions(str);
+
+  str = str
+    .replace(/\\ln/g, 'ln ')
+    .replace(/\\log/g, 'log ')
+    .replace(/\\exp/g, 'e^')
     .replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛$1')
     .replace(/\\sqrt\{([^}]+)\}/g, '√$1')
     .replace(/\\cdot/g, '·')
@@ -52,73 +101,160 @@ export function cleanLatexSymbol(s: string): string {
   return str;
 }
 
+function splitByTopLevelComma(text: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let braceDepth = 0;
+  let inDollar = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '$') {
+      inDollar = !inDollar;
+      current += char;
+    } else if (char === '{' && !inDollar) {
+      braceDepth++;
+      current += char;
+    } else if (char === '}' && !inDollar) {
+      braceDepth = Math.max(0, braceDepth - 1);
+      current += char;
+    } else if (char === ',' && braceDepth === 0 && !inDollar) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+  return result;
+}
+
+function extractBalancedBraces(text: string, startIndex: number): { content: string; endIndex: number } | null {
+  const openIdx = text.indexOf('{', startIndex);
+  if (openIdx === -1) return null;
+
+  let depth = 1;
+  let i = openIdx + 1;
+  while (i < text.length && depth > 0) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') depth--;
+    i++;
+  }
+
+  if (depth !== 0) return null;
+  return {
+    content: text.slice(openIdx + 1, i - 1),
+    endIndex: i,
+  };
+}
+
 export function parseTkzTabCode(code: string): TkzTabParsed | null {
   // Tìm lệnh \tkzTabInit
-  const initMatch = code.match(/\\tkzTabInit(?:\[.*?\])?\s*\{([\s\S]*?)\}\s*\{([\s\S]*?)\}/);
-  if (!initMatch) return null;
+  const initIdx = code.indexOf('\\tkzTabInit');
+  if (initIdx === -1) return null;
 
-  // 1. Phân tích tiêu đề các hàng (VD: $x$, $y'$, $y$ hoặc $t$, $y'(t)$, $y(t)$)
-  const rows = initMatch[1]
-    .split(',')
+  // Bỏ qua phần tùy chọn [nocadre=false, ...] nếu có
+  let searchIdx = initIdx + '\\tkzTabInit'.length;
+  const bracketIdx = code.indexOf('[', searchIdx);
+  const nextOpenBrace = code.indexOf('{', searchIdx);
+  if (bracketIdx !== -1 && bracketIdx < nextOpenBrace) {
+    const bracketEnd = code.indexOf(']', bracketIdx);
+    if (bracketEnd !== -1) {
+      searchIdx = bracketEnd + 1;
+    }
+  }
+
+  // 1. Phân tích tiêu đề các hàng (arg 1)
+  const arg1 = extractBalancedBraces(code, searchIdx);
+  if (!arg1) return null;
+  const rows = splitByTopLevelComma(arg1.content)
     .map((r) => r.split('/')[0].replace(/[\$]/g, '').trim())
     .filter(Boolean);
 
-  // 2. Phân tích các điểm mốc trên trục x (VD: -\infty, 1, 2, +\infty)
-  const xVals = initMatch[2]
-    .split(',')
+  // 2. Phân tích các điểm mốc trên trục x (arg 2)
+  const arg2 = extractBalancedBraces(code, arg1.endIndex);
+  if (!arg2) return null;
+  const xVals = splitByTopLevelComma(arg2.content)
     .map((v) => v.replace(/[\$]/g, '').trim())
     .filter(Boolean);
 
   // 3. Phân tích các dấu trong hàng y' (VD: ,-,d,-,0,+,)
   let signs: string[] = [];
-  const lineMatch = code.match(/\\tkzTabLine\s*\{([\s\S]*?)\}/);
-  if (lineMatch) {
-    let rawTokens = lineMatch[1].split(',').map((s) => s.trim());
-    if (rawTokens.length > 0 && rawTokens[0] === '') rawTokens.shift();
-    if (rawTokens.length > 0 && rawTokens[rawTokens.length - 1] === '') rawTokens.pop();
-    signs = rawTokens;
+  const lineIdx = code.indexOf('\\tkzTabLine');
+  if (lineIdx !== -1) {
+    const lineArg = extractBalancedBraces(code, lineIdx + '\\tkzTabLine'.length);
+    if (lineArg) {
+      let rawTokens = lineArg.content.split(',').map((s) => s.trim());
+      if (rawTokens.length > 0 && rawTokens[0] === '') rawTokens.shift();
+      if (rawTokens.length > 0 && rawTokens[rawTokens.length - 1] === '') rawTokens.pop();
+      signs = rawTokens;
+    }
   }
 
   // 4. Phân tích các chiều biến thiên trong hàng y (tkzTabVar)
   let variations: TkzTabParsedItem[] = [];
-  const varMatch = code.match(/\\tkzTabVar\s*\{([\s\S]*?)\}/);
-  if (varMatch) {
-    const rawItems = varMatch[1].split(',').map((item) => item.trim()).filter(Boolean);
+  const varIdx = code.indexOf('\\tkzTabVar');
+  if (varIdx !== -1) {
+    const varArg = extractBalancedBraces(code, varIdx + '\\tkzTabVar'.length);
+    if (varArg) {
+      const rawItems = splitByTopLevelComma(varArg.content).filter(Boolean);
 
-    for (let idx = 0; idx < rawItems.length; idx++) {
-      const item = rawItems[idx];
-      const parts = item.split('/');
-      const rawPos = parts[0]?.trim().toUpperCase() || '-';
+      for (let idx = 0; idx < rawItems.length; idx++) {
+        const item = rawItems[idx];
+        const firstSlash = item.indexOf('/');
+        const rawPos = (firstSlash >= 0 ? item.slice(0, firstSlash) : item).trim().toUpperCase() || '-';
+        const restContent = firstSlash >= 0 ? item.slice(firstSlash + 1).trim() : '';
 
-      // Kiểm tra xem mục này có chứa vạch kép / tiệm cận đứng (-D+, +D-, -D-, +D+, -D, +D, D) không
-      if (rawPos.includes('D')) {
-        let leftPos = rawPos.includes('+') && rawPos.indexOf('+') < rawPos.indexOf('D') ? '+' : '-';
-        let rightPos = rawPos.endsWith('+') || (rawPos.includes('+') && rawPos.indexOf('+') > rawPos.indexOf('D')) ? '+' : '-';
+        // Kiểm tra xem mục này có chứa vạch kép / tiệm cận đứng (-D+, +D-, -D-, +D+, -D, +D, D) không
+        if (rawPos.includes('D')) {
+          let leftPos = rawPos.includes('+') && rawPos.indexOf('+') < rawPos.indexOf('D') ? '+' : '-';
+          let rightPos = rawPos.endsWith('+') || (rawPos.includes('+') && rawPos.indexOf('+') > rawPos.indexOf('D')) ? '+' : '-';
 
-        let leftVal = parts[1]?.replace(/[\$]/g, '').trim() || '';
-        let rightVal = parts[2]?.replace(/[\$]/g, '').trim() || '';
+          // Tách 2 giá trị theo dấu / ngoài ngoặc nhọn
+          let leftVal = '';
+          let rightVal = '';
+          let depth = 0;
+          let sepIdx = -1;
+          for (let c = 0; c < restContent.length; c++) {
+            if (restContent[c] === '{') depth++;
+            else if (restContent[c] === '}') depth = Math.max(0, depth - 1);
+            else if (restContent[c] === '/' && depth === 0) {
+              sepIdx = c;
+              break;
+            }
+          }
 
-        // Nếu giáo viên chỉ ghi 1 giá trị thì tự suy luận giá trị bên phải từ dấu y'
-        if (!rightVal && leftVal) {
-          const signIdx = idx * 2 + 1;
-          const nextSign = signs[signIdx] || '-';
-          rightPos = nextSign === '+' ? '-' : '+';
-          rightVal = rightPos === '+' ? '+\\infty' : '-\\infty';
+          if (sepIdx >= 0) {
+            leftVal = restContent.slice(0, sepIdx).replace(/[\$]/g, '').trim();
+            rightVal = restContent.slice(sepIdx + 1).replace(/[\$]/g, '').trim();
+          } else {
+            leftVal = restContent.replace(/[\$]/g, '').trim();
+          }
+
+          // Nếu giáo viên chỉ ghi 1 giá trị thì tự suy luận giá trị bên phải từ dấu y'
+          if (!rightVal && leftVal) {
+            const signIdx = idx * 2 + 1;
+            const nextSign = signs[signIdx] || '-';
+            rightPos = nextSign === '+' ? '-' : '+';
+            rightVal = rightPos === '+' ? '+\\infty' : '-\\infty';
+          }
+
+          variations.push({
+            pos: rawPos,
+            val: leftVal,
+            isDiscontinuity: true,
+            leftPos,
+            leftVal,
+            rightPos,
+            rightVal,
+          });
+        } else {
+          const pos = rawPos.includes('+') ? '+' : '-';
+          const val = restContent.replace(/[\$]/g, '').trim();
+          variations.push({ pos, val, isDiscontinuity: false });
         }
-
-        variations.push({
-          pos: rawPos,
-          val: leftVal,
-          isDiscontinuity: true,
-          leftPos,
-          leftVal,
-          rightPos,
-          rightVal,
-        });
-      } else {
-        const pos = rawPos.includes('+') ? '+' : '-';
-        const val = parts[1]?.replace(/[\$]/g, '').trim() || '';
-        variations.push({ pos, val, isDiscontinuity: false });
       }
     }
   }
@@ -137,10 +273,12 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
   const colW = Math.max(140, Math.floor(660 / colCount));
   const totalW = headerW + colCount * colW + 40;
 
-  // Nâng chiều cao các hàng để bảng to rõ, thoáng đạt, font lớn
+  // Nâng chiều cao các hàng để bảng to rõ, thoáng đạt, font lớn.
+  // Tự động ẩn hàng 3 nếu chỉ là Bảng xét dấu đạo hàm (không có \tkzTabVar)
+  const hasRow3 = variations.length > 0;
   const row1H = 50;
   const row2H = 50;
-  const row3H = 150;
+  const row3H = hasRow3 ? 150 : 0;
   const totalH = row1H + row2H + row3H;
 
   const row1Y = 0;
@@ -283,5 +421,8 @@ export function generateTkzTabSvg(parsed: TkzTabParsed): string {
     xPointsElements += `<text x="${xPos}" y="${row1Y + 31}" fill="#0f172a" font-size="17" font-weight="bold" text-anchor="middle" font-family="KaTeX_Main, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${cleanLatexSymbol(xVals[i])}</text>`;
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-3 bg-white rounded-2xl shadow-xs border border-slate-300 select-none" style="max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M 1 2.5 L 11 6 L 1 9.5 L 3.2 6 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" /><line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" /><text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelYPrime}</text><text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelY}</text>${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
+  const row3Line = hasRow3 ? `<line x1="0" y1="${row3Y}" x2="${totalW}" y2="${row3Y}" stroke="#cbd5e1" stroke-width="1.2" />` : '';
+  const row3Label = hasRow3 ? `<text x="${headerW / 2}" y="${row3Y + row3H / 2 + 7}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelY}</text>` : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" class="w-full max-w-3xl lg:max-w-4xl mx-auto my-3 bg-white rounded-2xl shadow-xs border border-slate-300 select-none" style="max-width: 100%; height: auto; display: block;"><defs><marker id="${markerId}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto"><path d="M 1 2.5 L 11 6 L 1 9.5 L 3.2 6 z" fill="#2563eb" /></marker></defs><rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" rx="12" /><line x1="${headerW}" y1="0" x2="${headerW}" y2="${totalH}" stroke="#94a3b8" stroke-width="1.4" /><line x1="0" y1="${row2Y}" x2="${totalW}" y2="${row2Y}" stroke="#cbd5e1" stroke-width="1.2" />${row3Line}<text x="${headerW / 2}" y="${row1Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelX}</text><text x="${headerW / 2}" y="${row2Y + 32}" fill="#1e293b" font-size="18" font-style="italic" font-weight="bold" text-anchor="middle" font-family="KaTeX_Math, 'Cambria Math', 'Times New Roman', Times, STIXGeneral, serif">${rowLabelYPrime}</text>${row3Label}${doubleBarLines}${xPointsElements}${signsElements}${variationElements}</svg>`;
 }
